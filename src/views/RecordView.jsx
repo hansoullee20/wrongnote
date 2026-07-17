@@ -432,14 +432,19 @@ export default function RecordView({
                 className="note-row"
                 onClick={() => setExpandedId(open ? null : n.id)}
               >
-                <Badge tone="info">{n.subject}</Badge>
-                <span className="note-prob">{n.problem}</span>
-                <span className="note-topic">
-                  {n.topicMain}
-                  {n.topicSub ? `·${n.topicSub}` : ""}
-                </span>
-                <span className="note-date">{n.date}</span>
-                {N > 0 && <span className="repeat-marker">×{N}</span>}
+                <div className="note-row-head">
+                  <Badge tone="info">{n.subject}</Badge>
+                  <span className="note-prob">{n.problem}</span>
+                  <span className="note-topic">
+                    {n.topicMain}
+                    {n.topicSub ? `·${n.topicSub}` : ""}
+                  </span>
+                  <span className="note-date">{n.date}</span>
+                  {N > 0 && <span className="repeat-marker">×{N}</span>}
+                </div>
+                {n.question && !open && (
+                  <div className="note-preview">{n.question}</div>
+                )}
               </button>
               {open && (
                 <div className="note-detail">
