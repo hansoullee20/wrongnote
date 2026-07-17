@@ -5,7 +5,7 @@ import {
   EXECUTION_TAGS,
   MATH_TOPICS,
 } from "../constants.js";
-import { downloadJSON } from "../storage.js";
+import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
 import { Section, Button } from "../components.jsx";
 
 export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) {
@@ -54,7 +54,7 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
     const d = new Date();
     const p = (n) => String(n).padStart(2, "0");
     const name = `wr_backup_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
-    downloadJSON(name, { notes, cards });
+    downloadJSON(name, exportEnvelope(notes, cards));
   }
 
   function handleImportFile(e) {
@@ -65,20 +65,15 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
     reader.onload = () => {
       try {
         const parsed = JSON.parse(reader.result);
-        if (
-          !parsed ||
-          !Array.isArray(parsed.notes) ||
-          !Array.isArray(parsed.cards)
-        ) {
-          throw new Error("invalid shape");
-        }
+        // v1({notes,cards})·v2({version,...}) 백업 모두 현재 스키마로 마이그레이션
+        const migrated = importEnvelope(parsed);
         const ok = confirm(
-          `가져오면 현재 데이터 전체가 교체된다 (노트 ${parsed.notes.length}건, 카드 ${parsed.cards.length}장). 계속?`
+          `가져오면 현재 데이터 전체가 교체된다 (노트 ${migrated.notes.length}건, 카드 ${migrated.cards.length}장). 계속?`
         );
         if (!ok) return;
         // 교체 직전 기존 데이터 자동 백업 다운로드
-        downloadJSON("wr_backup_before_import.json", { notes, cards });
-        onReplaceAll(parsed.notes, parsed.cards);
+        downloadJSON("wr_backup_before_import.json", exportEnvelope(notes, cards));
+        onReplaceAll(migrated.notes, migrated.cards);
         setImportError("");
       } catch {
         setImportError("파싱 실패 — 데이터 변경 없음. JSON 파일을 확인해라.");

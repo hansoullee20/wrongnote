@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DAY_MS, RECHECK_DAYS, fmtDate, uid } from "./constants.js";
-import { loadNotes, loadCards, saveNotes, saveCards } from "./storage.js";
+import { loadAll, saveNotes, saveCards } from "./storage.js";
 import RecordView from "./views/RecordView.jsx";
 import RecheckView from "./views/RecheckView.jsx";
 import CardsView from "./views/CardsView.jsx";
@@ -14,13 +14,20 @@ const TABS = [
 ];
 
 export default function App() {
-  const [notes, setNotes] = useState(loadNotes);
-  const [cards, setCards] = useState(loadCards);
+  // 부팅 시 1회 로드 + 마이그레이션. 파싱 실패면 저장을 잠가 원본을 보호한다.
+  const [boot] = useState(loadAll);
+  const [notes, setNotes] = useState(boot.notes);
+  const [cards, setCards] = useState(boot.cards);
+  const storageLocked = Boolean(boot.error);
   const [tab, setTab] = useState("record");
   const [filter, setFilter] = useState({ tag: "", topicMain: "" });
 
-  useEffect(() => saveNotes(notes), [notes]);
-  useEffect(() => saveCards(cards), [cards]);
+  useEffect(() => {
+    if (!storageLocked) saveNotes(notes);
+  }, [notes, storageLocked]);
+  useEffect(() => {
+    if (!storageLocked) saveCards(cards);
+  }, [cards, storageLocked]);
 
   const dueCount = useMemo(
     () =>
@@ -123,6 +130,7 @@ export default function App() {
       </nav>
 
       <div className="paper-sheet">
+      {storageLocked && <div className="audit-warn">{boot.error}</div>}
       {tab === "record" && (
         <RecordView
           notes={notes}
