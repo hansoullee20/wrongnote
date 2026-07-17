@@ -1251,6 +1251,106 @@ textarea:focus {
   color: var(--pencil);
 }
 
+/* ---- 문제 사진 ---- */
+
+/* 폼 첨부 썸네일 스트립 */
+.photo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.photo-strip-item {
+  position: relative;
+}
+
+.photo-strip-item img {
+  height: 84px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  box-shadow: var(--sh-sm);
+  display: block;
+}
+
+.photo-loading {
+  display: inline-flex;
+  width: 84px;
+  height: 84px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: var(--sunken);
+  border-radius: var(--r-sm);
+}
+
+.photo-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--red-pen);
+  color: var(--text-on-accent);
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: var(--sh-sm);
+}
+
+/* 접힌 노트 행의 사진 표시 */
+.photo-count {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* 노트 상세/재검증의 사진: 폴라로이드처럼 살짝 기울여 붙임 */
+.note-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.note-image-thumb {
+  padding: var(--sp-1);
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: var(--sh-md);
+  transform: rotate(-0.6deg);
+  border-radius: 2px;
+}
+
+.note-image-thumb:nth-child(even) {
+  transform: rotate(0.7deg);
+}
+
+.note-image-thumb img {
+  max-height: 220px;
+  max-width: 100%;
+  display: block;
+  border-radius: 1px;
+}
+
+/* 전체 화면 보기 */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(33, 29, 22, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  cursor: zoom-out;
+}
+
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--r-sm);
+  box-shadow: var(--sh-lg);
+}
+
 /* ============================================================
    12. 태블릿 미디어
    ============================================================ */

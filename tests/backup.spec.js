@@ -15,9 +15,10 @@ test.describe("백업 내보내기/가져오기", () => {
     for await (const c of stream) chunks.push(c);
     const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
 
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(Array.isArray(parsed.notes)).toBe(true);
     expect(Array.isArray(parsed.cards)).toBe(true);
+    expect(typeof parsed.images).toBe("object"); // 사진 base64 맵 포함
   });
 
   test("v1 백업(버전 없음) 가져오기 → 마이그레이션되어 교체", async ({

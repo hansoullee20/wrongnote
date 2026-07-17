@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { isRecheckDue } from "../constants.js";
-import { TagBadges, Badge, Button } from "../components.jsx";
+import { TagBadges, Badge, Button, NoteImages } from "../components.jsx";
 
 export default function RecheckView({ notes, onResolve }) {
   // App의 탭 배지와 동일한 기준 (isRecheckDue)
@@ -29,6 +29,7 @@ export default function RecheckView({ notes, onResolve }) {
             </span>
             <span className="note-date">{n.date}</span>
           </div>
+          <NoteImages ids={n.images} />
           {n.question && <div className="rc-question">{n.question}</div>}
           <TagBadges tags={n.tags} />
           <div className="rc-actions">

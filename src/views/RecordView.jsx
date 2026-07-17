@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   SUBJECTS,
   MAIN_ERROR_TAGS,
@@ -16,9 +16,41 @@ import {
   Button,
   Field,
   Badge,
+  NoteImages,
 } from "../components.jsx";
 import { ocrImage } from "../ocr.js";
 import { copyText } from "../clipboard.js";
+import {
+  compressImage,
+  putImage,
+  deleteImages,
+  getImage,
+} from "../imageStore.js";
+
+/** 첨부 사진 썸네일 — 새 사진은 blob url, 기존 사진은 IDB에서 로드 */
+function PhotoThumb({ photo }) {
+  const [url, setUrl] = useState(photo.url || null);
+  useEffect(() => {
+    if (photo.url || !photo.id) return undefined;
+    let alive = true;
+    let created = null;
+    getImage(photo.id).then((blob) => {
+      if (blob && alive) {
+        created = URL.createObjectURL(blob);
+        setUrl(created);
+      }
+    });
+    return () => {
+      alive = false;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [photo]);
+  return url ? (
+    <img src={url} alt="첨부 사진" />
+  ) : (
+    <span className="photo-loading">…</span>
+  );
+}
 
 function buildClassifyPrompt(draft) {
   const isMath = draft.subject === "수학";
@@ -80,6 +112,17 @@ export default function RecordView({
   const [copied, setCopied] = useState("");
   const ocrInputRef = useRef(null);
 
+  // 첨부 사진: {id}=IDB에 이미 저장(수정 모드), {blob,url}=이번에 붙인 것(저장 시 기록)
+  const [photos, setPhotos] = useState([]);
+  const originalImageIds = useRef([]); // 수정 시작 시점의 저장된 사진 id
+
+  function clearPendingPhotos() {
+    setPhotos((ps) => {
+      ps.forEach((p) => p.url && URL.revokeObjectURL(p.url));
+      return [];
+    });
+  }
+
   /** 노트를 폼에 불러와 수정 모드 시작 */
   function startEdit(n) {
     setDraft({
@@ -94,6 +137,9 @@ export default function RecordView({
       tags: n.tags,
       memo: n.memo,
     });
+    clearPendingPhotos();
+    originalImageIds.current = n.images || [];
+    setPhotos((n.images || []).map((id) => ({ id })));
     setEditingId(n.id);
     setChecks([false, false, false, false]); // 게이트는 수정에도 다시 통과해야 함
     setFormOpen(true);
@@ -106,6 +152,8 @@ export default function RecordView({
     setEditingId(null);
     setDraft(emptyDraft(draft.subject));
     setChecks([false, false, false, false]);
+    clearPendingPhotos();
+    originalImageIds.current = [];
   }
 
   async function handleCopyPrompt() {
@@ -118,6 +166,13 @@ export default function RecordView({
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
+
+    // 1) 사진 첨부 — OCR 성패와 무관하게 사진은 남는다
+    setOcr({ busy: true, label: "사진 처리 중…", error: "" });
+    const blob = await compressImage(file);
+    setPhotos((ps) => [...ps, { blob, url: URL.createObjectURL(blob) }]);
+
+    // 2) 글자 추출 시도
     setOcr({ busy: true, label: "준비 중…", error: "" });
     try {
       const text = await ocrImage(file, (m) => {
@@ -146,9 +201,17 @@ export default function RecordView({
       setOcr({
         busy: false,
         label: "",
-        error: "인식 실패 — 더 밝게, 정면에서 다시 찍어봐라.",
+        error: "글자 인식 실패 — 사진은 첨부됐다. 직접 입력해도 된다.",
       });
     }
+  }
+
+  function removePhoto(index) {
+    setPhotos((ps) => {
+      const p = ps[index];
+      if (p?.url) URL.revokeObjectURL(p.url);
+      return ps.filter((_, i) => i !== index);
+    });
   }
 
   const isMath = draft.subject === "수학";
@@ -176,9 +239,26 @@ export default function RecordView({
     });
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!canSave) return;
-    const payload = { ...draft, problem: draft.problem.trim() };
+
+    // 이번에 붙인 사진을 IDB에 기록, 유지한 기존 id와 합침
+    const imageIds = [];
+    for (const p of photos) {
+      if (p.id) {
+        imageIds.push(p.id);
+      } else {
+        imageIds.push(await putImage(p.blob));
+        if (p.url) URL.revokeObjectURL(p.url);
+      }
+    }
+    // 수정 중 제거한 기존 사진은 IDB에서도 삭제
+    const removed = originalImageIds.current.filter(
+      (id) => !imageIds.includes(id)
+    );
+    if (removed.length) await deleteImages(removed);
+
+    const payload = { ...draft, problem: draft.problem.trim(), images: imageIds };
     if (editingId) {
       onUpdate(editingId, payload); // 수정 시 자동 카드 생성 없음
       setEditingId(null);
@@ -187,6 +267,8 @@ export default function RecordView({
     }
     setDraft(emptyDraft(draft.subject));
     setChecks([false, false, false, false]);
+    setPhotos([]);
+    originalImageIds.current = [];
   };
 
   // 반복 오류 마커: topicMain+topicSub × 태그 조합 누적 횟수 (렌더 시 파생)
@@ -295,7 +377,7 @@ export default function RecordView({
                 disabled={ocr.busy}
                 onClick={() => ocrInputRef.current && ocrInputRef.current.click()}
               >
-                {ocr.busy ? ocr.label : "사진에서 문제 추출 (OCR)"}
+                {ocr.busy ? ocr.label : "사진 첨부 + 글자 추출"}
               </Button>
               <input
                 ref={ocrInputRef}
@@ -317,6 +399,23 @@ export default function RecordView({
               </Button>
             </div>
             {ocr.error && <div className="io-error">{ocr.error}</div>}
+            {photos.length > 0 && (
+              <div className="photo-strip">
+                {photos.map((p, i) => (
+                  <div key={p.id || p.url} className="photo-strip-item">
+                    <PhotoThumb photo={p} />
+                    <button
+                      type="button"
+                      className="photo-remove"
+                      onClick={() => removePhoto(i)}
+                      aria-label="사진 제거"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <Field label="문제 원문 (선택)" hint="사진 OCR 결과가 여기 들어감">
               <textarea
                 rows={2}
@@ -481,6 +580,11 @@ export default function RecordView({
                     {n.topicSub ? `·${n.topicSub}` : ""}
                   </span>
                   <span className="note-date">{n.date}</span>
+                  {n.images?.length > 0 && (
+                    <span className="photo-count">
+                      📷{n.images.length > 1 ? n.images.length : ""}
+                    </span>
+                  )}
                   {N > 0 && <span className="repeat-marker">×{N}</span>}
                 </div>
                 {n.question && !open && (
@@ -490,6 +594,7 @@ export default function RecordView({
               {open && (
                 <div className="note-detail">
                   <TagBadges tags={n.tags} />
+                  <NoteImages ids={n.images} />
                   {n.question && (
                     <div className="field">
                       <div className="field-label">문제</div>

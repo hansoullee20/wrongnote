@@ -10,7 +10,7 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     const version = await page.evaluate(() =>
       localStorage.getItem("wr_schema_version")
     );
-    expect(version).toBe("2");
+    expect(version).toBe("3");
 
     // v1 원본 스냅샷 존재
     const backup = await page.evaluate(() =>
@@ -27,11 +27,12 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     expect(card.state).toBe("new");
     expect(typeof card.due).toBe("number");
 
-    // 노트: 반복 재검증 필드, 내용 보존
+    // 노트: 반복 재검증 + 사진 필드, 내용 보존
     const note = (await readNotes(page))[0];
     expect(note.problem).toBe("LEGACY-1");
     expect(note.recheckCount).toBe(0);
     expect(note.nextRecheckTs).toBe(null);
+    expect(note.images).toEqual([]);
 
     // 레거시 키는 읽기 전용 보존
     expect(

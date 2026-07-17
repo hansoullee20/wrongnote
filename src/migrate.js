@@ -1,6 +1,6 @@
 // 스키마 버전 & 마이그레이션 — 전부 순수 함수, 몇 번 돌려도 같은 결과(idempotent)
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3; // v3: 노트에 images(사진 id 배열) 추가
 
 /**
  * v2: 카드에 SRS 필드 추가.
@@ -38,5 +38,7 @@ export function migrateNote(note) {
     // ---- 반복 재검증 (v2) ----
     recheckCount: note.recheckCount ?? (note.rechecked ? 1 : 0),
     nextRecheckTs: note.nextRecheckTs ?? null,
+    // ---- 문제 사진 (v3) — IndexedDB blob id 배열 ----
+    images: Array.isArray(note.images) ? note.images : [],
   };
 }

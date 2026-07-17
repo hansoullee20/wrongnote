@@ -3,6 +3,7 @@ import { RECHECK_DAYS, DAY_MS, fmtDate, uid, isRecheckDue } from "./constants.js
 import { loadAll, saveNotes, saveCards } from "./storage.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
+import { deleteImages, gcImages } from "./imageStore.js";
 import RecordView from "./views/RecordView.jsx";
 import RecheckView from "./views/RecheckView.jsx";
 import CardsView from "./views/CardsView.jsx";
@@ -107,6 +108,9 @@ export default function App() {
   }
 
   function deleteNote(id) {
+    // 노트의 첨부 사진도 IDB에서 정리
+    const target = notes.find((n) => n.id === id);
+    if (target?.images?.length) deleteImages(target.images);
     setNotes((ns) => ns.filter((n) => n.id !== id));
     // 이 노트에서 자동 생성된 카드도 정리 (수동 카드는 noteId=null이라 생존)
     setCards((cs) => cs.filter((c) => c.noteId !== id));
@@ -170,6 +174,8 @@ export default function App() {
   function replaceAll(newNotes, newCards) {
     setNotes(newNotes);
     setCards(newCards);
+    // 가져온 노트가 참조하지 않는 고아 사진 정리
+    gcImages(newNotes.flatMap((n) => n.images || []));
   }
 
   function gotoRecordWithTopic(topicMain) {

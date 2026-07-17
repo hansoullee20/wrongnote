@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getImage } from "./imageStore.js";
 
 export function Chip({ label, active, onClick, className = "" }) {
   return (
@@ -192,5 +193,64 @@ export function Badge({ tone = "neutral", className = "", children }) {
     <span className={`badge badge--${tone}${className ? ` ${className}` : ""}`}>
       {children}
     </span>
+  );
+}
+
+/**
+ * IndexedDB에 저장된 문제 사진 썸네일 목록 + 탭하면 전체 화면.
+ * @param {{ ids: string[] }} props
+ */
+export function NoteImages({ ids }) {
+  const [urls, setUrls] = useState([]); // [{id, url}]
+  const [viewing, setViewing] = useState(null); // 전체 화면 중인 url
+
+  useEffect(() => {
+    let alive = true;
+    const created = [];
+    (async () => {
+      const loaded = [];
+      for (const id of ids || []) {
+        const blob = await getImage(id);
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          created.push(url);
+          loaded.push({ id, url });
+        }
+      }
+      if (alive) setUrls(loaded);
+      else created.forEach((u) => URL.revokeObjectURL(u));
+    })();
+    return () => {
+      alive = false;
+      created.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [ids]);
+
+  if (!ids?.length || urls.length === 0) return null;
+
+  return (
+    <>
+      <div className="note-images">
+        {urls.map(({ id, url }) => (
+          <button
+            key={id}
+            type="button"
+            className="note-image-thumb"
+            onClick={() => setViewing(url)}
+          >
+            <img src={url} alt="문제 사진" />
+          </button>
+        ))}
+      </div>
+      {viewing && (
+        <button
+          type="button"
+          className="lightbox"
+          onClick={() => setViewing(null)}
+        >
+          <img src={viewing} alt="문제 사진 크게 보기" />
+        </button>
+      )}
+    </>
   );
 }

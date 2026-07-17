@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { EXECUTION_TAGS, MATH_TOPICS, isRecheckDue } from "../constants.js";
 import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
+import { exportImages, importImages } from "../imageStore.js";
 import { Section, Button } from "../components.jsx";
 
 export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) {
@@ -44,11 +45,13 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
     return { done: done.length, pass, fail, waiting, rate };
   }, [notes]);
 
-  function handleExport() {
+  async function handleExport() {
     const d = new Date();
     const p = (n) => String(n).padStart(2, "0");
     const name = `wr_backup_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
-    downloadJSON(name, exportEnvelope(notes, cards));
+    // 첨부 사진(base64)까지 포함한 완전 백업
+    const images = await exportImages(notes.flatMap((n) => n.images || []));
+    downloadJSON(name, { ...exportEnvelope(notes, cards), images });
   }
 
   function handleImportFile(e) {
@@ -56,17 +59,23 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
     e.target.value = "";
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const parsed = JSON.parse(reader.result);
-        // v1({notes,cards})·v2({version,...}) 백업 모두 현재 스키마로 마이그레이션
+        // v1({notes,cards})·v2·v3 백업 모두 현재 스키마로 마이그레이션
         const migrated = importEnvelope(parsed);
         const ok = confirm(
           `가져오면 현재 데이터 전체가 교체된다 (노트 ${migrated.notes.length}건, 카드 ${migrated.cards.length}장). 계속?`
         );
         if (!ok) return;
-        // 교체 직전 기존 데이터 자동 백업 다운로드
-        downloadJSON("wr_backup_before_import.json", exportEnvelope(notes, cards));
+        // 교체 직전 기존 데이터 자동 백업 다운로드 (사진 포함)
+        const curImages = await exportImages(notes.flatMap((n) => n.images || []));
+        downloadJSON("wr_backup_before_import.json", {
+          ...exportEnvelope(notes, cards),
+          images: curImages,
+        });
+        // 백업에 담긴 사진 복원 후 교체
+        await importImages(parsed.images);
         onReplaceAll(migrated.notes, migrated.cards);
         setImportError("");
       } catch {
