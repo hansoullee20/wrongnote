@@ -1,0 +1,85 @@
+export const SUBJECTS = ["수학", "국어", "영어", "과탐"];
+
+export const MAIN_ERROR_TAGS = [
+  "실행 실수",
+  "개념 오류",
+  "지위 오해",
+  "시간 부족",
+  "독해 오류",
+  "문제 파악 실패",
+];
+
+export const MATH_ERROR_TAGS = [
+  "부호 실수",
+  "상하한 변환",
+  "내부도함수 누락",
+  "C 누락",
+  "조건 누락",
+  "막판 실수",
+];
+
+// 실행 계열: hard gate 트리거 + 재검증 큐 대상 판정에 사용
+export const EXECUTION_TAGS = ["실행 실수", ...MATH_ERROR_TAGS];
+
+export const MATH_TOPICS = {
+  "수I·지수로그": ["지수확장", "로그성질", "그래프", "방정식부등식"],
+  "수I·삼각함수": ["호도법", "그래프", "사인법칙", "코사인법칙"],
+  "수I·수열": ["등차등비", "Σ", "여러가지수열합", "귀납법·점화식"],
+  "수II·함수극한": ["극한존재", "미정계수", "연속", "사잇값정리"],
+  "수II·미분": [
+    "미분계수",
+    "미분가능성",
+    "접선",
+    "평균값정리",
+    "극대극소판정",
+    "개형",
+    "최대최소",
+    "속도가속도",
+  ],
+  "수II·적분": ["부정적분", "정적분정의", "∫포함함수", "넓이", "속도거리"],
+  "미적·수열극한": ["수렴발산", "등비극한케이스", "급수", "등비급수", "도형활용"],
+  "미적·미분법": [
+    "표준극한(e)",
+    "지수로그미분",
+    "덧셈정리",
+    "삼각극한",
+    "몫미분",
+    "합성함수",
+    "매개변수",
+    "음함수",
+    "역함수",
+    "이계도함수",
+    "변곡점",
+    "개형",
+  ],
+  "미적·적분법": [
+    "여러함수부정적분",
+    "치환적분",
+    "부분적분",
+    "급수↔정적분",
+    "넓이",
+    "부피(단면적)",
+    "속도거리",
+  ],
+};
+
+export const GATE_CHECKLIST = [
+  "근/후보 찾은 뒤 판정했는가 (부호변화·구간 유효성·경계)",
+  "답 범위 sanity check (단답 0~999 정수)",
+  "문제 조건 전부 사용했는가",
+  "경계값 대입 줄을 정렬해서 썼는가 (F(b)−F(a) 한 줄씩)",
+];
+
+export const RECHECK_DAYS = 14;
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+export const uid = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+export const fmtDate = (ts) => {
+  const d = new Date(ts);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
