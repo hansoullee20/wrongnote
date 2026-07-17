@@ -417,6 +417,24 @@ textarea:focus {
   margin-top: 2px;
 }
 
+/* 폼 그룹: RecordView의 평평한 스택을 묶는 시각 단위 */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.form-group-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--primary);
+  letter-spacing: 0.02em;
+}
+
 .hint {
   font-size: var(--fs-xs);
   color: var(--text-muted);
@@ -672,6 +690,22 @@ textarea:focus {
 .rc-actions {
   display: flex;
   gap: var(--sp-2);
+}
+
+.rc-actions .btn {
+  flex: 1;
+  font-size: var(--fs-sm);
+  padding: 10px 6px;
+}
+
+.io-row .btn {
+  flex: 1;
+  font-size: var(--fs-sm);
+}
+
+.ocr-row .btn {
+  flex: 1;
+  font-size: var(--fs-sm);
 }
 
 .rc-pass,

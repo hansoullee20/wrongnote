@@ -6,6 +6,7 @@ import {
   MATH_TOPICS,
 } from "../constants.js";
 import { downloadJSON } from "../storage.js";
+import { Section, Button } from "../components.jsx";
 
 export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) {
   const fileRef = useRef(null);
@@ -88,8 +89,7 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
 
   return (
     <div className="view">
-      <section className="stats-section">
-        <h2 className="stats-title">에러 타입 분포</h2>
+      <Section title="에러 타입 분포">
         {tagCounts.length === 0 && <div className="empty">데이터 없음.</div>}
         {tagCounts.map(([tag, count]) => (
           <div key={tag} className="bar-row">
@@ -103,10 +103,9 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
             <span className="bar-count">{count}</span>
           </div>
         ))}
-      </section>
+      </Section>
 
-      <section className="stats-section">
-        <h2 className="stats-title">토픽 × 에러타입</h2>
+      <Section title="토픽 × 에러타입">
         {matrix.length === 0 && <div className="empty">데이터 없음.</div>}
         {matrix.length > 0 && (
           <table className="matrix">
@@ -135,10 +134,9 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
           </table>
         )}
         <div className="hint">행 탭 → 기록 뷰에서 해당 토픽 필터</div>
-      </section>
+      </Section>
 
-      <section className="stats-section">
-        <h2 className="stats-title">재검증 감사</h2>
+      <Section title="재검증 감사">
         <div className="audit-grid">
           <div className="audit-cell">
             <div className="audit-num">{audit.done}</div>
@@ -163,21 +161,19 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
             개념 갭을 가리고 있음. 태깅 기준 재점검.
           </div>
         )}
-      </section>
+      </Section>
 
-      <section className="stats-section">
-        <h2 className="stats-title">백업</h2>
+      <Section title="백업">
         <div className="io-row">
-          <button type="button" className="io-btn" onClick={handleExport}>
+          <Button variant="neutral" onClick={handleExport}>
             내보내기 (JSON)
-          </button>
-          <button
-            type="button"
-            className="io-btn"
+          </Button>
+          <Button
+            variant="neutral"
             onClick={() => fileRef.current && fileRef.current.click()}
           >
             가져오기 (전체 교체)
-          </button>
+          </Button>
           <input
             ref={fileRef}
             type="file"
@@ -192,7 +188,7 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
           가져오기 직전 기존 데이터는 wr_backup_before_import.json으로 자동
           다운로드된다.
         </div>
-      </section>
+      </Section>
     </div>
   );
 }

@@ -7,7 +7,16 @@ import {
   MATH_TOPICS,
   GATE_CHECKLIST,
 } from "../constants.js";
-import { ChipRow, MultiChipRow, Chip, TagBadges } from "../components.jsx";
+import {
+  ChipRow,
+  MultiChipRow,
+  Chip,
+  TagBadges,
+  Panel,
+  Button,
+  Field,
+  Badge,
+} from "../components.jsx";
 import { ocrImage } from "../ocr.js";
 import { copyText } from "../clipboard.js";
 
@@ -187,18 +196,15 @@ export default function RecordView({
 
   return (
     <div className="view">
-      <section className="panel">
-        <button
-          type="button"
-          className="panel-head"
-          onClick={() => setFormOpen((o) => !o)}
-        >
-          <span>오답 기록</span>
-          <span className="fold-arrow">{formOpen ? "▾" : "▸"}</span>
-        </button>
-
-        {formOpen && (
-          <div className="form">
+      <Panel
+        title="오답 기록"
+        open={formOpen}
+        onToggle={() => setFormOpen((o) => !o)}
+      >
+        <div className="form">
+          {/* ── 분류 ── */}
+          <div className="form-group">
+            <div className="form-group-title">분류</div>
             <ChipRow
               options={SUBJECTS}
               value={draft.subject}
@@ -206,14 +212,15 @@ export default function RecordView({
                 set({ subject: s, topicMain: "", topicSub: "", derived: null })
               }
             />
-
-            <input
-              type="text"
-              placeholder="문제 식별 (예: 6모 Q22)"
-              value={draft.problem}
-              onChange={(e) => set({ problem: e.target.value })}
-            />
-
+            <Field label="문제 식별" htmlFor="rec-problem">
+              <input
+                id="rec-problem"
+                type="text"
+                placeholder="예: 6모 Q22"
+                value={draft.problem}
+                onChange={(e) => set({ problem: e.target.value })}
+              />
+            </Field>
             {isMath && (
               <>
                 <div className="label">토픽 — 대단원</div>
@@ -241,16 +248,19 @@ export default function RecordView({
                 )}
               </>
             )}
+          </div>
 
+          {/* ── 내용 ── */}
+          <div className="form-group">
+            <div className="form-group-title">내용</div>
             <div className="ocr-row">
-              <button
-                type="button"
-                className="ocr-btn"
+              <Button
+                variant="ghost"
                 disabled={ocr.busy}
                 onClick={() => ocrInputRef.current && ocrInputRef.current.click()}
               >
                 {ocr.busy ? ocr.label : "사진에서 문제 추출 (OCR)"}
-              </button>
+              </Button>
               <input
                 ref={ocrInputRef}
                 type="file"
@@ -258,9 +268,8 @@ export default function RecordView({
                 style={{ display: "none" }}
                 onChange={handleOcrFile}
               />
-              <button
-                type="button"
-                className="ocr-btn"
+              <Button
+                variant="ghost"
                 disabled={
                   !draft.question.trim() &&
                   !draft.mySol.trim() &&
@@ -269,28 +278,35 @@ export default function RecordView({
                 onClick={handleCopyPrompt}
               >
                 {copied || "분류 프롬프트 복사"}
-              </button>
+              </Button>
             </div>
             {ocr.error && <div className="io-error">{ocr.error}</div>}
-            <textarea
-              rows={2}
-              placeholder="문제 원문 (선택) — 사진 OCR 결과가 여기 들어감"
-              value={draft.question}
-              onChange={(e) => set({ question: e.target.value })}
-            />
-            <textarea
-              rows={2}
-              placeholder="내 풀이 — 실패 지점"
-              value={draft.mySol}
-              onChange={(e) => set({ mySol: e.target.value })}
-            />
-            <textarea
-              rows={2}
-              placeholder="최적 풀이 — 시험 전략 포함"
-              value={draft.optSol}
-              onChange={(e) => set({ optSol: e.target.value })}
-            />
+            <Field label="문제 원문 (선택)" hint="사진 OCR 결과가 여기 들어감">
+              <textarea
+                rows={2}
+                value={draft.question}
+                onChange={(e) => set({ question: e.target.value })}
+              />
+            </Field>
+            <Field label="내 풀이 — 실패 지점">
+              <textarea
+                rows={2}
+                value={draft.mySol}
+                onChange={(e) => set({ mySol: e.target.value })}
+              />
+            </Field>
+            <Field label="최적 풀이 — 시험 전략 포함">
+              <textarea
+                rows={2}
+                value={draft.optSol}
+                onChange={(e) => set({ optSol: e.target.value })}
+              />
+            </Field>
+          </div>
 
+          {/* ── 태그 & 판정 ── */}
+          <div className="form-group">
+            <div className="form-group-title">태그 &amp; 판정</div>
             {isMath && (
               <>
                 <div className="label">표준 항목 인출</div>
@@ -331,12 +347,13 @@ export default function RecordView({
               />
             )}
 
-            <textarea
-              rows={2}
-              placeholder="메모"
-              value={draft.memo}
-              onChange={(e) => set({ memo: e.target.value })}
-            />
+            <Field label="메모">
+              <textarea
+                rows={2}
+                value={draft.memo}
+                onChange={(e) => set({ memo: e.target.value })}
+              />
+            </Field>
 
             {gateActive && (
               <div className="gate">
@@ -359,21 +376,22 @@ export default function RecordView({
                 ))}
               </div>
             )}
-
-            <button
-              type="button"
-              className="save-btn"
-              disabled={!canSave}
-              onClick={submit}
-            >
-              저장
-            </button>
-            {gateActive && !gatePassed && (
-              <div className="gate-warn">판정 체크 미완료 — 저장 잠김</div>
-            )}
           </div>
-        )}
-      </section>
+
+          <Button
+            variant="primary"
+            size="lg"
+            block
+            disabled={!canSave}
+            onClick={submit}
+          >
+            저장
+          </Button>
+          {gateActive && !gatePassed && (
+            <div className="gate-warn">판정 체크 미완료 — 저장 잠김</div>
+          )}
+        </div>
+      </Panel>
 
       <div className="filter-row chip-row">
         <Chip
@@ -414,14 +432,14 @@ export default function RecordView({
                 className="note-row"
                 onClick={() => setExpandedId(open ? null : n.id)}
               >
-                <span className="note-subj">{n.subject}</span>
+                <Badge tone="info">{n.subject}</Badge>
                 <span className="note-prob">{n.problem}</span>
                 <span className="note-topic">
                   {n.topicMain}
                   {n.topicSub ? `·${n.topicSub}` : ""}
                 </span>
                 <span className="note-date">{n.date}</span>
-                {N > 0 && <span className="repeat-marker">×{N}</span>}
+                {N > 0 && <Badge tone="error">×{N}</Badge>}
               </button>
               {open && (
                 <div className="note-detail">

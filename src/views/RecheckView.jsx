@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { DAY_MS, RECHECK_DAYS } from "../constants.js";
-import { TagBadges } from "../components.jsx";
+import { TagBadges, Badge, Button } from "../components.jsx";
 
 export default function RecheckView({ notes, onResolve }) {
   const due = useMemo(
@@ -26,7 +26,7 @@ export default function RecheckView({ notes, onResolve }) {
       {due.map((n) => (
         <div key={n.id} className="recheck-item">
           <div className="rc-head">
-            <span className="note-subj">{n.subject}</span>
+            <Badge tone="info">{n.subject}</Badge>
             <span className="note-prob">{n.problem}</span>
             <span className="note-topic">
               {n.topicMain}
@@ -37,20 +37,12 @@ export default function RecheckView({ notes, onResolve }) {
           {n.question && <div className="rc-question">{n.question}</div>}
           <TagBadges tags={n.tags} />
           <div className="rc-actions">
-            <button
-              type="button"
-              className="rc-pass"
-              onClick={() => onResolve(n.id, "pass")}
-            >
+            <Button variant="success" onClick={() => onResolve(n.id, "pass")}>
               맞음 → 실행 실수 확정
-            </button>
-            <button
-              type="button"
-              className="rc-fail"
-              onClick={() => onResolve(n.id, "fail")}
-            >
+            </Button>
+            <Button variant="danger" onClick={() => onResolve(n.id, "fail")}>
               또 틀림 → 개념 갭 재분류
-            </button>
+            </Button>
           </div>
         </div>
       ))}
