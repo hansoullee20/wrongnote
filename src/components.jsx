@@ -164,9 +164,9 @@ export function Section({ title, actions, className = "", children }) {
  *   children: import('react').ReactNode,
  * }} props
  */
-export function Field({ label, hint, error, htmlFor, children }) {
+export function Field({ label, hint, error, htmlFor, className = "", children }) {
   return (
-    <div className="ui-field">
+    <div className={`ui-field${className ? ` ${className}` : ""}`}>
       <label className="ui-field-label" htmlFor={htmlFor}>
         {label}
       </label>

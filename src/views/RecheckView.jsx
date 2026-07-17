@@ -38,10 +38,11 @@ export default function RecheckView({ notes, onResolve }) {
           <TagBadges tags={n.tags} />
           <div className="rc-actions">
             <Button variant="success" onClick={() => onResolve(n.id, "pass")}>
-              맞음 → 실행 실수 확정
+              <span className="grade-mark pass">○</span> 맞음 → 실행 실수 확정
             </Button>
             <Button variant="danger" onClick={() => onResolve(n.id, "fail")}>
-              또 틀림 → 개념 갭 재분류
+              <span className="grade-mark fail">✗</span> 또 틀림 → 개념 갭
+              재분류
             </Button>
           </div>
         </div>

@@ -102,6 +102,12 @@ export default function App() {
 
   return (
     <div className="app">
+      <header className="masthead">
+        <span className="masthead-sub">대학수학능력시험 대비</span>
+        <h1 className="masthead-title">오답노트</h1>
+        <span className="masthead-stamp">채점완료</span>
+      </header>
+
       <nav className="tabs">
         {TABS.map((t) => (
           <button
@@ -116,6 +122,7 @@ export default function App() {
         ))}
       </nav>
 
+      <div className="paper-sheet">
       {tab === "record" && (
         <RecordView
           notes={notes}
@@ -137,6 +144,7 @@ export default function App() {
           onTopicClick={gotoRecordWithTopic}
         />
       )}
+      </div>
     </div>
   );
 }

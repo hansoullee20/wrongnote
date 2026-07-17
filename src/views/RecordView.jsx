@@ -347,7 +347,7 @@ export default function RecordView({
               />
             )}
 
-            <Field label="메모">
+            <Field label="메모" className="memo-field">
               <textarea
                 rows={2}
                 value={draft.memo}
@@ -439,7 +439,7 @@ export default function RecordView({
                   {n.topicSub ? `·${n.topicSub}` : ""}
                 </span>
                 <span className="note-date">{n.date}</span>
-                {N > 0 && <Badge tone="error">×{N}</Badge>}
+                {N > 0 && <span className="repeat-marker">×{N}</span>}
               </button>
               {open && (
                 <div className="note-detail">
@@ -465,11 +465,18 @@ export default function RecordView({
                   {n.memo && (
                     <div className="field">
                       <div className="field-label">메모</div>
-                      <div className="field-text">{n.memo}</div>
+                      <div className="field-text memo-text">{n.memo}</div>
                     </div>
                   )}
                   {n.rechecked && (
                     <div className="recheck-mark">
+                      <span
+                        className={`grade-mark ${
+                          n.recheckResult === "pass" ? "pass" : "fail"
+                        }`}
+                      >
+                        {n.recheckResult === "pass" ? "○" : "✗"}
+                      </span>{" "}
                       재검증:{" "}
                       {n.recheckResult === "pass"
                         ? "실행 실수 확정"

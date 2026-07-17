@@ -11,32 +11,49 @@
 }
 
 :root {
-  /* ---- 표면 (오트밀 → 크림) ---- */
-  --bg: #e7decb;
-  --surface: #f3ecdb;
-  --surface-2: #ede4d0;
-  --sunken: #dbcfb4;
-  --border: #cbbb9b;
-  --border-strong: #b4a17c;
+  /* ---- 컨셉: 채점된 시험지 — 종이/잉크/빨간펜/파란펜/형광펜 ---- */
+  --bg: #efeadf; /* 책상 위 갱지 톤 */
+  --paper: #fbf9f3; /* 시험지 종이 */
+  --surface: #fbf9f3;
+  --surface-2: #f3efe4;
+  --sunken: #e6e0d1;
+  --border: #d8d1bf;
+  --border-strong: #b9b09a;
+  --rule: #dcd4c0; /* 노트 줄 */
 
-  /* ---- 텍스트 (에스프레소, 순검정 금지) ---- */
-  --text: #3b3227;
-  --text-secondary: #6a5c48;
-  --text-muted: #93856e;
-  --text-on-accent: #f7f1e3;
+  /* ---- 잉크 ---- */
+  --text: #211d16; /* 인쇄 잉크 */
+  --text-secondary: #5b5344;
+  --text-muted: #948b76;
+  --text-on-accent: #fdfbf4;
 
-  /* ---- 시맨틱 액센트 (어시 톤) ---- */
-  --primary: #b25c38;
-  --primary-hover: #9c4e2e;
-  --primary-soft: #efd9c9;
-  --success: #5f7040;
-  --success-soft: #dce0c4;
-  --error: #a6402e;
-  --error-soft: #ebd3c6;
-  --warning: #b5852c;
-  --warning-soft: #ebdcb4;
-  --info: #4c6b72;
-  --info-soft: #d5ded9;
+  /* ---- 필기구 ---- */
+  --red-pen: #c0392b; /* 채점 빨간펜 */
+  --red-pen-soft: #f7ded9;
+  --blue-pen: #2b4e9b; /* 필기 파란펜 */
+  --blue-pen-soft: #dde5f3;
+  --pencil: #6d675c;
+  --highlight: #f6e7a9; /* 형광펜 */
+  --highlight-strong: #efd671;
+
+  /* ---- 시맨틱 매핑 ---- */
+  --primary: var(--red-pen);
+  --primary-hover: #a72f22;
+  --primary-soft: var(--red-pen-soft);
+  --success: #3e6b48; /* 채점 ○ 그린이 아니라 차분한 그린 */
+  --success-soft: #dde8dd;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #a87b23;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  /* ---- 폰트 ---- */
+  --font-body: "Pretendard Variable", "Pretendard", -apple-system,
+    BlinkMacSystemFont, "Noto Sans KR", "Segoe UI", sans-serif;
+  --font-exam: "Nanum Myeongjo", "Noto Serif KR", serif; /* 시험지 제목 */
+  --font-hand: "Nanum Pen Script", cursive; /* 손글씨 주석 */
 
   /* ---- 타이포 스케일 ---- */
   --fs-xs: 12px;
@@ -95,17 +112,76 @@ html,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: "Pretendard Variable", "Pretendard", -apple-system,
-    BlinkMacSystemFont, "Noto Sans KR", "Segoe UI", sans-serif;
+  font-family: var(--font-body);
   font-size: var(--fs-base);
   line-height: var(--lh-body);
   -webkit-font-smoothing: antialiased;
 }
 
+/* 시험지 한 장이 책상 위에 놓인 구성 */
 #root {
   max-width: var(--maxw);
   margin: 0 auto;
   padding: 0 var(--sp-4) 72px;
+}
+
+.paper-sheet {
+  background: var(--paper);
+  /* 노트 줄: 은은한 가로 괘선 */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    var(--rule) 31px,
+    var(--rule) 32px
+  );
+  border: 1px solid var(--border);
+  border-top: none;
+  box-shadow: var(--sh-lg);
+  padding: var(--sp-4);
+  min-height: calc(100vh - 120px);
+}
+
+/* ---- 시험지 마스트헤드: 이중 괘선 + 명조 ---- */
+.masthead {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-bottom: 3px double var(--text);
+  border-top: 3px double var(--text);
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+  box-shadow: var(--sh-sm);
+}
+
+.masthead-title {
+  font-family: var(--font-exam);
+  font-weight: 800;
+  font-size: var(--fs-xl);
+  letter-spacing: 0.35em;
+  text-indent: 0.35em;
+}
+
+.masthead-sub {
+  font-family: var(--font-exam);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.masthead-stamp {
+  font-family: var(--font-hand);
+  font-size: 22px;
+  color: var(--red-pen);
+  transform: rotate(-4deg);
+  border: 2px solid var(--red-pen);
+  border-radius: 6px;
+  padding: 0 10px;
+  white-space: nowrap;
+  opacity: 0.85;
 }
 
 button {
@@ -244,8 +320,13 @@ textarea:focus {
 }
 
 .section-title {
+  font-family: var(--font-exam);
   font-size: var(--fs-md);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.1em;
+  padding-bottom: var(--sp-1);
+  border-bottom: 2px solid var(--text);
+  align-self: flex-start;
 }
 
 .ui-field {
@@ -305,37 +386,42 @@ textarea:focus {
    3. 탭 네비게이션
    ============================================================ */
 
+/* 노트 인덱스 탭: 시험지 위에 붙은 견출지 */
 .tabs {
   position: sticky;
   top: 0;
   z-index: 20;
   display: flex;
-  gap: var(--sp-2);
+  gap: var(--sp-1);
   background: var(--bg);
-  padding: var(--sp-3) 0 var(--sp-2);
-  border-bottom: 1px solid var(--border);
+  padding: var(--sp-3) var(--sp-2) 0;
 }
 
 .tab {
   flex: 1;
   min-height: var(--tap-min);
-  padding: 10px 2px;
-  border-radius: var(--r-md);
+  padding: 12px 2px 10px;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--sunken);
   color: var(--text-secondary);
   font-weight: var(--fw-medium);
   font-size: var(--fs-base);
   white-space: nowrap;
+  transform: translateY(2px);
 }
 
 .tab.on {
-  background: var(--primary-soft);
-  color: var(--text);
-  font-weight: var(--fw-semibold);
-  box-shadow: var(--sh-sm);
+  background: var(--paper);
+  color: var(--red-pen);
+  font-weight: var(--fw-bold);
+  border-color: var(--border);
+  transform: translateY(0);
+  box-shadow: 0 -2px 4px rgba(33, 29, 22, 0.05);
 }
 
 .view {
-  padding-top: var(--sp-4);
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
@@ -395,8 +481,11 @@ textarea:focus {
   align-items: center;
   min-height: var(--tap-min);
   padding: var(--sp-3) var(--sp-4);
-  font-weight: var(--fw-semibold);
+  font-family: var(--font-exam);
+  font-weight: var(--fw-bold);
   font-size: var(--fs-md);
+  letter-spacing: 0.12em;
+  border-bottom: 1px solid var(--border);
 }
 
 .fold-arrow {
@@ -429,16 +518,23 @@ textarea:focus {
 }
 
 .form-group-title {
+  font-family: var(--font-exam);
   font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--primary);
-  letter-spacing: 0.02em;
+  font-weight: var(--fw-bold);
+  color: var(--text);
+  letter-spacing: 0.15em;
+  padding-bottom: var(--sp-1);
+  border-bottom: 2px solid var(--text);
+  align-self: flex-start;
 }
 
+/* 힌트/주석: 파란펜 손글씨 */
 .hint {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  line-height: 1.5;
+  font-family: var(--font-hand);
+  font-size: 17px;
+  color: var(--blue-pen);
+  line-height: 1.35;
+  opacity: 0.9;
 }
 
 /* ============================================================
@@ -517,16 +613,18 @@ textarea:focus {
   gap: var(--sp-3);
 }
 
+/* 답안지 행: 왼쪽 빨간 여백선 + 문항번호 느낌 */
 .note {
-  background: var(--surface);
+  background: var(--paper);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-left: 2px solid var(--red-pen-soft);
+  border-radius: var(--r-sm);
   overflow: hidden;
   box-shadow: var(--sh-sm);
 }
 
 .note.open {
-  border-color: var(--primary);
+  border-left-color: var(--red-pen);
   box-shadow: var(--sh-md);
 }
 
@@ -570,13 +668,18 @@ textarea:focus {
   font-size: var(--fs-xs);
 }
 
+/* 빨간펜으로 동그라미 친 반복 횟수 */
 .repeat-marker {
-  background: var(--error);
-  color: var(--text-on-accent);
+  background: transparent;
+  color: var(--red-pen);
+  font-family: var(--font-hand);
   font-weight: var(--fw-bold);
-  font-size: var(--fs-xs);
-  border-radius: var(--r-pill);
-  padding: 2px 8px;
+  font-size: 19px;
+  line-height: 1;
+  border: 2px solid var(--red-pen);
+  border-radius: 50% 45% 52% 48% / 48% 52% 45% 55%; /* 손으로 그린 원 */
+  padding: 3px 9px;
+  transform: rotate(-6deg);
   flex-shrink: 0;
 }
 
@@ -994,6 +1097,79 @@ textarea:focus {
   border-color: var(--border);
   background: var(--surface-2);
   cursor: wait;
+}
+
+/* ============================================================
+   11b. 시험지 아이덴티티 디테일
+   ============================================================ */
+
+/* 포스트잇 메모 */
+.memo-field textarea {
+  background: var(--highlight);
+  border: 1px solid var(--highlight-strong);
+  border-radius: 2px;
+  box-shadow: var(--sh-sm);
+  font-family: var(--font-hand);
+  font-size: 19px;
+  line-height: 1.4;
+  transform: rotate(-0.5deg);
+}
+
+.memo-field textarea:focus {
+  border-color: var(--warning);
+  box-shadow: var(--sh-md);
+}
+
+.note-detail .field-text.memo-text {
+  font-family: var(--font-hand);
+  font-size: 19px;
+  background: var(--highlight);
+  border-radius: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  display: inline-block;
+  transform: rotate(-0.4deg);
+}
+
+/* 채점 표시 ○ / ✗ */
+.grade-mark {
+  font-family: var(--font-hand);
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.grade-mark.pass {
+  color: var(--success);
+}
+
+.grade-mark.fail {
+  color: var(--red-pen);
+}
+
+/* 단어장 링카드: 위쪽 펀치 구멍 */
+.flashcard {
+  position: relative;
+}
+
+.flashcard::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--border-strong);
+  box-shadow: inset 0 1px 2px rgba(33, 29, 22, 0.15);
+}
+
+/* 빈 상태: 연필 손글씨 */
+.empty {
+  font-family: var(--font-hand);
+  font-size: 20px;
+  color: var(--pencil);
 }
 
 /* ============================================================
