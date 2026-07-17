@@ -66,6 +66,7 @@ const emptyDraft = (subject = "수학") => ({
 export default function RecordView({
   notes,
   onAdd,
+  onUpdate,
   onDelete,
   filter,
   setFilter,
@@ -74,9 +75,38 @@ export default function RecordView({
   const [formOpen, setFormOpen] = useState(true);
   const [checks, setChecks] = useState([false, false, false, false]);
   const [expandedId, setExpandedId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [ocr, setOcr] = useState({ busy: false, label: "", error: "" });
   const [copied, setCopied] = useState("");
   const ocrInputRef = useRef(null);
+
+  /** 노트를 폼에 불러와 수정 모드 시작 */
+  function startEdit(n) {
+    setDraft({
+      subject: n.subject,
+      problem: n.problem,
+      topicMain: n.topicMain,
+      topicSub: n.topicSub,
+      question: n.question,
+      mySol: n.mySol,
+      optSol: n.optSol,
+      derived: n.derived,
+      tags: n.tags,
+      memo: n.memo,
+    });
+    setEditingId(n.id);
+    setChecks([false, false, false, false]); // 게이트는 수정에도 다시 통과해야 함
+    setFormOpen(true);
+    setExpandedId(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /** 수정 취소 — 반쯤 고친 draft가 새 노트로 새는 것 방지 */
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(emptyDraft(draft.subject));
+    setChecks([false, false, false, false]);
+  }
 
   async function handleCopyPrompt() {
     const ok = await copyText(buildClassifyPrompt(draft));
@@ -148,7 +178,13 @@ export default function RecordView({
 
   const submit = () => {
     if (!canSave) return;
-    onAdd({ ...draft, problem: draft.problem.trim() });
+    const payload = { ...draft, problem: draft.problem.trim() };
+    if (editingId) {
+      onUpdate(editingId, payload); // 수정 시 자동 카드 생성 없음
+      setEditingId(null);
+    } else {
+      onAdd(payload);
+    }
     setDraft(emptyDraft(draft.subject));
     setChecks([false, false, false, false]);
   };
@@ -197,7 +233,7 @@ export default function RecordView({
   return (
     <div className="view">
       <Panel
-        title="오답 기록"
+        title={editingId ? "오답 수정 중" : "오답 기록"}
         open={formOpen}
         onToggle={() => setFormOpen((o) => !o)}
       >
@@ -385,8 +421,13 @@ export default function RecordView({
             disabled={!canSave}
             onClick={submit}
           >
-            저장
+            {editingId ? "수정 저장" : "저장"}
           </Button>
+          {editingId && (
+            <Button variant="neutral" block onClick={cancelEdit}>
+              수정 취소
+            </Button>
+          )}
           {gateActive && !gatePassed && (
             <div className="gate-warn">판정 체크 미완료 — 저장 잠김</div>
           )}
@@ -488,15 +529,24 @@ export default function RecordView({
                         : "개념 갭 재분류"}
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className="del-btn"
-                    onClick={() => {
-                      if (confirm("이 기록을 삭제할까?")) onDelete(n.id);
-                    }}
-                  >
-                    삭제
-                  </button>
+                  <div className="note-actions">
+                    <button
+                      type="button"
+                      className="edit-btn"
+                      onClick={() => startEdit(n)}
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      className="del-btn"
+                      onClick={() => {
+                        if (confirm("이 기록을 삭제할까?")) onDelete(n.id);
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

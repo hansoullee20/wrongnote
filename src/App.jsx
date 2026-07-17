@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { DAY_MS, RECHECK_DAYS, fmtDate, uid } from "./constants.js";
+import { RECHECK_DAYS, DAY_MS, fmtDate, uid, isRecheckDue } from "./constants.js";
 import { loadAll, saveNotes, saveCards } from "./storage.js";
+import { migrateCard } from "./migrate.js";
+import { scheduleCard, dueCards } from "./srs.js";
 import RecordView from "./views/RecordView.jsx";
 import RecheckView from "./views/RecheckView.jsx";
 import CardsView from "./views/CardsView.jsx";
@@ -29,72 +31,140 @@ export default function App() {
     if (!storageLocked) saveCards(cards);
   }, [cards, storageLocked]);
 
-  const dueCount = useMemo(
-    () =>
-      notes.filter(
-        (n) => !n.rechecked && Date.now() - n.ts >= RECHECK_DAYS * DAY_MS
-      ).length,
+  // 재검증 배지 — RecheckView와 동일한 isRecheckDue 기준
+  const recheckDueCount = useMemo(
+    () => notes.filter((n) => isRecheckDue(n)).length,
     [notes]
   );
 
-  function addNote(draft) {
-    const ts = Date.now();
-    let tags = draft.tags;
-    if (draft.derived === "yes" && !tags.includes("지위 오해")) {
-      tags = [...tags, "지위 오해"];
+  // 카드 복습 배지
+  const cardDueCount = useMemo(() => dueCards(cards).length, [cards]);
+
+  /** derived=yes면 "지위 오해" 자동 태그 — 생성/수정 공통 규칙 */
+  function applyDerivedTag(draft) {
+    if (draft.derived === "yes" && !draft.tags.includes("지위 오해")) {
+      return { ...draft, tags: [...draft.tags, "지위 오해"] };
     }
+    return draft;
+  }
+
+  function addNote(rawDraft) {
+    const draft = applyDerivedTag(rawDraft);
+    const ts = Date.now();
     const note = {
       ...draft,
-      tags,
       id: uid(),
       ts,
       date: fmtDate(ts),
       rechecked: false,
       recheckResult: null,
+      recheckCount: 0,
+      nextRecheckTs: null,
     };
     setNotes((ns) => [note, ...ns]);
 
-    // 재유도 → 플래시카드 자동 생성 (동일 front 존재 시 스킵)
-    if (note.derived === "yes") {
+    // 재유도 → 플래시카드 자동 생성.
+    // 빈 뒷면 금지: optSol 없으면 만들지 않는다. 생성 시에만 (수정 시 X).
+    if (note.derived === "yes" && note.problem && note.optSol?.trim()) {
       setCards((cs) => {
-        const front = note.problem;
-        if (!front || cs.some((c) => c.front === front)) return cs;
+        if (cs.some((c) => c.noteId === note.id || c.front === note.problem)) {
+          return cs;
+        }
         return [
           ...cs,
-          {
+          migrateCard({
             id: uid(),
             noteId: note.id,
             subject: note.subject,
-            front,
+            front: note.problem,
             back: note.optSol,
-          },
+          }),
         ];
       });
     }
   }
 
+  function updateNote(id, rawPatch) {
+    const patch = applyDerivedTag(rawPatch);
+    setNotes((ns) =>
+      ns.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              ...patch,
+              // 불변 필드는 원본 유지
+              id: n.id,
+              ts: n.ts,
+              date: n.date,
+              rechecked: n.rechecked,
+              recheckResult: n.recheckResult,
+              recheckCount: n.recheckCount,
+              nextRecheckTs: n.nextRecheckTs,
+            }
+          : n
+      )
+    );
+  }
+
   function deleteNote(id) {
     setNotes((ns) => ns.filter((n) => n.id !== id));
+    // 이 노트에서 자동 생성된 카드도 정리 (수동 카드는 noteId=null이라 생존)
+    setCards((cs) => cs.filter((c) => c.noteId !== id));
   }
 
   function resolveRecheck(id, result) {
+    const now = Date.now();
     setNotes((ns) =>
       ns.map((n) => {
         if (n.id !== id) return n;
         if (result === "pass") {
-          return { ...n, rechecked: true, recheckResult: "pass" };
+          // 통과 → 다음 사이클 예약 (반복 재검증)
+          return {
+            ...n,
+            rechecked: true,
+            recheckResult: "pass",
+            recheckCount: n.recheckCount + 1,
+            nextRecheckTs: now + RECHECK_DAYS * DAY_MS,
+          };
         }
+        // 실패 → 개념 갭 재분류, 종결
         const tags = n.tags.filter((t) => t !== "실행 실수");
         if (!tags.includes("개념 오류")) tags.push("개념 오류");
         return {
           ...n,
           rechecked: true,
           recheckResult: "fail",
+          recheckCount: n.recheckCount + 1,
+          nextRecheckTs: null,
           tags,
           memo: (n.memo ? n.memo + " " : "") + "[재검증 실패→개념갭]",
         };
       })
     );
+  }
+
+  // ---- 카드 CRUD + 채점 ----
+  function gradeCard(id, grade) {
+    setCards((cs) =>
+      cs.map((c) => (c.id === id ? scheduleCard(c, grade) : c))
+    );
+  }
+
+  function addCard({ front, back, subject }) {
+    setCards((cs) => [
+      ...cs,
+      migrateCard({ id: uid(), noteId: null, subject, front, back }),
+    ]);
+  }
+
+  function updateCard(id, patch) {
+    setCards((cs) =>
+      cs.map((c) => (c.id === id ? { ...c, ...patch, id: c.id } : c))
+    );
+  }
+
+  function deleteCard(id) {
+    setCards((cs) => cs.filter((c) => c.id !== id));
   }
 
   function replaceAll(newNotes, newCards) {
@@ -116,42 +186,59 @@ export default function App() {
       </header>
 
       <nav className="tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`tab${tab === t.id ? " on" : ""}`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.id === "recheck" && dueCount > 0 ? ` ${dueCount}` : ""}
-          </button>
-        ))}
+        {TABS.map((t) => {
+          const badge =
+            t.id === "recheck"
+              ? recheckDueCount
+              : t.id === "cards"
+                ? cardDueCount
+                : 0;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`tab${tab === t.id ? " on" : ""}`}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+              {badge > 0 && <span className="tab-badge">{badge}</span>}
+            </button>
+          );
+        })}
       </nav>
 
       <div className="paper-sheet">
-      {storageLocked && <div className="audit-warn">{boot.error}</div>}
-      {tab === "record" && (
-        <RecordView
-          notes={notes}
-          onAdd={addNote}
-          onDelete={deleteNote}
-          filter={filter}
-          setFilter={setFilter}
-        />
-      )}
-      {tab === "recheck" && (
-        <RecheckView notes={notes} onResolve={resolveRecheck} />
-      )}
-      {tab === "cards" && <CardsView cards={cards} />}
-      {tab === "stats" && (
-        <StatsView
-          notes={notes}
-          cards={cards}
-          onReplaceAll={replaceAll}
-          onTopicClick={gotoRecordWithTopic}
-        />
-      )}
+        {storageLocked && <div className="audit-warn">{boot.error}</div>}
+        {tab === "record" && (
+          <RecordView
+            notes={notes}
+            onAdd={addNote}
+            onUpdate={updateNote}
+            onDelete={deleteNote}
+            filter={filter}
+            setFilter={setFilter}
+          />
+        )}
+        {tab === "recheck" && (
+          <RecheckView notes={notes} onResolve={resolveRecheck} />
+        )}
+        {tab === "cards" && (
+          <CardsView
+            cards={cards}
+            onGrade={gradeCard}
+            onAdd={addCard}
+            onUpdate={updateCard}
+            onDelete={deleteCard}
+          />
+        )}
+        {tab === "stats" && (
+          <StatsView
+            notes={notes}
+            cards={cards}
+            onReplaceAll={replaceAll}
+            onTopicClick={gotoRecordWithTopic}
+          />
+        )}
       </div>
     </div>
   );

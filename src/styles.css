@@ -421,6 +421,20 @@ textarea:focus {
   box-shadow: 0 -2px 4px rgba(33, 29, 22, 0.05);
 }
 
+/* 할 일 개수: 빨간펜 동그라미 표시 */
+.tab-badge {
+  display: inline-block;
+  min-width: 22px;
+  margin-left: 6px;
+  font-family: var(--font-hand);
+  font-size: 16px;
+  line-height: 1.15;
+  color: var(--red-pen);
+  border: 1.5px solid var(--red-pen);
+  border-radius: 50% 46% 50% 48% / 46% 50% 48% 52%;
+  padding: 0 5px;
+}
+
 .view {
   display: flex;
   flex-direction: column;
@@ -754,8 +768,22 @@ textarea:focus {
   color: var(--warning);
 }
 
+.note-actions {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+}
+
+.edit-btn {
+  min-height: var(--tap-min);
+  color: var(--blue-pen);
+  font-size: var(--fs-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px 16px;
+}
+
 .del-btn {
-  align-self: flex-end;
   min-height: var(--tap-min);
   color: var(--error);
   font-size: var(--fs-sm);
@@ -860,6 +888,36 @@ textarea:focus {
 
 .cards-view {
   align-items: center;
+}
+
+.cards-view .form-group,
+.cards-view .note-list {
+  width: 100%;
+  align-self: stretch;
+}
+
+.mode-row,
+.grade-row {
+  display: flex;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.mode-row .btn,
+.grade-row .btn {
+  flex: 1;
+}
+
+.card-manage-actions {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+}
+
+.card-manage-actions .btn {
+  min-height: 38px;
+  padding: 6px 14px;
+  font-size: var(--fs-sm);
 }
 
 .card-count {

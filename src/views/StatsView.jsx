@@ -1,10 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import {
-  DAY_MS,
-  RECHECK_DAYS,
-  EXECUTION_TAGS,
-  MATH_TOPICS,
-} from "../constants.js";
+import { EXECUTION_TAGS, MATH_TOPICS, isRecheckDue } from "../constants.js";
 import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
 import { Section, Button } from "../components.jsx";
 
@@ -40,12 +35,11 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
   }, [notes]);
 
   const audit = useMemo(() => {
-    const done = notes.filter((n) => n.rechecked);
+    // 완료 = 한 번이라도 재검증한 노트 (반복 사이클 도입 후 기준)
+    const done = notes.filter((n) => n.recheckCount > 0);
     const pass = done.filter((n) => n.recheckResult === "pass").length;
     const fail = done.filter((n) => n.recheckResult === "fail").length;
-    const waiting = notes.filter(
-      (n) => !n.rechecked && Date.now() - n.ts >= RECHECK_DAYS * DAY_MS
-    ).length;
+    const waiting = notes.filter((n) => isRecheckDue(n)).length;
     const rate = pass + fail > 0 ? fail / (pass + fail) : 0;
     return { done: done.length, pass, fail, waiting, rate };
   }, [notes]);

@@ -73,6 +73,14 @@ export const GATE_CHECKLIST = [
 export const RECHECK_DAYS = 14;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * 재검증 대상 판정 — 탭 배지와 재검증 뷰가 반드시 같은 기준을 쓴다.
+ * pass는 다음 사이클을 예약하고(반복), fail은 종결.
+ */
+export const isRecheckDue = (n, now = Date.now()) =>
+  n.recheckResult !== "fail" &&
+  now >= (n.nextRecheckTs ?? n.ts + RECHECK_DAYS * DAY_MS);
+
 export const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()

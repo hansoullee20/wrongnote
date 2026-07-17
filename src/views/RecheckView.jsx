@@ -1,15 +1,10 @@
 import { useMemo } from "react";
-import { DAY_MS, RECHECK_DAYS } from "../constants.js";
+import { isRecheckDue } from "../constants.js";
 import { TagBadges, Badge, Button } from "../components.jsx";
 
 export default function RecheckView({ notes, onResolve }) {
-  const due = useMemo(
-    () =>
-      notes.filter(
-        (n) => !n.rechecked && Date.now() - n.ts >= RECHECK_DAYS * DAY_MS
-      ),
-    [notes]
-  );
+  // App의 탭 배지와 동일한 기준 (isRecheckDue)
+  const due = useMemo(() => notes.filter((n) => isRecheckDue(n)), [notes]);
 
   return (
     <div className="view">
