@@ -10,6 +10,40 @@
   font-display: swap;
 }
 
+/* 나눔명조 / 나눔펜스크립트 — 한글 서브셋 self-host (출처: @fontsource).
+   오프라인에서도 시험지 제목·빨간펜 손글씨가 유지되도록 CDN 대신 번들. */
+@font-face {
+  font-family: "Nanum Myeongjo";
+  src: url("/fonts/nanum-myeongjo-korean-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nanum Myeongjo";
+  src: url("/fonts/nanum-myeongjo-korean-700-normal.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nanum Myeongjo";
+  src: url("/fonts/nanum-myeongjo-korean-800-normal.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nanum Pen Script";
+  src: url("/fonts/nanum-pen-script-korean-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* ---- 컨셉: 채점된 시험지 — 종이/잉크/빨간펜/파란펜/형광펜 ---- */
   --bg: #efeadf; /* 책상 위 갱지 톤 */

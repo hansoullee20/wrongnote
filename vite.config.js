@@ -1,9 +1,64 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
-  plugins: [react()],
+/* GitHub Pages는 /wrongnote/ 하위에 서비스되지만 dev 서버와 Playwright는
+   루트 기준으로 돌기 때문에, base는 build 일 때만 붙인다. */
+const GITHUB_PAGES_BASE = "/wrongnote/";
+
+export default defineConfig(({ command, isPreview }) => ({
+  base: command === "build" || isPreview ? GITHUB_PAGES_BASE : "/",
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: "autoUpdate",
+      includeAssets: ["icon.svg", "apple-touch-icon.png"],
+      manifest: {
+        name: "수능 오답노트",
+        short_name: "오답노트",
+        description: "수능 오답을 기록하고 다시 풀어보는 개인 오답노트",
+        lang: "ko",
+        start_url: ".",
+        scope: ".",
+        display: "standalone",
+        background_color: "#efeadf",
+        theme_color: "#e7decb",
+        icons: [
+          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
+          {
+            src: "icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // Pretendard Variable 하나가 2MB에 육박해서 기본 한도(2MiB)를 넘긴다.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            /* tesseract.js는 wasm 코어와 kor/eng 학습데이터를 CDN에서 받는다.
+               수십 MB라 미리 캐시하진 않고, 온라인에서 OCR을 한 번 돌리면
+               그 뒤로는 오프라인에서도 인식되도록 한다. */
+            urlPattern: ({ url }) =>
+              url.hostname === "cdn.jsdelivr.net" ||
+              url.hostname === "unpkg.com" ||
+              url.hostname === "tessdata.projectnaptha.com",
+            handler: "CacheFirst",
+            options: {
+              cacheName: "tesseract-assets",
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
+    }),
+  ],
   server: {
     host: true,
   },
-});
+}));
