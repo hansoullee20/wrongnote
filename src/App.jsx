@@ -6,13 +6,13 @@ import { scheduleCard, dueCards } from "./srs.js";
 import { deleteImages, gcImages } from "./imageStore.js";
 import ProblemsView from "./views/ProblemsView.jsx";
 import RecordView from "./views/RecordView.jsx";
-import RecheckView from "./views/RecheckView.jsx";
+import SolveView from "./views/SolveView.jsx";
 import CardsView from "./views/CardsView.jsx";
 import StatsView from "./views/StatsView.jsx";
 
 const TABS = [
   { id: "problems", label: "문제" },
-  { id: "recheck", label: "재검증" },
+  { id: "solve", label: "풀기" },
   { id: "cards", label: "카드" },
   { id: "stats", label: "통계" },
 ];
@@ -27,6 +27,8 @@ export default function App() {
   // 기록 폼은 탭이 아니라 오버레이 — 매일 하는 건 복습이고 기록은 가끔이다
   const [recording, setRecording] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
+  // 문제 그리드에서 바로 세션을 시작할 때 넘기는 큐
+  const [pendingQueue, setPendingQueue] = useState(null);
   const [filter, setFilter] = useState({ tag: "", cause: "", topicMain: "" });
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export default function App() {
     if (!storageLocked) saveCards(cards);
   }, [cards, storageLocked]);
 
-  // 재검증 배지 — RecheckView와 동일한 isRecheckDue 기준
+  // 풀기 배지 — 풀기 세션과 동일한 isRecheckDue 기준
   const recheckDueCount = useMemo(
     () => notes.filter((n) => isRecheckDue(n)).length,
     [notes]
@@ -120,34 +122,31 @@ export default function App() {
     setCards((cs) => cs.filter((c) => c.noteId !== id));
   }
 
-  function resolveRecheck(id, result) {
+  /**
+   * 다시 풀기 결과 1회분을 노트에 쌓는다.
+   * 틀렸다고 주원인을 자동으로 바꾸지 않는다 — 잘못된 재분류는
+   * 잘못된 처방으로 이어진다. 대신 세션 요약에서 사용자에게 물어본다.
+   */
+  function recordAttempt(id, { answer, correct, seconds }) {
     const now = Date.now();
     setNotes((ns) =>
       ns.map((n) => {
         if (n.id !== id) return n;
-        if (result === "pass") {
-          // 통과 → 다음 사이클 예약 (반복 재검증)
-          return {
-            ...n,
-            rechecked: true,
-            recheckResult: "pass",
-            recheckCount: n.recheckCount + 1,
-            nextRecheckTs: now + RECHECK_DAYS * DAY_MS,
-          };
-        }
-        // 실패 → 개념 갭 재분류, 종결
-        const tags = n.tags.filter((t) => t !== "실행 실수");
-        if (!tags.includes("개념 오류")) tags.push("개념 오류");
         return {
           ...n,
+          attempts: [...(n.attempts || []), { ts: now, answer, correct, seconds }],
           rechecked: true,
-          recheckResult: "fail",
+          recheckResult: correct ? "pass" : "fail",
           recheckCount: n.recheckCount + 1,
-          nextRecheckTs: null,
-          tags,
-          memo: (n.memo ? n.memo + " " : "") + "[재검증 실패→개념갭]",
+          nextRecheckTs: now + (correct ? RECHECK_DAYS : 1) * DAY_MS,
         };
       })
+    );
+  }
+
+  function setCorrectAnswer(id, correctAnswer) {
+    setNotes((ns) =>
+      ns.map((n) => (n.id === id ? { ...n, correctAnswer } : n))
     );
   }
 
@@ -198,7 +197,7 @@ export default function App() {
       <nav className="tabs">
         {TABS.map((t) => {
           const badge =
-            t.id === "recheck"
+            t.id === "solve"
               ? recheckDueCount
               : t.id === "cards"
                 ? cardDueCount
@@ -233,11 +232,37 @@ export default function App() {
               setEditingNoteId(null);
               setRecording(true);
             }}
-            onStartDue={() => setTab("recheck")}
+            onStartDue={() => {
+              setPendingQueue({
+                ids: notes.filter((n) => isRecheckDue(n)).map((n) => n.id),
+                label: "오늘 볼 것",
+              });
+              setTab("solve");
+            }}
+            onStartRandom={(pool, size) => {
+              const shuffled = [...pool].sort(() => Math.random() - 0.5);
+              setPendingQueue({
+                ids: shuffled.slice(0, size).map((n) => n.id),
+                label: filter.cause ? `${filter.cause}에서` : "전체에서",
+              });
+              setTab("solve");
+            }}
           />
         )}
-        {tab === "recheck" && (
-          <RecheckView notes={notes} onResolve={resolveRecheck} />
+        {tab === "solve" && (
+          <SolveView
+            notes={notes}
+            cardDueCount={cardDueCount}
+            initialQueue={pendingQueue}
+            onConsumeInitialQueue={() => setPendingQueue(null)}
+            onRecordAttempt={recordAttempt}
+            onSetCorrectAnswer={setCorrectAnswer}
+            onOpenNote={(id) => {
+              setEditingNoteId(id);
+              setRecording(true);
+            }}
+            onGotoCards={() => setTab("cards")}
+          />
         )}
         {tab === "cards" && (
           <CardsView

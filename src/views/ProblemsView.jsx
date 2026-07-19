@@ -78,9 +78,9 @@ export default function ProblemsView({
   );
 
   /* 복습할 것이 앞으로 온다 — "오늘 뭐 하지"를 사용자가 고르지 않게 한다 */
-  const due = useMemo(() => visible.filter(isRecheckDue), [visible]);
+  const due = useMemo(() => visible.filter((n) => isRecheckDue(n)), [visible]);
   const rest = useMemo(() => visible.filter((n) => !isRecheckDue(n)), [visible]);
-  const recheckDueCount = useMemo(() => notes.filter(isRecheckDue).length, [notes]);
+  const recheckDueCount = useMemo(() => notes.filter((n) => isRecheckDue(n)).length, [notes]);
   const todayCount = recheckDueCount + cardDueCount;
 
   const renderCard = (n) => (

@@ -110,11 +110,13 @@ export const RECHECK_DAYS = 14;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * 재검증 대상 판정 — 탭 배지와 재검증 뷰가 반드시 같은 기준을 쓴다.
- * pass는 다음 사이클을 예약하고(반복), fail은 종결.
+ * 재검증 대상 판정 — 탭 배지와 풀기 세션이 반드시 같은 기준을 쓴다.
+ *
+ * v4부터 fail은 종결이 아니다. 틀린 문제야말로 다시 봐야 하므로
+ * 다음 복습을 내일로 당기고 큐에 남긴다. (예전엔 fail을 영구 제외해서
+ * 한 번 틀리면 두 번 다시 안 나왔다.)
  */
 export const isRecheckDue = (n, now = Date.now()) =>
-  n.recheckResult !== "fail" &&
   now >= (n.nextRecheckTs ?? n.ts + RECHECK_DAYS * DAY_MS);
 
 export const uid = () =>
