@@ -121,6 +121,7 @@ export default function RecordView({
   setFilter,
   formOnly = false,
   initialEditId = null,
+  onCancelEdit,
 }) {
   const [draft, setDraft] = useState(() => emptyDraft());
   const [formOpen, setFormOpen] = useState(true);
@@ -186,6 +187,9 @@ export default function RecordView({
   function cancelEdit() {
     setEditingId(null);
     setStep(1);
+    // 바깥(시트 헤더)도 수정 상태를 벗어나야 한다.
+    // 안 그러면 헤더는 '오답 수정 + 삭제'인데 폼은 빈 새 기록이 된다.
+    if (onCancelEdit) onCancelEdit();
     setDraft(emptyDraft(draft.subject));
     setStep(1);
     setChecks([false, false, false, false]);

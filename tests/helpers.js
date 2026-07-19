@@ -68,13 +68,13 @@ export const pickCause = (page, cause = "개념 부족") =>
 /** 기록 폼은 v4부터 탭이 아니라 FAB로 여는 오버레이다 */
 export async function openRecord(page) {
   await page.click(".fab");
-  await page.locator(".sheet .panel").first().waitFor();
+  await page.locator(".sheet .form").first().waitFor();
 }
 
 /** 그리드에서 문제를 탭해 수정 오버레이를 연다 */
 export async function openNoteByProblem(page, problem) {
   await page.click(`.prob-card:has-text("${problem}")`);
-  await page.locator(".sheet .panel").first().waitFor();
+  await page.locator(".sheet .form").first().waitFor();
 }
 
 /** 기록 폼 1페이지(사실) → 2페이지(분석). 주원인·풀이·저장은 2페이지에 있다 */

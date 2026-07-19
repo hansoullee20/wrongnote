@@ -67,7 +67,7 @@ test.describe("노트 CRUD + 자동 카드", () => {
 
     await openNoteByProblem(page, "EDIT-ME");
     await expect(
-      page.locator('.panel-head:has-text("오답 수정 중")')
+      page.locator('.sheet-title:has-text("오답 수정")')
     ).toBeVisible();
 
     await page.fill("#rec-problem", "EDITED");
@@ -90,13 +90,13 @@ test.describe("노트 CRUD + 자동 카드", () => {
     const baseNotes = (await readNotes(page)).length;
 
     await page.locator(".prob-card").first().click();
-    await page.locator(".sheet .panel").first().waitFor();
+    await page.locator(".sheet .form").first().waitFor();
     await page.fill("#rec-problem", "SHOULD-NOT-LEAK");
     await goAnalysis(page);
     await page.click('.btn:has-text("수정 취소")');
 
     await expect(
-      page.locator('.panel-head:has-text("오답 기록")')
+      page.locator('.sheet-title:has-text("오답 기록")')
     ).toBeVisible();
     expect((await readNotes(page)).length).toBe(baseNotes);
     expect(

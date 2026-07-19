@@ -338,6 +338,7 @@ export default function App() {
               setFilter={setFilter}
               formOnly
               initialEditId={editingNoteId}
+              onCancelEdit={() => setEditingNoteId(null)}
             />
           </div>
         </div>
