@@ -5,7 +5,10 @@ const NOTES_KEY = "wr_notes";
 const CARDS_KEY = "wr_cards";
 const LEGACY_CARDS_KEY = "gap_cards"; // v1 카드 키 — 읽기 전용으로 유지
 const VERSION_KEY = "wr_schema_version";
-const BACKUP_V1_KEY = "wr_backup_v1"; // v1→v2 직전 원본 스냅샷
+/* 스키마를 올리기 직전 원본 스냅샷. 버전마다 따로 남긴다 —
+   키를 하나로 두면 첫 마이그레이션 때 한 번 찍고 그 뒤로는
+   영영 안 찍혀서, 정작 위험한 후속 업그레이드가 무방비가 된다. */
+const backupKeyFor = (version) => `wr_backup_v${version}`;
 
 function parseArray(raw) {
   const parsed = JSON.parse(raw);
@@ -25,15 +28,16 @@ export function loadAll() {
   const rawCards =
     localStorage.getItem(CARDS_KEY) ?? localStorage.getItem(LEGACY_CARDS_KEY);
 
-  // v1→v2 최초 마이그레이션 직전, 원본 문자열 그대로 스냅샷 (1회만, 조용히)
+  // 마이그레이션 직전, 원본 문자열 그대로 스냅샷 (버전당 1회, 조용히)
+  const backupKey = backupKeyFor(storedVersion);
   if (
     storedVersion < SCHEMA_VERSION &&
     (rawNotes !== null || rawCards !== null) &&
-    localStorage.getItem(BACKUP_V1_KEY) === null
+    localStorage.getItem(backupKey) === null
   ) {
     try {
       localStorage.setItem(
-        BACKUP_V1_KEY,
+        backupKey,
         JSON.stringify({ savedAt: Date.now(), notes: rawNotes, cards: rawCards })
       );
     } catch {

@@ -176,3 +176,46 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     expect(raw).toBe("{corrupted!!");
   });
 });
+
+test.describe("업그레이드 직전 스냅샷", () => {
+  test("버전마다 따로 남는다 — 첫 스냅샷이 있어도 건너뛰지 않는다", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    // v3 데이터 + v1 시절 스냅샷이 이미 존재하는 상태 (실제 태블릿과 같은 상황)
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "3");
+      localStorage.setItem("wr_backup_v1", JSON.stringify({ savedAt: 1, notes: "old", cards: "old" }));
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학", problem: "PRE-V4", topicMain: "", topicSub: "",
+            question: "", mySol: "", optSol: "", tags: ["개념 오류"],
+            derived: null, memo: "", ts: Date.now(), id: "p1", date: "2026-07-19",
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    await page.waitForTimeout(300);
+
+    // v3 직전 상태가 새 키로 보존돼야 한다
+    const snap = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("wr_backup_v3"))
+    );
+    expect(snap.notes).toContain("PRE-V4");
+    // 옛 스냅샷은 건드리지 않는다
+    const old = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("wr_backup_v1"))
+    );
+    expect(old.notes).toBe("old");
+    // 마이그레이션 자체는 정상 수행
+    expect(
+      await page.evaluate(() => localStorage.getItem("wr_schema_version"))
+    ).toBe("4");
+  });
+});
