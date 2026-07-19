@@ -1467,3 +1467,261 @@ textarea:focus {
   color: var(--text-muted);
   font-weight: 400;
 }
+
+/* ============================================================
+   문제 그리드 (v4) — 메인은 폼이 아니라 문제다
+   ============================================================ */
+
+.today-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--red-pen);
+  color: var(--text-on-accent);
+  border-radius: var(--r-md);
+}
+
+.today-num {
+  font-family: var(--font-exam);
+  font-size: 34px;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+
+.today-text {
+  flex: 1;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.today-go {
+  min-height: var(--tap-min);
+  padding: 9px 18px;
+  border: 1px solid rgba(253, 251, 244, 0.55);
+  border-radius: var(--r-pill);
+  color: var(--text-on-accent);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+}
+
+/* 필터: 왼쪽 주원인(칩) / 오른쪽 토픽(드롭다운) — 축을 섞으면 지저분해진다 */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
+.filter-spacer {
+  flex: 1;
+}
+
+.topic-select {
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  min-height: var(--tap-min);
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+}
+
+.btn-random {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--blue-pen);
+  min-height: var(--tap-min);
+  padding: 8px 16px;
+  border: 1px solid var(--blue-pen);
+  border-radius: var(--r-pill);
+  background: var(--blue-pen-soft);
+  white-space: nowrap;
+}
+
+.btn-random:disabled {
+  opacity: 0.4;
+}
+
+.group-label {
+  font-family: var(--font-hand);
+  font-size: 19px;
+  color: var(--blue-pen);
+  margin: var(--sp-5) 0 var(--sp-2);
+}
+
+.prob-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+}
+
+.prob-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  box-shadow: var(--sh-sm);
+}
+
+.prob-card.due {
+  border-color: var(--red-pen);
+  box-shadow: 0 0 0 2px var(--red-pen-soft);
+}
+
+.prob-card:active {
+  box-shadow: var(--sh-md);
+}
+
+.prob-shot {
+  display: block;
+  width: 100%;
+  height: 132px;
+  object-fit: cover;
+  object-position: top center;
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+}
+
+/* 캡처가 없으면 문제 원문이라도 보여준다 */
+.prob-shot--text {
+  height: auto;
+  min-height: 62px;
+  max-height: 132px;
+  padding: 10px 12px;
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+}
+
+.prob-shot-none {
+  color: var(--text-muted);
+}
+
+.prob-meta {
+  padding: 9px 11px 11px;
+}
+
+.prob-id {
+  font-family: var(--font-exam);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--text);
+}
+
+.prob-try {
+  font-family: var(--font-hand);
+  font-size: 15px;
+  color: var(--blue-pen);
+  margin-left: 6px;
+}
+
+.prob-topic {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.prob-cause {
+  display: inline-block;
+  margin-top: 7px;
+  font-size: 11px;
+  font-weight: var(--fw-bold);
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: var(--red-pen-soft);
+  color: var(--red-pen);
+}
+
+.prob-cause.none {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-weight: var(--fw-regular);
+}
+
+.prob-flag {
+  position: absolute;
+  bottom: 13px;
+  right: 11px;
+  font-family: var(--font-hand);
+  font-size: 19px;
+  color: var(--red-pen);
+  transform: rotate(-8deg);
+}
+
+/* 기록 FAB — 매일 하는 건 복습, 기록은 가끔 */
+.fab {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  min-height: var(--tap-comfy);
+  padding: 14px 24px;
+  border-radius: var(--r-pill);
+  background: var(--text);
+  color: var(--text-on-accent);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+  box-shadow: var(--sh-lg);
+  z-index: 40;
+}
+
+/* 기록 오버레이 */
+.sheet {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--paper);
+  border-bottom: 3px double var(--text);
+}
+
+.sheet-title {
+  font-family: var(--font-exam);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+}
+
+.sheet-close {
+  min-height: var(--tap-min);
+  padding: 8px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
+}
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  max-width: var(--maxw);
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (max-width: 700px) {
+  .prob-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

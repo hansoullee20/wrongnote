@@ -107,6 +107,8 @@ export default function RecordView({
   onDelete,
   filter,
   setFilter,
+  formOnly = false,
+  initialEditId = null,
 }) {
   const [draft, setDraft] = useState(() => emptyDraft());
   const [formOpen, setFormOpen] = useState(true);
@@ -129,6 +131,15 @@ export default function RecordView({
   }
 
   /** 노트를 폼에 불러와 수정 모드 시작 */
+  // 그리드에서 문제를 탭해 들어온 경우 해당 노트를 편집 상태로 연다
+  useEffect(() => {
+    if (!initialEditId) return;
+    const n = notes.find((x) => x.id === initialEditId);
+    if (n) startEdit(n);
+    // 최초 진입 시 1회만 — 이후 사용자가 취소하면 다시 열리면 안 된다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEditId]);
+
   function startEdit(n) {
     setDraft({
       subject: n.subject,
@@ -541,12 +552,26 @@ export default function RecordView({
               수정 취소
             </Button>
           )}
+          {editingId && (
+            <Button
+              variant="danger"
+              block
+              className="note-delete"
+              onClick={() => {
+                if (confirm("이 기록을 삭제할까?")) onDelete(editingId);
+              }}
+            >
+              이 기록 삭제
+            </Button>
+          )}
           {gateActive && !gatePassed && (
             <div className="gate-warn">판정 체크 미완료 — 저장 잠김</div>
           )}
         </div>
       </Panel>
 
+      {!formOnly && (
+        <>
       <div className="filter-row chip-row">
         <Chip
           label="전체"
@@ -672,6 +697,8 @@ export default function RecordView({
           );
         })}
       </div>
+        </>
+      )}
     </div>
   );
 }

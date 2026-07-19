@@ -1,11 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { freshApp, readNotes, readCards , pickCause } from "./helpers.js";
+import { freshApp, readNotes, readCards , pickCause , openRecord, openNoteByProblem } from "./helpers.js";
 
 test.describe("노트 CRUD + 자동 카드", () => {
   test("재유도 노트 → 자동 카드 생성, 노트 삭제 시 카드 정리", async ({
     page,
   }) => {
     await freshApp(page);
+    await openRecord(page);
     const baseCards = (await readCards(page)).length;
 
     await page.fill("#rec-problem", "DERIVED-1");
@@ -25,9 +26,8 @@ test.describe("노트 CRUD + 자동 카드", () => {
 
     // 삭제 → 자동 카드도 정리
     page.on("dialog", (d) => d.accept());
-    await page.click(".panel-head"); // 폼 접기
-    await page.click('.note-prob:has-text("DERIVED-1")');
-    await page.click(".del-btn");
+    await openNoteByProblem(page, "DERIVED-1");
+    await page.click('.btn--danger:has-text("이 기록 삭제")');
 
     await expect
       .poll(async () => (await readCards(page)).length)
@@ -39,6 +39,7 @@ test.describe("노트 CRUD + 자동 카드", () => {
 
   test("optSol 없으면 빈 뒷면 카드를 만들지 않는다", async ({ page }) => {
     await freshApp(page);
+    await openRecord(page);
     const baseCards = (await readCards(page)).length;
 
     await page.fill("#rec-problem", "NOBACK-1");
@@ -56,9 +57,9 @@ test.describe("노트 CRUD + 자동 카드", () => {
     page,
   }) => {
     await freshApp(page);
+    await openRecord(page);
 
     await page.fill("#rec-problem", "EDIT-ME");
-    await page.click('.chip:has-text("시간 부족")');
     await pickCause(page);
     await page.click('.btn--primary:has-text("저장")');
     await expect
@@ -66,9 +67,7 @@ test.describe("노트 CRUD + 자동 카드", () => {
       .toBe(true);
     const cardsBefore = (await readCards(page)).length;
 
-    await page.click(".panel-head");
-    await page.click('.note-prob:has-text("EDIT-ME")');
-    await page.click(".edit-btn");
+    await openNoteByProblem(page, "EDIT-ME");
     await expect(
       page.locator('.panel-head:has-text("오답 수정 중")')
     ).toBeVisible();
@@ -91,9 +90,8 @@ test.describe("노트 CRUD + 자동 카드", () => {
     await freshApp(page);
     const baseNotes = (await readNotes(page)).length;
 
-    await page.click(".panel-head");
-    await page.locator(".note-row").first().click();
-    await page.click(".edit-btn");
+    await page.locator(".prob-card").first().click();
+    await page.locator(".sheet .panel").first().waitFor();
     await page.fill("#rec-problem", "SHOULD-NOT-LEAK");
     await page.click('.btn:has-text("수정 취소")');
 

@@ -4,13 +4,14 @@ import { loadAll, saveNotes, saveCards } from "./storage.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
 import { deleteImages, gcImages } from "./imageStore.js";
+import ProblemsView from "./views/ProblemsView.jsx";
 import RecordView from "./views/RecordView.jsx";
 import RecheckView from "./views/RecheckView.jsx";
 import CardsView from "./views/CardsView.jsx";
 import StatsView from "./views/StatsView.jsx";
 
 const TABS = [
-  { id: "record", label: "기록" },
+  { id: "problems", label: "문제" },
   { id: "recheck", label: "재검증" },
   { id: "cards", label: "카드" },
   { id: "stats", label: "통계" },
@@ -22,8 +23,11 @@ export default function App() {
   const [notes, setNotes] = useState(boot.notes);
   const [cards, setCards] = useState(boot.cards);
   const storageLocked = Boolean(boot.error);
-  const [tab, setTab] = useState("record");
-  const [filter, setFilter] = useState({ tag: "", topicMain: "" });
+  const [tab, setTab] = useState("problems");
+  // 기록 폼은 탭이 아니라 오버레이 — 매일 하는 건 복습이고 기록은 가끔이다
+  const [recording, setRecording] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [filter, setFilter] = useState({ tag: "", cause: "", topicMain: "" });
 
   useEffect(() => {
     if (!storageLocked) saveNotes(notes);
@@ -178,9 +182,9 @@ export default function App() {
     gcImages(newNotes.flatMap((n) => n.images || []));
   }
 
-  function gotoRecordWithTopic(topicMain) {
-    setFilter({ tag: "", topicMain });
-    setTab("record");
+  function gotoProblemsWithTopic(topicMain) {
+    setFilter({ tag: "", cause: "", topicMain });
+    setTab("problems");
   }
 
   return (
@@ -215,14 +219,21 @@ export default function App() {
 
       <div className="paper-sheet">
         {storageLocked && <div className="audit-warn">{boot.error}</div>}
-        {tab === "record" && (
-          <RecordView
+        {tab === "problems" && (
+          <ProblemsView
             notes={notes}
-            onAdd={addNote}
-            onUpdate={updateNote}
-            onDelete={deleteNote}
+            cardDueCount={cardDueCount}
             filter={filter}
             setFilter={setFilter}
+            onOpenNote={(id) => {
+              setEditingNoteId(id);
+              setRecording(true);
+            }}
+            onRecord={() => {
+              setEditingNoteId(null);
+              setRecording(true);
+            }}
+            onStartDue={() => setTab("recheck")}
           />
         )}
         {tab === "recheck" && (
@@ -242,10 +253,53 @@ export default function App() {
             notes={notes}
             cards={cards}
             onReplaceAll={replaceAll}
-            onTopicClick={gotoRecordWithTopic}
+            onTopicClick={gotoProblemsWithTopic}
           />
         )}
       </div>
+
+      {recording && (
+        <div className="sheet">
+          <div className="sheet-head">
+            <span className="sheet-title">
+              {editingNoteId ? "오답 수정" : "오답 기록"}
+            </span>
+            <button
+              type="button"
+              className="sheet-close"
+              onClick={() => {
+                setRecording(false);
+                setEditingNoteId(null);
+              }}
+            >
+              닫기 ✕
+            </button>
+          </div>
+          <div className="sheet-body">
+            <RecordView
+              notes={notes}
+              onAdd={(payload) => {
+                addNote(payload);
+                setRecording(false);
+              }}
+              onUpdate={(id, payload) => {
+                updateNote(id, payload);
+                setRecording(false);
+                setEditingNoteId(null);
+              }}
+              onDelete={(id) => {
+                deleteNote(id);
+                setRecording(false);
+                setEditingNoteId(null);
+              }}
+              filter={filter}
+              setFilter={setFilter}
+              formOnly
+              initialEditId={editingNoteId}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

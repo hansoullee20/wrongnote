@@ -5,7 +5,7 @@ export async function freshApp(page) {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.getByRole("button", { name: /^기록/ }).waitFor();
+  await page.getByRole("button", { name: /^문제/ }).waitFor();
   await page.waitForTimeout(300); // 시드 로드 안정화
 }
 
@@ -56,7 +56,7 @@ export async function seedLegacyStore(page) {
     );
   });
   await page.reload();
-  await page.getByRole("button", { name: /^기록/ }).waitFor();
+  await page.getByRole("button", { name: /^문제/ }).waitFor();
   await page.waitForTimeout(300);
 }
 
@@ -64,3 +64,15 @@ export async function seedLegacyStore(page) {
     기본값을 '개념 부족'으로 둬서 실행 실수 게이트가 뜨지 않게 한다. */
 export const pickCause = (page, cause = "개념 부족") =>
   page.click(`.chip:has-text("${cause}")`);
+
+/** 기록 폼은 v4부터 탭이 아니라 FAB로 여는 오버레이다 */
+export async function openRecord(page) {
+  await page.click(".fab");
+  await page.locator(".sheet .panel").first().waitFor();
+}
+
+/** 그리드에서 문제를 탭해 수정 오버레이를 연다 */
+export async function openNoteByProblem(page, problem) {
+  await page.click(`.prob-card:has-text("${problem}")`);
+  await page.locator(".sheet .panel").first().waitFor();
+}

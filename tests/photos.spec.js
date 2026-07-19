@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { freshApp, readNotes , pickCause } from "./helpers.js";
+import { freshApp, readNotes , pickCause , openRecord, openNoteByProblem } from "./helpers.js";
 
 // 1×1 픽셀 PNG (테스트용 최소 이미지)
 const TINY_PNG = Buffer.from(
@@ -37,6 +37,7 @@ test.describe("문제 사진 첨부", () => {
     // 실패하고, 사진 첨부는 그대로 동작해야 함. 로컬 모듈은 통과.
     await page.route(/^https?:\/\/(?!localhost)/, (route) => route.abort());
     await freshApp(page);
+    await openRecord(page);
     await page.evaluate(
       () =>
         new Promise((resolve) => {
@@ -72,16 +73,9 @@ test.describe("문제 사진 첨부", () => {
     const ids = await readImageIds(page);
     expect(ids.length).toBe(1);
 
-    // 접힌 행에 📷 표시
-    await page.click(".panel-head");
+    // 그리드 카드가 캡처 자체를 썸네일로 보여준다 — 목록에서 문제가 보여야 한다
     await expect(
-      page.locator('.note:has-text("사진 노트 1") .photo-count')
-    ).toBeVisible();
-
-    // 펼치면 사진 렌더
-    await page.click('.note-prob:has-text("사진 노트 1")');
-    await expect(
-      page.locator('.note:has-text("사진 노트 1") .note-image-thumb img')
+      page.locator('.prob-card:has-text("사진 노트 1") img.prob-shot')
     ).toBeVisible();
   });
 
@@ -100,9 +94,8 @@ test.describe("문제 사진 첨부", () => {
     await expect.poll(async () => (await readImageIds(page)).length).toBe(1);
 
     page.on("dialog", (d) => d.accept());
-    await page.click(".panel-head");
-    await page.click('.note-prob:has-text("사진 삭제 테스트")');
-    await page.click(".del-btn");
+    await openNoteByProblem(page, "사진 삭제 테스트");
+    await page.click('.btn--danger:has-text("이 기록 삭제")');
 
     await expect.poll(async () => (await readImageIds(page)).length).toBe(0);
   });

@@ -87,7 +87,7 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
       );
     });
     await page.reload();
-    await page.getByRole("button", { name: /^기록/ }).waitFor();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
     await page.waitForTimeout(300);
 
     const byId = Object.fromEntries(
@@ -136,7 +136,7 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
       );
     });
     await page.reload();
-    await page.getByRole("button", { name: /^기록/ }).waitFor();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
     await page.waitForTimeout(300);
 
     expect((await readNotes(page))[0].cause).toBe("개념 부족");
@@ -150,7 +150,7 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     ]);
 
     await page.reload();
-    await page.getByRole("button", { name: /^기록/ }).waitFor();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
     await page.waitForTimeout(300);
 
     const snap2 = JSON.stringify([
@@ -168,7 +168,7 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
       localStorage.setItem("wr_notes", "{corrupted!!")
     );
     await page.reload();
-    await page.getByRole("button", { name: /^기록/ }).waitFor();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
     await page.waitForTimeout(500);
 
     await expect(page.locator(".audit-warn").first()).toBeVisible();
