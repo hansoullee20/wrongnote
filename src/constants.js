@@ -1,14 +1,29 @@
 export const SUBJECTS = ["수학", "국어", "영어", "과탐"];
 
-export const MAIN_ERROR_TAGS = [
-  "실행 실수",
-  "개념 오류",
-  "지위 오해",
+/* 주원인 — 노트당 정확히 1개. 통계 집계의 축이다.
+   문제당 1개라 합계가 노트 수와 일치하고 비율이 의미를 가진다.
+   국내외 오답 분류 체계가 독립적으로 수렴한 5분류와 같다
+   (개념 / 오독 / 전략 / 계산·실행 / 시간). */
+export const CAUSE_EXECUTION = "실행 실수";
+
+export const CAUSES = [
+  "개념 부족",
+  "읽기 실패",
+  "전략 실패",
+  CAUSE_EXECUTION,
   "시간 부족",
-  "독해 오류",
-  "문제 파악 실패",
 ];
 
+/** 주원인을 고를 때 뜻이 흔들리지 않도록 붙는 한 줄 설명 */
+export const CAUSE_HINTS = {
+  "개념 부족": "개념·공식을 몰라서 못 풀었다",
+  "읽기 실패": "조건을 잘못 읽었다",
+  "전략 실패": "제대로 읽었는데 접근을 못 잡았다",
+  [CAUSE_EXECUTION]: "방향은 맞았는데 계산·처리에서 틀렸다",
+  "시간 부족": "시간이 없어서 못 풀었거나 찍었다",
+};
+
+// 세부 태그 — 여러 개 선택 가능. 주원인과 달리 집계 축이 아니다.
 export const MATH_ERROR_TAGS = [
   "부호 실수",
   "상하한 변환",
@@ -18,8 +33,29 @@ export const MATH_ERROR_TAGS = [
   "막판 실수",
 ];
 
-// 실행 계열: hard gate 트리거 + 재검증 큐 대상 판정에 사용
-export const EXECUTION_TAGS = ["실행 실수", ...MATH_ERROR_TAGS];
+/** 5지선다 마킹 */
+export const CHOICES = ["①", "②", "③", "④", "⑤"];
+
+/** 시험에서 걸린 시간 — 선택 입력. 초 단위로 받으면 아무도 안 쓴다. */
+export const EXAM_TIME_BUCKETS = [
+  "1분 이내",
+  "2~3분",
+  "4~5분",
+  "5분 이상",
+  "못 풀고 넘김",
+];
+
+/* v3까지 쓰던 평면 태그 — 마이그레이션에서 주원인으로 옮기는 데만 쓴다.
+   '지위 오해'는 뜻이 소실되어 제거했고, 추측해서 옮기지 않는다. */
+export const LEGACY_CAUSE_MAP = {
+  "실행 실수": CAUSE_EXECUTION,
+  "개념 오류": "개념 부족",
+  "독해 오류": "읽기 실패",
+  "문제 파악 실패": "전략 실패",
+  "시간 부족": "시간 부족",
+};
+
+export const LEGACY_DROPPED_TAG = "지위 오해";
 
 export const MATH_TOPICS = {
   "수I·지수로그": ["지수확장", "로그성질", "그래프", "방정식부등식"],

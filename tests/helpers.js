@@ -59,3 +59,8 @@ export async function seedLegacyStore(page) {
   await page.getByRole("button", { name: /^기록/ }).waitFor();
   await page.waitForTimeout(300);
 }
+
+/** 주원인은 v4부터 필수 — 저장 전에 하나 골라야 한다.
+    기본값을 '개념 부족'으로 둬서 실행 실수 게이트가 뜨지 않게 한다. */
+export const pickCause = (page, cause = "개념 부족") =>
+  page.click(`.chip:has-text("${cause}")`);

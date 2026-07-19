@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { EXECUTION_TAGS, MATH_TOPICS, isRecheckDue } from "../constants.js";
+import { CAUSES, MATH_TOPICS, isRecheckDue } from "../constants.js";
 import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
 import { exportImages, importImages } from "../imageStore.js";
 import { Section, Button } from "../components.jsx";
@@ -15,6 +15,22 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
   }, [notes]);
   const maxTagCount = tagCounts.length ? tagCounts[0][1] : 1;
 
+  /* 주원인 분포 — 노트당 1개라 합계가 노트 수와 일치한다.
+     미분류는 묻지 않고 따로 센다. */
+  const causeCounts = useMemo(() => {
+    const counts = CAUSES.map((cause) => ({
+      cause,
+      count: notes.filter((n) => n.cause === cause).length,
+    }));
+    counts.sort((a, b) => b.count - a.count);
+    return counts;
+  }, [notes]);
+  const maxCauseCount = causeCounts.length ? causeCounts[0].count : 1;
+  const unclassified = useMemo(
+    () => notes.filter((n) => !n.cause).length,
+    [notes]
+  );
+
   const matrix = useMemo(() => {
     const topics = [...new Set(notes.map((n) => n.topicMain).filter(Boolean))];
     const order = Object.keys(MATH_TOPICS);
@@ -27,13 +43,22 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
       const tn = notes.filter((n) => n.topicMain === topic);
       return {
         topic,
-        exec: tn.filter((n) => n.tags.some((t) => EXECUTION_TAGS.includes(t)))
-          .length,
-        concept: tn.filter((n) => n.tags.includes("개념 오류")).length,
-        status: tn.filter((n) => n.tags.includes("지위 오해")).length,
+        cells: CAUSES.map((cause) => tn.filter((n) => n.cause === cause).length),
+        none: tn.filter((n) => !n.cause).length,
       };
     });
   }, [notes]);
+
+  /* 가장 약한 칸 하나만 강조 — 표를 훑지 않아도 눈에 박히게 */
+  const worst = useMemo(() => {
+    let best = null;
+    matrix.forEach((row, r) =>
+      row.cells.forEach((v, c) => {
+        if (v > 0 && (!best || v > best.v)) best = { r, c, v };
+      })
+    );
+    return best;
+  }, [matrix]);
 
   const audit = useMemo(() => {
     // 완료 = 한 번이라도 재검증한 노트 (반복 사이클 도입 후 기준)
@@ -87,7 +112,34 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
 
   return (
     <div className="view">
-      <Section title="에러 타입 분포">
+      <Section title="주원인 분포">
+        {notes.length === 0 && <div className="empty">데이터 없음.</div>}
+        {causeCounts.map(({ cause, count }) => (
+          <div key={cause} className="bar-row">
+            <span className="bar-label">{cause}</span>
+            <div className="bar-track">
+              {count > 0 && (
+                <div
+                  className="bar-fill"
+                  style={{ width: `${(count / maxCauseCount) * 100}%` }}
+                />
+              )}
+            </div>
+            <span className="bar-count">{count}</span>
+          </div>
+        ))}
+        {unclassified > 0 && (
+          <div className="unclassified">
+            <span className="unclassified-num">{unclassified}</span>
+            <span className="unclassified-text">
+              주원인이 비어 있는 노트. 옛 분류에서 뜻을 확정할 수 없어 추측하지
+              않고 남겨뒀다 — 기록 뷰에서 하나씩 골라주면 위 통계에 합류한다.
+            </span>
+          </div>
+        )}
+      </Section>
+
+      <Section title="세부 태그 분포">
         {tagCounts.length === 0 && <div className="empty">데이터 없음.</div>}
         {tagCounts.map(([tag, count]) => (
           <div key={tag} className="bar-row">
@@ -103,35 +155,48 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
         ))}
       </Section>
 
-      <Section title="토픽 × 에러타입">
+      <Section title="토픽 × 주원인">
         {matrix.length === 0 && <div className="empty">데이터 없음.</div>}
         {matrix.length > 0 && (
           <table className="matrix">
             <thead>
               <tr>
                 <th>토픽</th>
-                <th>실행</th>
-                <th>개념</th>
-                <th>지위</th>
+                {CAUSES.map((c) => (
+                  <th key={c}>{c.split(" ")[0]}</th>
+                ))}
+                {unclassified > 0 && <th>미분류</th>}
               </tr>
             </thead>
             <tbody>
-              {matrix.map((row) => (
+              {matrix.map((row, r) => (
                 <tr key={row.topic} onClick={() => onTopicClick(row.topic)}>
                   <td className="matrix-topic">{row.topic}</td>
-                  <td className={row.exec ? "hit" : ""}>{row.exec || ""}</td>
-                  <td className={row.concept ? "hit" : ""}>
-                    {row.concept || ""}
-                  </td>
-                  <td className={row.status ? "hit" : ""}>
-                    {row.status || ""}
-                  </td>
+                  {row.cells.map((v, c) => (
+                    <td
+                      key={CAUSES[c]}
+                      className={
+                        worst && worst.r === r && worst.c === c
+                          ? "hit worst"
+                          : v
+                            ? "hit"
+                            : ""
+                      }
+                    >
+                      {v || ""}
+                    </td>
+                  ))}
+                  {unclassified > 0 && (
+                    <td className={row.none ? "dim" : ""}>{row.none || ""}</td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-        <div className="hint">행 탭 → 기록 뷰에서 해당 토픽 필터</div>
+        <div className="hint">
+          진한 칸이 제일 약한 지점. 행 탭 → 기록 뷰에서 해당 토픽 필터
+        </div>
       </Section>
 
       <Section title="재검증 감사">

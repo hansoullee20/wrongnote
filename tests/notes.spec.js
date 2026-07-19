@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { freshApp, readNotes, readCards } from "./helpers.js";
+import { freshApp, readNotes, readCards , pickCause } from "./helpers.js";
 
 test.describe("노트 CRUD + 자동 카드", () => {
   test("재유도 노트 → 자동 카드 생성, 노트 삭제 시 카드 정리", async ({
@@ -16,6 +16,7 @@ test.describe("노트 CRUD + 자동 카드", () => {
       .nth(2)
       .fill("최적 풀이 내용"); // optSol
     await page.click('.chip:has-text("재유도함")');
+    await pickCause(page);
     await page.click('.btn--primary:has-text("저장")');
 
     await expect
@@ -42,6 +43,7 @@ test.describe("노트 CRUD + 자동 카드", () => {
 
     await page.fill("#rec-problem", "NOBACK-1");
     await page.click('.chip:has-text("재유도함")');
+    await pickCause(page);
     await page.click('.btn--primary:has-text("저장")');
 
     await expect
@@ -57,6 +59,7 @@ test.describe("노트 CRUD + 자동 카드", () => {
 
     await page.fill("#rec-problem", "EDIT-ME");
     await page.click('.chip:has-text("시간 부족")');
+    await pickCause(page);
     await page.click('.btn--primary:has-text("저장")');
     await expect
       .poll(async () => (await readNotes(page)).some((n) => n.problem === "EDIT-ME"))

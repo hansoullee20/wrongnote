@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   SUBJECTS,
-  MAIN_ERROR_TAGS,
+  CAUSES,
+  CAUSE_HINTS,
+  CAUSE_EXECUTION,
   MATH_ERROR_TAGS,
-  EXECUTION_TAGS,
   MATH_TOPICS,
   GATE_CHECKLIST,
 } from "../constants.js";
@@ -59,7 +60,7 @@ function buildClassifyPrompt(draft) {
     isMath
       ? "1) 토픽을 아래 [토픽 목록]에서 대단원 1개 + 소단원 1개로 골라줘."
       : "1) 어떤 유형의 문제인지 한 줄로 말해줘.",
-    "2) 에러 유형을 아래 [에러 태그]에서 골라줘 (내 풀이 참고). 답은 짧게.",
+    "2) 주원인을 아래 [주원인]에서 딱 하나 골라줘 (내 풀이 참고).",
     "",
     "[문제]",
     draft.question.trim() || "(원문 없음 — 문제 식별: " + draft.problem + ")",
@@ -75,8 +76,8 @@ function buildClassifyPrompt(draft) {
   }
   lines.push(
     "",
-    "[에러 태그]",
-    MAIN_ERROR_TAGS.join(", ") +
+    "[주원인]",
+    CAUSES.join(", ") +
       (isMath ? ` / 수학 세부: ${MATH_ERROR_TAGS.join(", ")}` : "")
   );
   return lines.join("\n");
@@ -84,6 +85,10 @@ function buildClassifyPrompt(draft) {
 
 const emptyDraft = (subject = "수학") => ({
   subject,
+  cause: "",
+  correctAnswer: "",
+  myAnswer: "",
+  examTime: "",
   problem: "",
   topicMain: "",
   topicSub: "",
@@ -133,6 +138,10 @@ export default function RecordView({
       question: n.question,
       mySol: n.mySol,
       optSol: n.optSol,
+      cause: n.cause ?? "",
+      correctAnswer: n.correctAnswer ?? "",
+      myAnswer: n.myAnswer ?? "",
+      examTime: n.examTime ?? "",
       derived: n.derived,
       tags: n.tags,
       memo: n.memo,
@@ -215,10 +224,10 @@ export default function RecordView({
   }
 
   const isMath = draft.subject === "수학";
-  const gateActive =
-    isMath && draft.tags.some((t) => EXECUTION_TAGS.includes(t));
+  const gateActive = isMath && draft.cause === CAUSE_EXECUTION;
   const gatePassed = !gateActive || checks.every(Boolean);
-  const canSave = draft.problem.trim().length > 0 && gatePassed;
+  const canSave =
+    draft.problem.trim().length > 0 && draft.cause !== "" && gatePassed;
 
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -295,7 +304,7 @@ export default function RecordView({
   const tagsInUse = useMemo(() => {
     const present = new Set();
     notes.forEach((n) => n.tags.forEach((t) => present.add(t)));
-    const order = [...MAIN_ERROR_TAGS, ...MATH_ERROR_TAGS];
+    const order = [...CAUSES, ...MATH_ERROR_TAGS];
     return [
       ...order.filter((t) => present.has(t)),
       ...[...present].filter((t) => !order.includes(t)),
@@ -467,12 +476,17 @@ export default function RecordView({
               </>
             )}
 
-            <div className="label">에러 태그</div>
-            <MultiChipRow
-              options={MAIN_ERROR_TAGS}
-              selected={draft.tags}
-              onToggle={toggleTag}
+            <div className="label">주원인 — 하나만</div>
+            <ChipRow
+              options={CAUSES}
+              value={draft.cause}
+              onPick={(cause) => set({ cause })}
             />
+            {draft.cause && (
+              <div className="hint">{CAUSE_HINTS[draft.cause]}</div>
+            )}
+
+            <div className="label">세부 — 여러 개 가능</div>
             {isMath && (
               <MultiChipRow
                 options={MATH_ERROR_TAGS}

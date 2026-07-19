@@ -10,7 +10,7 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     const version = await page.evaluate(() =>
       localStorage.getItem("wr_schema_version")
     );
-    expect(version).toBe("3");
+    expect(version).toBe("4");
 
     // v1 원본 스냅샷 존재
     const backup = await page.evaluate(() =>
@@ -38,6 +38,108 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     expect(
       await page.evaluate(() => localStorage.getItem("gap_cards") !== null)
     ).toBe(true);
+  });
+
+  test("v4: 옛 태그 → 주원인 1개, 답/시도 이력 필드 추가", async ({ page }) => {
+    await seedLegacyStore(page);
+
+    const note = (await readNotes(page))[0];
+    // '실행 실수' 태그 → 주원인 '실행 실수'
+    expect(note.cause).toBe("실행 실수");
+    // 세부 태그는 그대로 보존 (주원인으로 옮겼다고 지우지 않는다)
+    expect(note.tags).toContain("실행 실수");
+    expect(note.correctAnswer).toBe("");
+    expect(note.myAnswer).toBe("");
+    expect(note.examTime).toBe("");
+    expect(note.attempts).toEqual([]);
+    expect(note.solutionImages).toEqual([]);
+  });
+
+  test("v4: 옛 태그별 주원인 매핑", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      const mk = (id, tags) => ({
+        subject: "수학",
+        problem: id,
+        topicMain: "수II·미분",
+        topicSub: "",
+        question: "",
+        mySol: "",
+        optSol: "",
+        tags,
+        derived: null,
+        memo: "",
+        ts: Date.now(),
+        id,
+        date: "2026-07-19",
+      });
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          mk("N-concept", ["개념 오류"]),
+          mk("N-read", ["독해 오류"]),
+          mk("N-strategy", ["문제 파악 실패"]),
+          mk("N-time", ["시간 부족"]),
+          mk("N-dropped", ["지위 오해"]),
+          mk("N-none", []),
+        ])
+      );
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^기록/ }).waitFor();
+    await page.waitForTimeout(300);
+
+    const byId = Object.fromEntries(
+      (await readNotes(page)).map((n) => [n.id, n])
+    );
+    expect(byId["N-concept"].cause).toBe("개념 부족");
+    expect(byId["N-read"].cause).toBe("읽기 실패");
+    expect(byId["N-strategy"].cause).toBe("전략 실패");
+    expect(byId["N-time"].cause).toBe("시간 부족");
+
+    // '지위 오해'는 뜻이 소실된 카테고리 — 추측해서 옮기지 않고 미분류로 둔다
+    expect(byId["N-dropped"].cause).toBe("");
+    // 다만 태그 자체는 지우지 않는다 (데이터 손실 방지)
+    expect(byId["N-dropped"].tags).toContain("지위 오해");
+
+    expect(byId["N-none"].cause).toBe("");
+  });
+
+  test("v4: 이미 주원인이 있으면 옛 태그가 덮어쓰지 않는다", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학",
+            problem: "N-1",
+            topicMain: "",
+            topicSub: "",
+            question: "",
+            mySol: "",
+            optSol: "",
+            // 사용자가 나중에 '개념 부족'으로 고쳤는데 옛 태그는 남아 있는 상태
+            cause: "개념 부족",
+            tags: ["실행 실수"],
+            derived: null,
+            memo: "",
+            ts: Date.now(),
+            id: "n1",
+            date: "2026-07-19",
+          },
+        ])
+      );
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^기록/ }).waitFor();
+    await page.waitForTimeout(300);
+
+    expect((await readNotes(page))[0].cause).toBe("개념 부족");
   });
 
   test("마이그레이션은 멱등 — 재로드해도 데이터 불변", async ({ page }) => {

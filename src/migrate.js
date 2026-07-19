@@ -1,6 +1,8 @@
 // 스키마 버전 & 마이그레이션 — 전부 순수 함수, 몇 번 돌려도 같은 결과(idempotent)
 
-export const SCHEMA_VERSION = 3; // v3: 노트에 images(사진 id 배열) 추가
+import { LEGACY_CAUSE_MAP, LEGACY_DROPPED_TAG, CAUSES } from "./constants.js";
+
+export const SCHEMA_VERSION = 4; // v4: 주원인 1개 + 정답/내 답/시도 이력/걸린 시간
 
 /**
  * v2: 카드에 SRS 필드 추가.
@@ -26,13 +28,31 @@ export function migrateCard(card, now = Date.now()) {
 }
 
 /**
- * v2: 노트에 반복 재검증 필드 추가 + 누락 필드 보정.
+ * 옛 평면 태그에서 주원인 1개를 뽑는다.
+ * 판정 못 하면 ""(미분류)를 반환한다 — 추측해서 채우면 과거 데이터가 조용히 왜곡된다.
+ * @param {string[]} tags
+ * @returns {string} CAUSES 중 하나 또는 ""
+ */
+export function deriveCause(tags) {
+  for (const tag of tags) {
+    const mapped = LEGACY_CAUSE_MAP[tag];
+    if (mapped) return mapped;
+  }
+  return "";
+}
+
+/**
+ * v2: 반복 재검증 필드. v3: 사진. v4: 주원인/답/시도 이력.
  * @param {object} note 저장된 노트
  */
 export function migrateNote(note) {
+  const tags = Array.isArray(note.tags) ? note.tags : [];
+  // '지위 오해'는 뜻이 소실된 카테고리 — 주원인 후보에서 빼되 태그로는 보존한다
+  const cause = CAUSES.includes(note.cause) ? note.cause : deriveCause(tags);
+
   return {
     ...note,
-    tags: Array.isArray(note.tags) ? note.tags : [],
+    tags,
     rechecked: note.rechecked ?? false,
     recheckResult: note.recheckResult ?? null,
     // ---- 반복 재검증 (v2) ----
@@ -40,5 +60,16 @@ export function migrateNote(note) {
     nextRecheckTs: note.nextRecheckTs ?? null,
     // ---- 문제 사진 (v3) — IndexedDB blob id 배열 ----
     images: Array.isArray(note.images) ? note.images : [],
+    // ---- 주원인 & 답 (v4) ----
+    cause, // "" = 미분류. 통계에서 정직하게 따로 센다
+    correctAnswer: note.correctAnswer ?? "",
+    myAnswer: note.myAnswer ?? "",
+    examTime: note.examTime ?? "",
+    // 시도 이력 — 덮어쓰지 않고 쌓아야 "②를 세 번째 골랐다"가 나온다
+    attempts: Array.isArray(note.attempts) ? note.attempts : [],
+    // 해설 캡처는 문제 캡처(images)와 섞이면 안 된다
+    solutionImages: Array.isArray(note.solutionImages)
+      ? note.solutionImages
+      : [],
   };
 }

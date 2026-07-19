@@ -1430,3 +1430,40 @@ textarea:focus {
     width: 140px;
   }
 }
+
+/* ---- 통계: 미분류 안내 & 최약 지점 강조 (v4) ---- */
+.matrix td.worst {
+  background: var(--red-pen);
+  color: var(--text-on-accent);
+  font-weight: 700;
+}
+
+.unclassified {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  margin-top: 12px;
+  background: var(--highlight);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.unclassified-num {
+  font-family: var(--font-exam);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--red-pen);
+  line-height: 1;
+}
+
+.unclassified-text {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.matrix td.dim {
+  color: var(--text-muted);
+  font-weight: 400;
+}
