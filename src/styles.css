@@ -2295,3 +2295,118 @@ textarea:focus {
   color: var(--text-secondary);
   border: 1px solid var(--border-strong);
 }
+
+.sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.sheet-delete {
+  min-height: var(--tap-min);
+  padding: 8px 16px;
+  border: 1px solid var(--red-pen);
+  border-radius: var(--r-pill);
+  background: var(--red-pen-soft);
+  color: var(--red-pen);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- 기록 폼 2페이지 (v4) ---- */
+.steps {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  line-height: 24px;
+  text-align: center;
+  font-size: var(--fs-xs);
+}
+
+.step.on {
+  color: var(--text);
+  font-weight: var(--fw-bold);
+}
+
+.step.on .step-num {
+  background: var(--red-pen);
+  border-color: var(--red-pen);
+  color: var(--text-on-accent);
+}
+
+.step-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* 답 마킹 — 수능 답안지처럼 동그라미로 */
+.ans-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
+.ans-name {
+  width: 96px;
+  flex: 0 0 auto;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--text-secondary);
+}
+
+.ans-o {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--paper);
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+}
+
+/* 정답은 초록, 내가 고른 답은 빨강 — 한눈에 갈라 보이게 */
+.ans-o.right {
+  border-color: var(--success);
+  background: var(--success);
+  color: var(--text-on-accent);
+}
+
+.ans-o.mine {
+  border-color: var(--red-pen);
+  background: var(--red-pen);
+  color: var(--text-on-accent);
+}
+
+.ans-sub {
+  flex: 1;
+  min-width: 110px;
+  max-width: 160px;
+  margin-left: var(--sp-1);
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+}

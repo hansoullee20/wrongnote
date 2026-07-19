@@ -76,3 +76,7 @@ export async function openNoteByProblem(page, problem) {
   await page.click(`.prob-card:has-text("${problem}")`);
   await page.locator(".sheet .panel").first().waitFor();
 }
+
+/** 기록 폼 1페이지(사실) → 2페이지(분석). 주원인·풀이·저장은 2페이지에 있다 */
+export const goAnalysis = (page) =>
+  page.click('.btn--primary:has-text("다음 — 왜 틀렸나")');

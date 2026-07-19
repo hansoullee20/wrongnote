@@ -3,6 +3,8 @@ import {
   SUBJECTS,
   CAUSES,
   CAUSE_HINTS,
+  CHOICES,
+  EXAM_TIME_BUCKETS,
   CAUSE_EXECUTION,
   MATH_ERROR_TAGS,
   MATH_TOPICS,
@@ -83,6 +85,16 @@ function buildClassifyPrompt(draft) {
   return lines.join("\n");
 }
 
+/** 오버레이에선 시트 헤더가 제목·닫기를 이미 갖고 있어 패널 껍데기가 중복된다 */
+function FormShell({ formOnly, title, open, onToggle, children }) {
+  if (formOnly) return <div className="form-shell">{children}</div>;
+  return (
+    <Panel title={title} open={open} onToggle={onToggle}>
+      {children}
+    </Panel>
+  );
+}
+
 const emptyDraft = (subject = "수학") => ({
   subject,
   cause: "",
@@ -115,6 +127,8 @@ export default function RecordView({
   const [checks, setChecks] = useState([false, false, false, false]);
   const [expandedId, setExpandedId] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  // 기록은 2페이지 — 사실을 먼저 적고, 해설은 주원인을 고른 뒤에 본다
+  const [step, setStep] = useState(1);
   const [ocr, setOcr] = useState({ busy: false, label: "", error: "" });
   const [copied, setCopied] = useState("");
   const ocrInputRef = useRef(null);
@@ -161,6 +175,7 @@ export default function RecordView({
     originalImageIds.current = n.images || [];
     setPhotos((n.images || []).map((id) => ({ id })));
     setEditingId(n.id);
+    setStep(1);
     setChecks([false, false, false, false]); // 게이트는 수정에도 다시 통과해야 함
     setFormOpen(true);
     setExpandedId(null);
@@ -170,7 +185,9 @@ export default function RecordView({
   /** 수정 취소 — 반쯤 고친 draft가 새 노트로 새는 것 방지 */
   function cancelEdit() {
     setEditingId(null);
+    setStep(1);
     setDraft(emptyDraft(draft.subject));
+    setStep(1);
     setChecks([false, false, false, false]);
     clearPendingPhotos();
     originalImageIds.current = [];
@@ -286,6 +303,7 @@ export default function RecordView({
       onAdd(payload);
     }
     setDraft(emptyDraft(draft.subject));
+    setStep(1);
     setChecks([false, false, false, false]);
     setPhotos([]);
     originalImageIds.current = [];
@@ -334,15 +352,28 @@ export default function RecordView({
 
   return (
     <div className="view">
-      <Panel
+      <FormShell
+        formOnly={formOnly}
         title={editingId ? "오답 수정 중" : "오답 기록"}
         open={formOpen}
         onToggle={() => setFormOpen((o) => !o)}
       >
         <div className="form">
-          {/* ── 분류 ── */}
-          <div className="form-group">
-            <div className="form-group-title">분류</div>
+          <div className="steps">
+            <span className={`step${step === 1 ? " on" : ""}`}>
+              <span className="step-num">1</span>사실
+            </span>
+            <span className="step-line" />
+            <span className={`step${step === 2 ? " on" : ""}`}>
+              <span className="step-num">2</span>분석
+            </span>
+          </div>
+
+          {step === 1 && (
+            <>
+              {/* ── 1페이지: 무슨 일이 있었나. 풀이·해설은 여기 없다 ── */}
+              <div className="form-group">
+                <div className="form-group-title">사실</div>
             <ChipRow
               options={SUBJECTS}
               value={draft.subject}
@@ -359,38 +390,6 @@ export default function RecordView({
                 onChange={(e) => set({ problem: e.target.value })}
               />
             </Field>
-            {isMath && (
-              <>
-                <div className="label">토픽 — 대단원</div>
-                <ChipRow
-                  options={Object.keys(MATH_TOPICS)}
-                  value={draft.topicMain}
-                  onPick={(m) =>
-                    set({
-                      topicMain: m === draft.topicMain ? "" : m,
-                      topicSub: "",
-                    })
-                  }
-                />
-                {draft.topicMain && (
-                  <>
-                    <div className="label">소단원</div>
-                    <ChipRow
-                      options={MATH_TOPICS[draft.topicMain]}
-                      value={draft.topicSub}
-                      onPick={(s) =>
-                        set({ topicSub: s === draft.topicSub ? "" : s })
-                      }
-                    />
-                  </>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* ── 내용 ── */}
-          <div className="form-group">
-            <div className="form-group-title">내용</div>
             <div className="ocr-row">
               <Button
                 variant="ghost"
@@ -436,32 +435,85 @@ export default function RecordView({
                 ))}
               </div>
             )}
-            <Field label="문제 원문 (선택)" hint="사진 OCR 결과가 여기 들어감">
+            <Field label="문제 원문 (선택)" hint="사진 OCR 결과가 여기 들어감" htmlFor="rec-question">
               <textarea
+                id="rec-question"
                 rows={2}
                 value={draft.question}
                 onChange={(e) => set({ question: e.target.value })}
               />
             </Field>
-            <Field label="내 풀이 — 실패 지점">
-              <textarea
-                rows={2}
-                value={draft.mySol}
-                onChange={(e) => set({ mySol: e.target.value })}
-              />
-            </Field>
-            <Field label="최적 풀이 — 시험 전략 포함">
-              <textarea
-                rows={2}
-                value={draft.optSol}
-                onChange={(e) => set({ optSol: e.target.value })}
-              />
-            </Field>
-          </div>
 
-          {/* ── 태그 & 판정 ── */}
-          <div className="form-group">
-            <div className="form-group-title">태그 &amp; 판정</div>
+                <div className="label">답 마킹</div>
+                <div className="ans-line">
+                  <span className="ans-name">정답</span>
+                  {CHOICES.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`ans-o${draft.correctAnswer === c ? " right" : ""}`}
+                      onClick={() =>
+                        set({ correctAnswer: draft.correctAnswer === c ? "" : c })
+                      }
+                    >
+                      {c}
+                    </button>
+                  ))}
+                  <input
+                    className="ans-sub"
+                    type="text"
+                    placeholder="주관식"
+                    value={
+                      CHOICES.includes(draft.correctAnswer)
+                        ? ""
+                        : draft.correctAnswer
+                    }
+                    onChange={(e) => set({ correctAnswer: e.target.value })}
+                  />
+                </div>
+                <div className="ans-line">
+                  <span className="ans-name">내가 고른 답</span>
+                  {CHOICES.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`ans-o${draft.myAnswer === c ? " mine" : ""}`}
+                      onClick={() =>
+                        set({ myAnswer: draft.myAnswer === c ? "" : c })
+                      }
+                    >
+                      {c}
+                    </button>
+                  ))}
+                  <input
+                    className="ans-sub"
+                    type="text"
+                    placeholder="주관식"
+                    value={
+                      CHOICES.includes(draft.myAnswer) ? "" : draft.myAnswer
+                    }
+                    onChange={(e) => set({ myAnswer: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <Button
+                variant="primary"
+                size="lg"
+                block
+                disabled={!draft.problem.trim()}
+                onClick={() => setStep(2)}
+              >
+                다음 — 왜 틀렸나
+              </Button>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              {/* ── 2페이지: 왜 그랬나. 해설은 주원인을 고른 뒤에 나온다 ── */}
+              <div className="form-group">
+                <div className="form-group-title">분석</div>
             {isMath && (
               <>
                 <div className="label">표준 항목 인출</div>
@@ -536,8 +588,67 @@ export default function RecordView({
                 ))}
               </div>
             )}
-          </div>
+              </div>
 
+              <div className="form-group">
+                <div className="form-group-title">토픽 & 풀이</div>
+            {isMath && (
+              <>
+                <div className="label">토픽 — 대단원</div>
+                <ChipRow
+                  options={Object.keys(MATH_TOPICS)}
+                  value={draft.topicMain}
+                  onPick={(m) =>
+                    set({
+                      topicMain: m === draft.topicMain ? "" : m,
+                      topicSub: "",
+                    })
+                  }
+                />
+                {draft.topicMain && (
+                  <>
+                    <div className="label">소단원</div>
+                    <ChipRow
+                      options={MATH_TOPICS[draft.topicMain]}
+                      value={draft.topicSub}
+                      onPick={(s) =>
+                        set({ topicSub: s === draft.topicSub ? "" : s })
+                      }
+                    />
+                  </>
+                )}
+              </>
+            )}
+            <Field label="내 풀이 — 실패 지점" htmlFor="rec-mysol">
+              <textarea
+                id="rec-mysol"
+                rows={2}
+                value={draft.mySol}
+                onChange={(e) => set({ mySol: e.target.value })}
+              />
+            </Field>
+            <Field label="최적 풀이 — 시험 전략 포함" htmlFor="rec-optsol">
+              <textarea
+                id="rec-optsol"
+                rows={2}
+                value={draft.optSol}
+                onChange={(e) => set({ optSol: e.target.value })}
+              />
+            </Field>
+
+                <div className="label">시험에서 걸린 시간 — 선택</div>
+                <ChipRow
+                  options={EXAM_TIME_BUCKETS}
+                  value={draft.examTime}
+                  onPick={(t) =>
+                    set({ examTime: t === draft.examTime ? "" : t })
+                  }
+                />
+              </div>
+
+              <Button variant="neutral" block onClick={() => setStep(1)}>
+                이전
+              </Button>
           <Button
             variant="primary"
             size="lg"
@@ -552,23 +663,13 @@ export default function RecordView({
               수정 취소
             </Button>
           )}
-          {editingId && (
-            <Button
-              variant="danger"
-              block
-              className="note-delete"
-              onClick={() => {
-                if (confirm("이 기록을 삭제할까?")) onDelete(editingId);
-              }}
-            >
-              이 기록 삭제
-            </Button>
-          )}
           {gateActive && !gatePassed && (
             <div className="gate-warn">판정 체크 미완료 — 저장 잠김</div>
           )}
+            </>
+          )}
         </div>
-      </Panel>
+      </FormShell>
 
       {!formOnly && (
         <>

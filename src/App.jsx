@@ -289,16 +289,33 @@ export default function App() {
             <span className="sheet-title">
               {editingNoteId ? "오답 수정" : "오답 기록"}
             </span>
-            <button
-              type="button"
-              className="sheet-close"
-              onClick={() => {
-                setRecording(false);
-                setEditingNoteId(null);
-              }}
-            >
-              닫기 ✕
-            </button>
+            <div className="sheet-actions">
+              {editingNoteId && (
+                <button
+                  type="button"
+                  className="sheet-delete"
+                  onClick={() => {
+                    if (confirm("이 기록을 삭제할까?")) {
+                      deleteNote(editingNoteId);
+                      setRecording(false);
+                      setEditingNoteId(null);
+                    }
+                  }}
+                >
+                  이 기록 삭제
+                </button>
+              )}
+              <button
+                type="button"
+                className="sheet-close"
+                onClick={() => {
+                  setRecording(false);
+                  setEditingNoteId(null);
+                }}
+              >
+                닫기 ✕
+              </button>
+            </div>
           </div>
           <div className="sheet-body">
             <RecordView

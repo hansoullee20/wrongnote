@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { freshApp , openRecord } from "./helpers.js";
+import { freshApp , openRecord , goAnalysis } from "./helpers.js";
 
 test.describe("실행 오류 하드 게이트", () => {
   test("실행 태그 선택 시 4항목 체크 전까지 저장 잠김", async ({ page }) => {
@@ -7,6 +7,7 @@ test.describe("실행 오류 하드 게이트", () => {
     await openRecord(page);
 
     await page.fill("#rec-problem", "게이트 테스트 Q1");
+    await goAnalysis(page);
     await page.click('.chip:has-text("실행 실수")');
 
     const saveBtn = page.locator('.btn--primary:has-text("저장")');
@@ -24,6 +25,7 @@ test.describe("실행 오류 하드 게이트", () => {
     await freshApp(page);
     await openRecord(page);
     await page.fill("#rec-problem", "게이트 없음 Q1");
+    await goAnalysis(page);
     await page.click('.chip:has-text("시간 부족")');
     await expect(page.locator(".gate")).toHaveCount(0);
     await expect(page.locator('.btn--primary:has-text("저장")')).toBeEnabled();

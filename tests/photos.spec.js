@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { freshApp, readNotes , pickCause , openRecord, openNoteByProblem } from "./helpers.js";
+import { freshApp, readNotes , pickCause , openRecord, openNoteByProblem , goAnalysis } from "./helpers.js";
 
 // 1×1 픽셀 PNG (테스트용 최소 이미지)
 const TINY_PNG = Buffer.from(
@@ -60,6 +60,7 @@ test.describe("문제 사진 첨부", () => {
     // 사진 썸네일이 폼에 떠야 함 (OCR 실패와 무관)
     await expect(page.locator(".photo-strip-item")).toHaveCount(1);
 
+    await goAnalysis(page);
     await pickCause(page);
     await page.click('.btn--primary:has-text("저장")');
 
@@ -89,13 +90,14 @@ test.describe("문제 사진 첨부", () => {
         buffer: TINY_PNG,
       });
     await expect(page.locator(".photo-strip-item")).toHaveCount(1);
+    await goAnalysis(page);
     await pickCause(page);
     await page.click('.btn--primary:has-text("저장")');
     await expect.poll(async () => (await readImageIds(page)).length).toBe(1);
 
     page.on("dialog", (d) => d.accept());
     await openNoteByProblem(page, "사진 삭제 테스트");
-    await page.click('.btn--danger:has-text("이 기록 삭제")');
+    await page.click(".sheet-delete");
 
     await expect.poll(async () => (await readImageIds(page)).length).toBe(0);
   });
@@ -113,6 +115,7 @@ test.describe("문제 사진 첨부", () => {
     await page.click(".photo-remove");
     await expect(page.locator(".photo-strip-item")).toHaveCount(0);
 
+    await goAnalysis(page);
     await pickCause(page);
     await page.click('.btn--primary:has-text("저장")');
     await expect
