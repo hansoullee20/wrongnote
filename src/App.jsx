@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { RECHECK_DAYS, DAY_MS, fmtDate, uid, isRecheckDue } from "./constants.js";
+import {
+  RECHECK_DAYS,
+  FAIL_RECHECK_DAYS,
+  DAY_MS,
+  fmtDate,
+  uid,
+  isRecheckDue,
+  CAUSES,
+} from "./constants.js";
 import { loadAll, saveNotes, saveCards } from "./storage.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
@@ -29,6 +37,8 @@ export default function App() {
   const [editingNoteId, setEditingNoteId] = useState(null);
   // 문제 그리드에서 바로 세션을 시작할 때 넘기는 큐
   const [pendingQueue, setPendingQueue] = useState(null);
+  // 통계 → 문제 탭 그룹 이동 요청 {group, unattemptedOnly}
+  const [problemNavRequest, setProblemNavRequest] = useState(null);
   const [filter, setFilter] = useState({ tag: "", cause: "", topicMain: "" });
 
   useEffect(() => {
@@ -123,22 +133,42 @@ export default function App() {
   }
 
   /**
-   * 다시 풀기 결과 1회분을 노트에 쌓는다.
-   * 틀렸다고 주원인을 자동으로 바꾸지 않는다 — 잘못된 재분류는
+   * 다시 풀기 결과 1회분을 노트에 쌓는다 (v5: 시도별 실패 원인 포함).
+   * 틀렸다고 노트의 주원인을 자동으로 바꾸지 않는다 — 잘못된 재분류는
    * 잘못된 처방으로 이어진다. 대신 세션 요약에서 사용자에게 물어본다.
+   * fail인데 원인이 유효하지 않으면 저장하지 않는다 — 분류 없는
+   * fail이 쌓이면 통계가 다시 거짓말을 하게 된다.
    */
-  function recordAttempt(id, { answer, correct, seconds }) {
-    const now = Date.now();
+  function recordAttempt(id, draft) {
+    const now = draft.ts ?? Date.now();
+    const correct = Boolean(draft.correct);
+    if (!correct && !CAUSES.includes(draft.cause)) return;
+
+    const attempt = {
+      id: draft.id ?? uid(),
+      ts: now,
+      answer: draft.answer ?? "",
+      correct,
+      result: correct ? "pass" : "fail",
+      seconds: Number.isFinite(draft.seconds) ? draft.seconds : null,
+      // pass에 딸려온 원인은 버린다 — pass에는 실패 원인이 없다
+      cause: correct ? "" : draft.cause,
+      tags: correct ? [] : [...(draft.tags || [])],
+      memo: correct ? "" : (draft.memo ?? ""),
+      source: draft.source,
+    };
+
     setNotes((ns) =>
       ns.map((n) => {
         if (n.id !== id) return n;
         return {
           ...n,
-          attempts: [...(n.attempts || []), { ts: now, answer, correct, seconds }],
+          attempts: [...(n.attempts || []), attempt],
           rechecked: true,
           recheckResult: correct ? "pass" : "fail",
           recheckCount: n.recheckCount + 1,
-          nextRecheckTs: now + (correct ? RECHECK_DAYS : 1) * DAY_MS,
+          nextRecheckTs:
+            now + (correct ? RECHECK_DAYS : FAIL_RECHECK_DAYS) * DAY_MS,
         };
       })
     );
@@ -224,9 +254,20 @@ export default function App() {
             cardDueCount={cardDueCount}
             filter={filter}
             setFilter={setFilter}
+            navigationRequest={problemNavRequest}
+            onConsumeNavigationRequest={() => setProblemNavRequest(null)}
             onOpenNote={(id) => {
               setEditingNoteId(id);
               setRecording(true);
+            }}
+            onSolveNote={(id) => {
+              const n = notes.find((x) => x.id === id);
+              setPendingQueue({
+                ids: [id],
+                label: n ? n.problem : "다시 풀기",
+                source: "manual",
+              });
+              setTab("solve");
             }}
             onRecord={() => {
               setEditingNoteId(null);
@@ -236,6 +277,7 @@ export default function App() {
               setPendingQueue({
                 ids: notes.filter((n) => isRecheckDue(n)).map((n) => n.id),
                 label: "오늘 볼 것",
+                source: "scheduled",
               });
               setTab("solve");
             }}
@@ -244,6 +286,7 @@ export default function App() {
               setPendingQueue({
                 ids: shuffled.slice(0, size).map((n) => n.id),
                 label: filter.cause ? `${filter.cause}에서` : "전체에서",
+                source: "random",
               });
               setTab("solve");
             }}
@@ -253,6 +296,7 @@ export default function App() {
           <SolveView
             notes={notes}
             cardDueCount={cardDueCount}
+            filter={filter}
             initialQueue={pendingQueue}
             onConsumeInitialQueue={() => setPendingQueue(null)}
             onRecordAttempt={recordAttempt}
@@ -279,6 +323,10 @@ export default function App() {
             cards={cards}
             onReplaceAll={replaceAll}
             onTopicClick={gotoProblemsWithTopic}
+            onGotoGroup={(group, unattemptedOnly) => {
+              setProblemNavRequest({ group, unattemptedOnly });
+              setTab("problems");
+            }}
           />
         )}
       </div>

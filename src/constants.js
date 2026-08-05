@@ -109,6 +109,25 @@ export const GATE_CHECKLIST = [
 export const RECHECK_DAYS = 14;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+/* ---- 재풀이 궤적 (v5) ---- */
+// 연속 pass 이 횟수 이상이면 '졸업' — 판정·테스트 모두 이 상수만 쓴다
+export const GRADUATION_PASS_STREAK = 2;
+// 카드·이력에 보여주는 최근 시도 수
+export const TRAJECTORY_LIMIT = 5;
+// fail 후 다음 복습까지 (pass는 RECHECK_DAYS)
+export const FAIL_RECHECK_DAYS = 1;
+// 태그 변화 통계의 비교 창
+export const TAG_TREND_WINDOW_DAYS = 14;
+
+/** 시도 진입 경로 — attempt.source 허용값 */
+export const ATTEMPT_SOURCES = [
+  "scheduled",
+  "random",
+  "manual",
+  "solution_reveal",
+  "legacy",
+];
+
 /**
  * 재검증 대상 판정 — 탭 배지와 풀기 세션이 반드시 같은 기준을 쓴다.
  *

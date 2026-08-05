@@ -71,9 +71,9 @@ export async function openRecord(page) {
   await page.locator(".sheet .form").first().waitFor();
 }
 
-/** 그리드에서 문제를 탭해 수정 오버레이를 연다 */
+/** 그리드에서 연필 버튼으로 수정 오버레이를 연다 (v5: 본문 탭은 바로 풀기) */
 export async function openNoteByProblem(page, problem) {
-  await page.click(`.prob-card:has-text("${problem}")`);
+  await page.click(`.prob-card:has-text("${problem}") .prob-card-edit`);
   await page.locator(".sheet .form").first().waitFor();
 }
 

@@ -218,6 +218,28 @@ body {
   opacity: 0.85;
 }
 
+/* 좁은 화면: 제목이 글자 단위로 꺾이면 안 된다 — 부제를 접고 제목을 줄인다 */
+@media (max-width: 480px) {
+  .masthead {
+    padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  }
+
+  .masthead-sub {
+    display: none;
+  }
+
+  .masthead-title {
+    font-size: var(--fs-lg);
+    letter-spacing: 0.22em;
+    text-indent: 0.22em;
+    white-space: nowrap;
+  }
+
+  .masthead-stamp {
+    font-size: 16px;
+  }
+}
+
 button {
   font-family: inherit;
   font-size: inherit;
@@ -1159,6 +1181,76 @@ textarea:focus {
   line-height: 1.5;
 }
 
+/* ---- 재풀이 궤적 통계 (v5) ---- */
+.audit-cell.traj-cell {
+  width: 100%;
+  cursor: pointer;
+}
+
+.audit-cell.traj-cell:active {
+  background: var(--sunken);
+}
+
+.improve-line {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.improve-line b {
+  color: var(--success);
+  font-size: var(--fs-md);
+}
+
+.trend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.trend-bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bar-track.sm {
+  /* 세로 flex(.trend-bars) 안에선 flex:1의 basis 0이 높이를 잡아먹는다 */
+  flex: 0 0 auto;
+  height: 9px;
+}
+
+.bar-fill.prev {
+  background: var(--border-strong);
+}
+
+.trend-counts {
+  width: 44px;
+  text-align: right;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.trend-marker {
+  width: 52px;
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+}
+
+.trend-marker.up {
+  color: var(--red-pen);
+}
+
+.trend-marker.down {
+  color: var(--success);
+}
+
 .io-row {
   display: flex;
   gap: var(--sp-2);
@@ -1562,14 +1654,63 @@ textarea:focus {
 
 .prob-card {
   position: relative;
-  display: block;
-  width: 100%;
-  text-align: left;
   background: var(--paper);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   overflow: hidden;
   box-shadow: var(--sh-sm);
+}
+
+/* 본문 = 바로 풀기 */
+.prob-card-main {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+}
+
+/* 연필 = 수정 진입. 본문 탭과 절대 겹치지 않게 떠 있는 원 */
+.prob-card-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  color: var(--blue-pen);
+  font-size: 15px;
+  line-height: 1;
+  box-shadow: var(--sh-sm);
+  z-index: 2;
+}
+
+.prob-traj {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: 5px;
+}
+
+.prob-last {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 그룹 헤더 — 접히는 졸업은 버튼 */
+.review-group .group-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.group-toggle {
+  font-family: var(--font-hand);
+  font-size: 19px;
+  color: var(--blue-pen);
+  padding: 0;
+  min-height: var(--tap-min);
 }
 
 .prob-card.due {
@@ -2141,6 +2282,126 @@ textarea:focus {
   line-height: 1.6;
   padding-left: 12px;
   border-left: 2px solid var(--border);
+}
+
+/* ---- fail 분류 (v5) — 이번 시도의 원인을 붙여야 저장된다 ---- */
+.fail-classifier {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--red-pen);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.quick-cause-row .chip.quick-cause {
+  border: 1px dashed var(--blue-pen);
+  color: var(--blue-pen);
+  font-weight: var(--fw-semibold);
+}
+
+.quick-cause-row .chip.quick-cause.on {
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: var(--text-on-accent);
+}
+
+.fail-memo {
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  font-size: var(--fs-sm);
+  font-family: inherit;
+}
+
+.fail-save {
+  width: 100%;
+}
+
+/* 포기 선언 — 조용하지만 찾을 수 있게 */
+.reveal-give-up {
+  min-height: var(--tap-min);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  align-self: center;
+}
+
+/* ---- 재풀이 궤적 도트 (v5) ---- */
+.traj {
+  display: inline-flex;
+  gap: 3px;
+  letter-spacing: 0;
+}
+
+.traj-dot {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.traj-dot.pass {
+  color: var(--success);
+}
+
+.traj-dot.fail {
+  color: var(--red-pen);
+}
+
+.traj-none {
+  font-family: var(--font-hand);
+  font-size: 15px;
+  color: var(--pencil);
+}
+
+/* ---- 시도 로그 (v5) — 수정 오버레이 하단 ---- */
+.attempt-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.attempt-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.attempt-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  flex-wrap: wrap;
+}
+
+.attempt-date {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  width: 34px;
+  flex-shrink: 0;
+}
+
+.attempt-body {
+  color: var(--text-secondary);
+}
+
+.attempt-memo {
+  font-family: var(--font-hand);
+  font-size: 16px;
+  color: var(--blue-pen);
 }
 
 /* 세션 요약 */

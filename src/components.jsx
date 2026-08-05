@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { GATE_CHECKLIST } from "./constants.js";
+import { getTrajectory } from "./review.js";
 import { getImage } from "./imageStore.js";
 
 export function Chip({ label, active, onClick, className = "" }) {
@@ -193,6 +195,99 @@ export function Badge({ tone = "neutral", className = "", children }) {
     <span className={`badge badge--${tone}${className ? ` ${className}` : ""}`}>
       {children}
     </span>
+  );
+}
+
+/**
+ * 실행 실수 하드 게이트 — 기록·재풀이 분류가 같은 체크리스트를 쓴다.
+ * 체크 상태는 부모가 관리하고, 저장 가능 여부도 부모가 판단한다.
+ * @param {{ checks: boolean[], onToggle: (index: number) => void }} props
+ */
+export function ExecutionGate({ checks, onToggle }) {
+  return (
+    <div className="gate">
+      <div className="gate-title">판정 체크 — 4항목 전부 체크해야 저장 가능</div>
+      {GATE_CHECKLIST.map((item, i) => (
+        <label key={i} className="gate-item">
+          <input
+            type="checkbox"
+            checked={checks[i]}
+            onChange={() => onToggle(i)}
+          />
+          <span>{item}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 재풀이 궤적 도트 — 오래된 것 → 최신. 색이 아니라 모양(●/○)으로
+ * 갈라 보이게 하고, 스크린리더용 라벨을 단다.
+ * @param {{ attempts: object[] }} props
+ */
+export function TrajectoryDots({ attempts }) {
+  const recent = getTrajectory({ attempts });
+  if (recent.length === 0) {
+    return <span className="traj-none">미재풀이</span>;
+  }
+  return (
+    <span className="traj" role="img" aria-label="재풀이 궤적">
+      {recent.map((a) => (
+        <span
+          key={a.id ?? a.ts}
+          className={`traj-dot ${a.correct ? "pass" : "fail"}`}
+          aria-label={a.correct ? "통과" : "실패"}
+        >
+          {a.correct ? "○" : "●"}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+const fmtSecShort = (s) =>
+  s == null
+    ? ""
+    : s >= 60
+      ? `${Math.floor(s / 60)}분 ${String(s % 60).padStart(2, "0")}초`
+      : `${s}초`;
+
+const fmtShortDate = (ts) => {
+  const d = new Date(ts);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+};
+
+/**
+ * 시도 로그 (읽기 전용) — 수정 오버레이 하단에서 이 문제의 재풀이
+ * 궤적 전체를 보여준다. 편집·삭제는 이번 범위에 없다.
+ * @param {{ attempts: object[] }} props
+ */
+export function AttemptHistory({ attempts }) {
+  const all = Array.isArray(attempts) ? attempts : [];
+  return (
+    <div className="attempt-history">
+      <div className="attempt-history-head">
+        <span className="label">재풀이 이력</span>
+        <TrajectoryDots attempts={all} />
+      </div>
+      {all.length === 0 && <div className="hint">아직 다시 푼 적 없음</div>}
+      {all.map((a) => (
+        <div key={a.id ?? a.ts} className="attempt-line">
+          <span className="attempt-date">{fmtShortDate(a.ts)}</span>
+          <span className={`grade-mark ${a.correct ? "pass" : "fail"}`}>
+            {a.correct ? "○" : "✗"}
+          </span>
+          <span className="attempt-body">
+            {a.correct ? "통과" : a.cause || "원인 미기록"}
+            {!a.correct && a.tags?.length > 0 && ` · ${a.tags.join(" · ")}`}
+            {a.answer && ` — ${a.answer}`}
+            {a.seconds != null && ` — ${fmtSecShort(a.seconds)}`}
+          </span>
+          {a.memo && <span className="attempt-memo">{a.memo}</span>}
+        </div>
+      ))}
+    </div>
   );
 }
 

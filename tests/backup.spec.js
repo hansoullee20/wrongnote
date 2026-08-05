@@ -15,7 +15,7 @@ test.describe("백업 내보내기/가져오기", () => {
     for await (const c of stream) chunks.push(c);
     const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
 
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(5); // v5: 시도별 실패 원인 스키마
     expect(Array.isArray(parsed.notes)).toBe(true);
     expect(Array.isArray(parsed.cards)).toBe(true);
     expect(typeof parsed.images).toBe("object"); // 사진 base64 맵 포함

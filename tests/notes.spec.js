@@ -89,7 +89,8 @@ test.describe("노트 CRUD + 자동 카드", () => {
     await freshApp(page);
     const baseNotes = (await readNotes(page)).length;
 
-    await page.locator(".prob-card").first().click();
+    // v5: 카드 본문 탭은 바로 풀기 — 수정은 연필 버튼
+    await page.locator(".prob-card-edit").first().click();
     await page.locator(".sheet .form").first().waitFor();
     await page.fill("#rec-problem", "SHOULD-NOT-LEAK");
     await goAnalysis(page);
