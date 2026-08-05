@@ -218,6 +218,28 @@ body {
   opacity: 0.85;
 }
 
+/* 좁은 화면: 제목이 글자 단위로 꺾이면 안 된다 — 부제를 접고 제목을 줄인다 */
+@media (max-width: 480px) {
+  .masthead {
+    padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  }
+
+  .masthead-sub {
+    display: none;
+  }
+
+  .masthead-title {
+    font-size: var(--fs-lg);
+    letter-spacing: 0.22em;
+    text-indent: 0.22em;
+    white-space: nowrap;
+  }
+
+  .masthead-stamp {
+    font-size: 16px;
+  }
+}
+
 button {
   font-family: inherit;
   font-size: inherit;
@@ -1197,6 +1219,8 @@ textarea:focus {
 }
 
 .bar-track.sm {
+  /* 세로 flex(.trend-bars) 안에선 flex:1의 basis 0이 높이를 잡아먹는다 */
+  flex: 0 0 auto;
   height: 9px;
 }
 

@@ -20,6 +20,9 @@ for (const vp of [
       await freshApp(page);
 
       await expect(page.locator(".tab")).toHaveCount(4);
+      // 마스트헤드 제목이 글자 단위로 줄바꿈되면 안 된다 (한 줄 높이 이내)
+      const titleBox = await page.locator(".masthead-title").boundingBox();
+      expect(titleBox.height).toBeLessThan(45);
       // 본문이 뷰포트를 넘치면 안 된다
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - window.innerWidth
