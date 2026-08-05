@@ -8,7 +8,6 @@ import {
   CAUSE_EXECUTION,
   MATH_ERROR_TAGS,
   MATH_TOPICS,
-  GATE_CHECKLIST,
 } from "../constants.js";
 import {
   ChipRow,
@@ -20,6 +19,8 @@ import {
   Field,
   Badge,
   NoteImages,
+  ExecutionGate,
+  AttemptHistory,
 } from "../components.jsx";
 import { copyText } from "../clipboard.js";
 import {
@@ -548,25 +549,12 @@ export default function RecordView({
             </Field>
 
             {gateActive && (
-              <div className="gate">
-                <div className="gate-title">
-                  판정 체크 — 4항목 전부 체크해야 저장 가능
-                </div>
-                {GATE_CHECKLIST.map((item, i) => (
-                  <label key={i} className="gate-item">
-                    <input
-                      type="checkbox"
-                      checked={checks[i]}
-                      onChange={() =>
-                        setChecks((cs) =>
-                          cs.map((c, j) => (j === i ? !c : c))
-                        )
-                      }
-                    />
-                    <span>{item}</span>
-                  </label>
-                ))}
-              </div>
+              <ExecutionGate
+                checks={checks}
+                onToggle={(i) =>
+                  setChecks((cs) => cs.map((c, j) => (j === i ? !c : c)))
+                }
+              />
             )}
               </div>
 
@@ -645,6 +633,12 @@ export default function RecordView({
           )}
           {gateActive && !gatePassed && (
             <div className="gate-warn">판정 체크 미완료 — 저장 잠김</div>
+          )}
+          {/* 수정 중엔 이 문제의 재풀이 이력을 함께 보여준다 (읽기 전용) */}
+          {editingId && (
+            <AttemptHistory
+              attempts={notes.find((x) => x.id === editingId)?.attempts}
+            />
           )}
             </>
           )}

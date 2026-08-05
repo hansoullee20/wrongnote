@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CAUSES, CHOICES, isRecheckDue } from "../constants.js";
+import {
+  CAUSES,
+  CAUSE_EXECUTION,
+  CHOICES,
+  MATH_ERROR_TAGS,
+  isRecheckDue,
+} from "../constants.js";
 import { getImage } from "../imageStore.js";
-import { Chip } from "../components.jsx";
+import {
+  Chip,
+  ChipRow,
+  MultiChipRow,
+  ExecutionGate,
+} from "../components.jsx";
 
 const fmtSec = (s) =>
   s >= 60 ? `${Math.floor(s / 60)}분 ${String(s % 60).padStart(2, "0")}초` : `${s}초`;
@@ -72,17 +83,27 @@ export default function SolveView({
   const [queue, setQueue] = useState([]); // 노트 id 배열
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState([]); // {id, correct, seconds, answer}
-  const [phase, setPhase] = useState("idle"); // idle | solving | graded | summary
+  // idle | solving | classifying_fail | graded | summary
+  const [phase, setPhase] = useState("idle");
   const [picked, setPicked] = useState("");
   const [freeAnswer, setFreeAnswer] = useState("");
   const [answerFix, setAnswerFix] = useState(""); // 정답이 비어 있을 때 지금 입력
   const [randomSize, setRandomSize] = useState(5);
-  const [scope, setScope] = useState({ label: "", cause: "" });
+  const [scope, setScope] = useState({ label: "", cause: "", source: "manual" });
   const startedAt = useRef(0);
+
+  /* fail 분류 중인 시도 — 메모리에만 있고, '실패 기록'을 눌러야 저장된다.
+     분류 없이 이탈하면 이 시도는 없던 일이 된다. */
+  const [pendingFailure, setPendingFailure] = useState(null);
+  const [failCause, setFailCause] = useState("");
+  const [failTags, setFailTags] = useState([]);
+  const [failMemo, setFailMemo] = useState("");
+  const [failChecks, setFailChecks] = useState([false, false, false, false]);
+  const submittingFail = useRef(false); // 더블탭 중복 저장 방지
 
   const dueNotes = useMemo(() => notes.filter((n) => isRecheckDue(n)), [notes]);
 
-  const start = (ids, label) => {
+  const start = (ids, label, source) => {
     if (ids.length === 0) return;
     setQueue(ids);
     setIndex(0);
@@ -90,15 +111,16 @@ export default function SolveView({
     setPicked("");
     setFreeAnswer("");
     setAnswerFix("");
-    setScope({ label });
+    setPendingFailure(null);
+    setScope({ label, cause: "", source });
     setPhase("solving");
     startedAt.current = Date.now();
   };
 
-  // 문제 그리드의 '바로 시작' / '랜덤' 진입
+  // 문제 그리드의 '바로 시작' / '랜덤' / 카드 단일 진입
   useEffect(() => {
     if (!initialQueue) return;
-    start(initialQueue.ids, initialQueue.label);
+    start(initialQueue.ids, initialQueue.label, initialQueue.source);
     onConsumeInitialQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQueue]);
@@ -131,7 +153,8 @@ export default function SolveView({
             onClick={() =>
               start(
                 dueNotes.map((n) => n.id),
-                "오늘 볼 것"
+                "오늘 볼 것",
+                "scheduled"
               )
             }
           >
@@ -182,7 +205,8 @@ export default function SolveView({
               const shuffled = [...pool].sort(() => Math.random() - 0.5);
               start(
                 shuffled.slice(0, randomSize).map((n) => n.id),
-                scope.cause ? `${scope.cause}에서` : "전체에서"
+                scope.cause ? `${scope.cause}에서` : "전체에서",
+                "random"
               );
             }}
           >
@@ -317,7 +341,9 @@ export default function SolveView({
             <button
               type="button"
               className="end-btn ghost"
-              onClick={() => start(wrongIds, `틀린 ${wrongIds.length}개 다시`)}
+              onClick={() =>
+                start(wrongIds, `틀린 ${wrongIds.length}개 다시`, "manual")
+              }
             >
               틀린 {wrongIds.length}개만 다시
             </button>
@@ -352,8 +378,64 @@ export default function SolveView({
     const fix = answerFix.trim();
     if (!knownCorrect && fix) onSetCorrectAnswer(current.id, fix);
 
-    onRecordAttempt(current.id, { answer, correct, seconds });
-    setResults((rs) => [...rs, { id: current.id, correct, seconds, answer }]);
+    if (correct) {
+      // pass는 분류할 것이 없다 — 즉시 확정 저장
+      onRecordAttempt(current.id, {
+        answer,
+        correct: true,
+        seconds,
+        source: scope.source,
+      });
+      setResults((rs) => [...rs, { id: current.id, correct: true, seconds, answer }]);
+      setPhase("graded");
+      return;
+    }
+
+    // fail은 이번 시도의 원인을 붙여야 저장된다
+    beginFailClassification({ answer, seconds, source: scope.source });
+  }
+
+  /** 풀이 보기 — 이번 시도는 fail로 기록되고, 분류를 마쳐야 저장된다 */
+  function revealSolution() {
+    const seconds = Math.max(1, Math.round((Date.now() - startedAt.current) / 1000));
+    beginFailClassification({ answer, seconds, source: "solution_reveal" });
+  }
+
+  function beginFailClassification({ answer: a, seconds, source }) {
+    setPendingFailure({
+      ts: Date.now(),
+      answer: a,
+      correct: false,
+      seconds,
+      source,
+    });
+    setFailCause("");
+    setFailTags([]);
+    setFailMemo("");
+    setFailChecks([false, false, false, false]);
+    submittingFail.current = false;
+    setPhase("classifying_fail");
+  }
+
+  function finalizeFail() {
+    if (!pendingFailure || submittingFail.current) return;
+    submittingFail.current = true;
+    onRecordAttempt(current.id, {
+      ...pendingFailure,
+      cause: failCause,
+      tags: failTags,
+      memo: failMemo,
+    });
+    setResults((rs) => [
+      ...rs,
+      {
+        id: current.id,
+        correct: false,
+        seconds: pendingFailure.seconds,
+        answer: pendingFailure.answer,
+      },
+    ]);
+    setPendingFailure(null);
     setPhase("graded");
   }
 
@@ -366,6 +448,7 @@ export default function SolveView({
     setPicked("");
     setFreeAnswer("");
     setAnswerFix("");
+    setPendingFailure(null);
     setPhase("solving");
     startedAt.current = Date.now();
   }
@@ -485,7 +568,95 @@ export default function SolveView({
               </button>
             </div>
           )}
+
+          {/* 포기하고 풀이를 보는 것도 fail이다 — 정직하게 기록 */}
+          <button type="button" className="reveal-give-up" onClick={revealSolution}>
+            풀이 보기 (이번 시도는 실패로 기록)
+          </button>
         </>
+      )}
+
+      {phase === "classifying_fail" && pendingFailure && (
+        <div className="fail-classifier">
+          <div className="verdict">
+            <span className="verdict-stamp">또 틀림</span>
+            <span className="verdict-text">
+              이번엔 왜 틀렸나 — 원인을 골라야 기록된다
+            </span>
+          </div>
+
+          {/* 풀이 보기로 들어왔다면 분류하는 동안 최적 풀이를 보여준다 */}
+          {pendingFailure.source === "solution_reveal" &&
+            current.optSol?.trim() && (
+              <div className="reveal">
+                <div className="reveal-title">최적 풀이</div>
+                <div className="sol-shot">{current.optSol}</div>
+              </div>
+            )}
+
+          {CAUSES.includes(current.cause) && (
+            <div className="quick-cause-row">
+              <Chip
+                label={`처음과 같은 원인 · ${current.cause}`}
+                active={failCause === current.cause}
+                onClick={() => setFailCause(current.cause)}
+                className="quick-cause"
+              />
+            </div>
+          )}
+
+          <div className="label">주원인 — 하나만</div>
+          <ChipRow
+            options={CAUSES}
+            value={failCause}
+            onPick={(c) => setFailCause(c)}
+          />
+
+          {current.subject === "수학" && (
+            <>
+              <div className="label">세부 — 여러 개 가능 (선택)</div>
+              <MultiChipRow
+                options={MATH_ERROR_TAGS}
+                selected={failTags}
+                onToggle={(t) =>
+                  setFailTags((ts) =>
+                    ts.includes(t) ? ts.filter((x) => x !== t) : [...ts, t]
+                  )
+                }
+                className="math-tag"
+              />
+            </>
+          )}
+
+          <input
+            className="fail-memo"
+            type="text"
+            placeholder="짧은 메모 (선택)"
+            value={failMemo}
+            onChange={(e) => setFailMemo(e.target.value)}
+          />
+
+          {failCause === CAUSE_EXECUTION && (
+            <ExecutionGate
+              checks={failChecks}
+              onToggle={(i) =>
+                setFailChecks((cs) => cs.map((c, j) => (j === i ? !c : c)))
+              }
+            />
+          )}
+
+          <button
+            type="button"
+            className="grade-btn no fail-save"
+            disabled={
+              !failCause ||
+              (failCause === CAUSE_EXECUTION && !failChecks.every(Boolean))
+            }
+            onClick={finalizeFail}
+          >
+            실패 기록
+          </button>
+        </div>
       )}
 
       {phase === "graded" && justResult && (

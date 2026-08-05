@@ -2143,6 +2143,126 @@ textarea:focus {
   border-left: 2px solid var(--border);
 }
 
+/* ---- fail 분류 (v5) — 이번 시도의 원인을 붙여야 저장된다 ---- */
+.fail-classifier {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--red-pen);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.quick-cause-row .chip.quick-cause {
+  border: 1px dashed var(--blue-pen);
+  color: var(--blue-pen);
+  font-weight: var(--fw-semibold);
+}
+
+.quick-cause-row .chip.quick-cause.on {
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: var(--text-on-accent);
+}
+
+.fail-memo {
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  font-size: var(--fs-sm);
+  font-family: inherit;
+}
+
+.fail-save {
+  width: 100%;
+}
+
+/* 포기 선언 — 조용하지만 찾을 수 있게 */
+.reveal-give-up {
+  min-height: var(--tap-min);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  align-self: center;
+}
+
+/* ---- 재풀이 궤적 도트 (v5) ---- */
+.traj {
+  display: inline-flex;
+  gap: 3px;
+  letter-spacing: 0;
+}
+
+.traj-dot {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.traj-dot.pass {
+  color: var(--success);
+}
+
+.traj-dot.fail {
+  color: var(--red-pen);
+}
+
+.traj-none {
+  font-family: var(--font-hand);
+  font-size: 15px;
+  color: var(--pencil);
+}
+
+/* ---- 시도 로그 (v5) — 수정 오버레이 하단 ---- */
+.attempt-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.attempt-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.attempt-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  flex-wrap: wrap;
+}
+
+.attempt-date {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  width: 34px;
+  flex-shrink: 0;
+}
+
+.attempt-body {
+  color: var(--text-secondary);
+}
+
+.attempt-memo {
+  font-family: var(--font-hand);
+  font-size: 16px;
+  color: var(--blue-pen);
+}
+
 /* 세션 요약 */
 .sum-head {
   display: flex;
