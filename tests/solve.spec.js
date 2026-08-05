@@ -139,3 +139,100 @@ test.describe("다시 풀기 세션", () => {
     await expect(page.locator(".solve-prog")).toContainText("1 / 1");
   });
 });
+
+/* 변경 전 현재 동작 고정 (characterization) — 풀기 흐름을 건드리기 전에
+   기존 계약을 테스트로 잠근다. */
+test.describe("풀기 세션 현재 동작 고정", () => {
+  test("주관식 정답도 자동 채점된다", async ({ page }) => {
+    await seedOneSolvable(page, { correctAnswer: "47" });
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.fill(".ans-block .ans-row:not(.ans-fix) .ans-input", "47");
+    await page.click('.grade-btn:has-text("채점하기")');
+
+    await expect(page.locator(".verdict-stamp")).toHaveText("맞음");
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts[0].answer).toBe("47");
+    expect(note.attempts[0].correct).toBe(true);
+  });
+
+  test("정답도 현장 입력도 없으면 자기 채점으로 기록된다", async ({ page }) => {
+    await seedOneSolvable(page, { correctAnswer: "" });
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+
+    // 정답 미기록 → 자기 채점 버튼 두 개
+    await page.click('.grade-btn:has-text("또 틀렸다")');
+
+    await expect(page.locator(".verdict-stamp")).toHaveText("또 틀림");
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts.length).toBe(1);
+    expect(note.attempts[0].correct).toBe(false);
+  });
+
+  test("채점 후 답·시간 비교가 보인다", async ({ page }) => {
+    await seedOneSolvable(page);
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.click('.ans-opt:has-text("②")');
+    await page.click('.grade-btn:has-text("채점하기")');
+
+    await expect(page.locator(".time-line .time-now")).toBeVisible();
+    await expect(page.locator(".ans-compare")).toBeVisible();
+    // 이번에 고른 답과 정답이 나란히 표시된다
+    await expect(page.locator(".ans-cell-val.wrong").first()).toHaveText("②");
+    await expect(page.locator(".ans-cell-val.right").first()).toHaveText("③");
+  });
+
+  test("2문제 큐: 다음 문제로 넘어가면 타이머가 리셋되고 진행이 표시된다", async ({
+    page,
+  }) => {
+    await seedOneSolvable(page);
+    await page.evaluate(() => {
+      const ns = JSON.parse(localStorage.getItem("wr_notes"));
+      ns.push({
+        ...ns[0],
+        id: "solve_n2",
+        problem: "SOLVE-2",
+        correctAnswer: "①",
+      });
+      localStorage.setItem("wr_notes", JSON.stringify(ns));
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await expect(page.locator(".solve-prog")).toContainText("1 / 2");
+
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await page.click('.end-btn:has-text("다음 문제")');
+
+    await expect(page.locator(".solve-prog")).toContainText("2 / 2");
+    // 새 문제에서 다시 풀이 화면 + 타이머 재시작
+    await expect(page.locator(".veil")).toBeVisible();
+    await expect(page.locator(".timer")).toBeVisible();
+    await expect(page.locator(".timer-num")).toHaveText(/^00:0/);
+  });
+
+  test("reload 후에도 attempt가 남는다", async ({ page }) => {
+    await seedOneSolvable(page);
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.click('.ans-opt:has-text("②")');
+    await page.click('.grade-btn:has-text("채점하기")');
+
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    await page.waitForTimeout(300);
+
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts.length).toBe(1);
+    expect(note.attempts[0].answer).toBe("②");
+  });
+});
