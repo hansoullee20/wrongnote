@@ -370,13 +370,13 @@ export default function RecordView({
             </Field>
             <div className="ocr-row">
               <Button
-                variant="ghost"
+                variant="ink"
                 disabled={photo.busy}
                 onClick={() =>
                   photoInputRef.current && photoInputRef.current.click()
                 }
               >
-                {photo.busy ? photo.label : "문제 사진 첨부"}
+                {photo.busy ? photo.label : "📷 문제 사진 첨부"}
               </Button>
               <input
                 ref={photoInputRef}

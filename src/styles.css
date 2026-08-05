@@ -173,7 +173,8 @@ body {
   border-top: none;
   box-shadow: var(--sh-lg);
   padding: var(--sp-4);
-  min-height: calc(100vh - 120px);
+  /* 내용보다 약간만 길게 — 빈 괘선이 화면 끝까지 흘러가면 미완성처럼 보인다 */
+  min-height: 46vh;
 }
 
 /* ---- 시험지 마스트헤드: 이중 괘선 + 명조 ---- */
@@ -250,6 +251,22 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 키보드 포커스: 탭 이동에도 어디 있는지 보여야 한다 */
+button:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 input[type="text"],
 textarea {
   width: 100%;
@@ -296,6 +313,14 @@ textarea:focus {
   font-weight: var(--fw-semibold);
   border: 1px solid transparent;
   box-shadow: var(--sh-sm);
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.06s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn--lg {
@@ -335,10 +360,20 @@ textarea:focus {
 }
 
 .btn--ghost {
-  background: var(--info-soft);
+  background: transparent;
   border: 1px dashed var(--info);
   color: var(--info);
   box-shadow: none;
+}
+
+/* 잉크 버튼: FAB·mode-go와 같은 "실행" 계열 — 기록 흐름의 핵심 동작용 */
+.btn--ink {
+  background: var(--text);
+  color: var(--text-on-accent);
+}
+
+.btn--ink:active {
+  background: #3a342a;
 }
 
 .btn:disabled {
@@ -347,6 +382,12 @@ textarea:focus {
   color: var(--text-muted);
   cursor: not-allowed;
   box-shadow: none;
+}
+
+/* 잠긴 주요 CTA도 "여기가 저장이다"는 읽혀야 한다 — 죽은 회색 슬래브 금지 */
+.btn--primary:disabled {
+  background: var(--red-pen-soft);
+  color: rgba(192, 57, 43, 0.55);
 }
 
 .card {
@@ -460,12 +501,17 @@ textarea:focus {
   border-radius: var(--r-md) var(--r-md) 0 0;
   border: 1px solid var(--border);
   border-bottom: none;
-  background: var(--sunken);
-  color: var(--text-secondary);
+  border-top: 2px solid transparent;
+  background: var(--surface-2);
+  color: var(--text-muted);
   font-weight: var(--fw-medium);
   font-size: var(--fs-base);
   white-space: nowrap;
   transform: translateY(2px);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .tab.on {
@@ -473,6 +519,7 @@ textarea:focus {
   color: var(--red-pen);
   font-weight: var(--fw-bold);
   border-color: var(--border);
+  border-top: 2px solid var(--red-pen); /* 견출지에 빨간펜 표시 */
   transform: translateY(0);
   box-shadow: 0 -2px 4px rgba(33, 29, 22, 0.05);
 }
@@ -515,6 +562,10 @@ textarea:focus {
   color: var(--text-secondary);
   background: var(--surface);
   min-height: 38px;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .chip.on {
@@ -1335,6 +1386,43 @@ textarea:focus {
   transform: rotate(-0.4deg);
 }
 
+/* 도장 찍기: 크게 들어와서 쿵 내려앉는다.
+   0%/60%에만 명시된 속성은 100%에서 요소 고유값으로 복귀한다. */
+@keyframes stamp-in {
+  0% {
+    transform: rotate(-4deg) scale(1.9);
+    opacity: 0;
+  }
+  60% {
+    transform: rotate(-4deg) scale(0.94);
+    opacity: 1;
+  }
+}
+
+.masthead-stamp {
+  animation: stamp-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+
+.verdict-stamp {
+  animation: stamp-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+
+/* 링카드 넘기기: 뒷면이 젖혀지며 나타난다 */
+@keyframes flip-in {
+  0% {
+    transform: perspective(900px) rotateX(70deg);
+    opacity: 0.4;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.flashcard.flipped {
+  animation: flip-in 0.28s ease-out;
+}
+
 /* 채점 표시 ○ / ✗ */
 .grade-mark {
   font-family: var(--font-hand);
@@ -1588,15 +1676,17 @@ textarea:focus {
   line-height: 1.5;
 }
 
+/* 빨간 배너 위에서 유일하게 밝은 것 = 눌러야 할 것 */
 .today-go {
   min-height: var(--tap-min);
   padding: 9px 18px;
-  border: 1px solid rgba(253, 251, 244, 0.55);
   border-radius: var(--r-pill);
-  color: var(--text-on-accent);
+  background: var(--paper);
+  color: var(--red-pen);
   font-size: var(--fs-sm);
   font-weight: var(--fw-bold);
   white-space: nowrap;
+  box-shadow: var(--sh-sm);
 }
 
 /* 필터: 왼쪽 주원인(칩) / 오른쪽 토픽(드롭다운) — 축을 섞으면 지저분해진다 */
@@ -1659,6 +1749,9 @@ textarea:focus {
   border-radius: var(--r-sm);
   overflow: hidden;
   box-shadow: var(--sh-sm);
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
 }
 
 /* 본문 = 바로 풀기 */
@@ -1720,6 +1813,7 @@ textarea:focus {
 
 .prob-card:active {
   box-shadow: var(--sh-md);
+  transform: scale(0.985);
 }
 
 .prob-shot {
@@ -1745,8 +1839,18 @@ textarea:focus {
   background: var(--surface-2);
 }
 
+/* 사진 없는 카드: 사과문 같은 회색 문구 대신 연필 손글씨로 조용히 */
+.prob-shot--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .prob-shot-none {
-  color: var(--text-muted);
+  font-family: var(--font-hand);
+  font-size: 18px;
+  color: var(--pencil);
+  opacity: 0.7;
 }
 
 .prob-meta {
@@ -1755,7 +1859,7 @@ textarea:focus {
 
 .prob-id {
   font-family: var(--font-exam);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   font-weight: var(--fw-bold);
   color: var(--text);
 }

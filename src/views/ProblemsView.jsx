@@ -39,8 +39,10 @@ function ProblemShot({ note }) {
 
   const text = note.question?.trim() || note.mySol?.trim();
   return (
-    <div className="prob-shot prob-shot--text">
-      {text || <span className="prob-shot-none">캡처 없음</span>}
+    <div
+      className={`prob-shot prob-shot--text${text ? "" : " prob-shot--empty"}`}
+    >
+      {text || <span className="prob-shot-none">사진 없음</span>}
     </div>
   );
 }
