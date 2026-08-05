@@ -36,49 +36,52 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: "Nanum Pen Script";
-  src: url("/fonts/nanum-pen-script-korean-400-normal.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
-  /* ---- 컨셉: 채점된 시험지 — 종이/잉크/빨간펜/파란펜/형광펜 ---- */
-  --bg: #efeadf; /* 책상 위 갱지 톤 */
-  --paper: #fbf9f3; /* 시험지 종이 */
-  --surface: #fbf9f3;
-  --surface-2: #f3efe4;
-  --sunken: #e6e0d1;
-  --border: #d8d1bf;
-  --border-strong: #b9b09a;
-  --rule: #dcd4c0; /* 노트 줄 */
+  /* ============================================================
+     컨셉: 기출 인쇄 + 요즘 앱 — 편집디자인의 규율, 앱의 여백
+     색은 전부 토큰으로만 쓴다. 야간 모드는 이 토큰만 갈아끼운다.
+     ============================================================ */
+  color-scheme: light;
 
-  /* ---- 잉크 ---- */
-  --text: #211d16; /* 인쇄 잉크 */
-  --text-secondary: #5b5344;
-  --text-muted: #948b76;
-  --text-on-accent: #fdfbf4;
+  /* 순흑 대신 회색 계단 — 종이에서 책상까지 다섯 단계 */
+  --bg: #e9ecf0; /* 책상 */
+  --paper: #ffffff; /* 지면 */
+  --surface: #ffffff;
+  --surface-2: #f4f6f9;
+  --sunken: #e4e8ed;
+  --border: #dde2e8;
+  --border-strong: #bfc6d0;
+  --rule: #dde2e8;
 
-  /* ---- 필기구 ---- */
-  --red-pen: #c0392b; /* 채점 빨간펜 */
-  --red-pen-soft: #f7ded9;
-  --blue-pen: #2b4e9b; /* 필기 파란펜 */
-  --blue-pen-soft: #dde5f3;
-  --pencil: #6d675c;
-  --highlight: #f6e7a9; /* 형광펜 */
-  --highlight-strong: #efd671;
+  /* ---- 잉크: 검정이 아니라 부드러운 흑연 ---- */
+  --text: #262b33;
+  --text-secondary: #59616d;
+  --text-muted: #909aa6;
+  --text-on-accent: #ffffff;
+
+  /* ---- 의미색: 빨강은 오직 채점·실패·긴급 ---- */
+  --red-pen: #d3312b;
+  --red-pen-soft: #fdeceb;
+  --blue-pen: #3a4ea8; /* 안내·부가 정보 */
+  --blue-pen-soft: #ebeefa;
+  --pencil: #8a929e;
+  --highlight: #fdf3dc;
+  --highlight-strong: #e8cf95;
+
+  /* ---- 누르는 것 = 흑연. 밤에는 스탠드 불빛으로 바뀐다 ---- */
+  --action: #333944;
+  --action-hover: #454c59;
+  --on-action: #ffffff;
 
   /* ---- 시맨틱 매핑 ---- */
   --primary: var(--red-pen);
-  --primary-hover: #a72f22;
+  --primary-hover: #b4241f;
   --primary-soft: var(--red-pen-soft);
-  --success: #3e6b48; /* 채점 ○ 그린이 아니라 차분한 그린 */
-  --success-soft: #dde8dd;
+  --success: #1f7a55;
+  --success-soft: #e7f3ee;
   --error: var(--red-pen);
   --error-soft: var(--red-pen-soft);
-  --warning: #a87b23;
+  --warning: #9a6b10;
   --warning-soft: var(--highlight);
   --info: var(--blue-pen);
   --info-soft: var(--blue-pen-soft);
@@ -86,8 +89,9 @@
   /* ---- 폰트 ---- */
   --font-body: "Pretendard Variable", "Pretendard", -apple-system,
     BlinkMacSystemFont, "Noto Sans KR", "Segoe UI", sans-serif;
-  --font-exam: "Nanum Myeongjo", "Noto Serif KR", serif; /* 시험지 제목 */
-  --font-hand: "Nanum Pen Script", cursive; /* 손글씨 주석 */
+  --font-exam: "Nanum Myeongjo", "Noto Serif KR", serif; /* 제목·숫자 */
+  /* 손글씨는 은퇴 — 편집디자인 방향에선 굵기와 자간으로만 위계를 만든다 */
+  --font-hand: var(--font-body);
 
   /* ---- 타이포 스케일 ---- */
   --fs-xs: 12px;
@@ -113,23 +117,78 @@
   --sp-8: 32px;
   --sp-10: 40px;
 
-  /* ---- 라운드 ---- */
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
-  --r-xl: 18px;
+  /* ---- 라운드: 세 단계로 통일 ---- */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 16px;
   --r-pill: 999px;
 
-  /* ---- 그림자 (따뜻한 브라운 틴트) ---- */
-  --sh-sm: 0 1px 2px rgba(59, 50, 39, 0.08);
-  --sh-md: 0 2px 6px rgba(59, 50, 39, 0.1), 0 1px 2px rgba(59, 50, 39, 0.06);
-  --sh-lg: 0 8px 20px rgba(59, 50, 39, 0.14);
-  --focus-ring: 0 0 0 3px rgba(178, 92, 56, 0.35);
+  /* ---- 그림자: 인쇄물답게 아주 얕게 ---- */
+  --sh-sm: 0 1px 2px rgba(20, 23, 28, 0.05);
+  --sh-md: 0 1px 2px rgba(20, 23, 28, 0.05), 0 4px 14px rgba(20, 23, 28, 0.06);
+  --sh-lg: 0 2px 4px rgba(20, 23, 28, 0.06), 0 12px 32px rgba(20, 23, 28, 0.1);
+  --focus-ring: 0 0 0 3px rgba(58, 78, 168, 0.35);
 
   /* ---- 태블릿 인체공학 ---- */
   --tap-min: 44px;
   --tap-comfy: 52px;
   --maxw: 860px;
+}
+
+/* ============================================================
+   1b. 야간 자습 — 시스템 설정을 따르되, 앱 안에서 직접 끄고 켤 수 있다.
+   토큰만 갈아끼우고 컴포넌트 규칙은 건드리지 않는다.
+   ============================================================ */
+/* App이 시스템 설정을 해석해서 항상 light/dark 중 하나를 명시한다 —
+   브라우저가 멋대로 색을 뒤집지 않게 color-scheme도 같이 선언한다. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* 새까만 바닥(OLED 구멍) 대신 어두운 방의 회색 계단 */
+  --bg: #15181d;
+  --paper: #1d2128;
+  --surface: #1d2128;
+  --surface-2: #242932;
+  --sunken: #2b313b;
+  --border: #2f3641;
+  --border-strong: #454d5a;
+  --rule: #2f3641;
+
+  --text: #e8e6e0; /* 상아색 — 순백은 밤에 눈을 찌른다 */
+  --text-secondary: #a9b2be;
+  --text-muted: #78818e;
+  --text-on-accent: #ffffff;
+
+  --red-pen: #e0685c;
+  --red-pen-soft: #2a1d1c;
+  --blue-pen: #93a8dc;
+  --blue-pen-soft: #1b2231;
+  --pencil: #737c89;
+  --highlight: #2c2617;
+  --highlight-strong: #5a4c26;
+
+  /* 밤에는 잉크 검정이 안 보인다 — 스탠드 불빛이 행동색을 맡는다 */
+  --action: #e8a33d;
+  --action-hover: #f0b358;
+  --on-action: #16181d;
+
+  --primary: var(--red-pen);
+  --primary-hover: #eb8a80;
+  --primary-soft: var(--red-pen-soft);
+  --success: #7fb08a;
+  --success-soft: #1a2620;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #e8a33d;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+  --focus-ring: 0 0 0 3px rgba(232, 163, 61, 0.4);
 }
 
 /* ============================================================
@@ -159,64 +218,77 @@ body {
   padding: 0 var(--sp-4) 72px;
 }
 
+/* 지면 — 질감 없음. 여백과 괘선(테두리)만으로 구조를 만든다 */
 .paper-sheet {
   background: var(--paper);
-  /* 노트 줄: 은은한 가로 괘선 */
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 31px,
-    var(--rule) 31px,
-    var(--rule) 32px
-  );
   border: 1px solid var(--border);
   border-top: none;
-  box-shadow: var(--sh-lg);
-  padding: var(--sp-4);
-  /* 내용보다 약간만 길게 — 빈 괘선이 화면 끝까지 흘러가면 미완성처럼 보인다 */
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  box-shadow: var(--sh-md);
+  padding: var(--sp-5) var(--sp-4) var(--sp-6);
   min-height: 46vh;
 }
 
-/* ---- 시험지 마스트헤드: 이중 괘선 + 명조 ---- */
+/* ---- 마스트헤드: 지면 제호 — 굵은 밑줄 하나로 끝낸다 ---- */
 .masthead {
   background: var(--paper);
   border: 1px solid var(--border);
-  border-bottom: 3px double var(--text);
-  border-top: 3px double var(--text);
+  border-bottom: 2px solid var(--border-strong);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
   padding: var(--sp-4) var(--sp-5) var(--sp-3);
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
   margin-top: var(--sp-4);
-  box-shadow: var(--sh-sm);
 }
 
 .masthead-title {
   font-family: var(--font-exam);
   font-weight: 800;
-  font-size: var(--fs-xl);
-  letter-spacing: 0.35em;
-  text-indent: 0.35em;
+  font-size: var(--fs-lg);
+  letter-spacing: 0.12em;
+  flex: 1;
 }
 
 .masthead-sub {
-  font-family: var(--font-exam);
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+/* 문제 수 — 도장이 아니라 지면의 발행 정보처럼 */
+.masthead-stamp {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.08em;
+  color: var(--red-pen);
+  border: 1px solid var(--red-pen);
+  border-radius: var(--r-sm);
+  padding: 3px 9px;
   white-space: nowrap;
 }
 
-.masthead-stamp {
-  font-family: var(--font-hand);
-  font-size: 22px;
-  color: var(--red-pen);
-  transform: rotate(-4deg);
-  border: 2px solid var(--red-pen);
-  border-radius: 6px;
-  padding: 0 10px;
-  white-space: nowrap;
-  opacity: 0.85;
+/* 야간/주간 전환 */
+.theme-toggle {
+  min-width: 40px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.theme-toggle:active {
+  background: var(--surface-2);
 }
 
 /* 좁은 화면: 제목이 글자 단위로 꺾이면 안 된다 — 부제를 접고 제목을 줄인다 */
@@ -332,13 +404,14 @@ textarea:focus {
   width: 100%;
 }
 
+/* 주요 행동 = 잉크(밤엔 스탠드 불빛). 빨강은 채점에만 쓴다 */
 .btn--primary {
-  background: var(--primary);
-  color: var(--text-on-accent);
+  background: var(--action);
+  color: var(--on-action);
 }
 
 .btn--primary:active {
-  background: var(--primary-hover);
+  background: var(--action-hover);
 }
 
 .btn--success {
@@ -366,14 +439,13 @@ textarea:focus {
   box-shadow: none;
 }
 
-/* 잉크 버튼: FAB·mode-go와 같은 "실행" 계열 — 기록 흐름의 핵심 동작용 */
 .btn--ink {
-  background: var(--text);
-  color: var(--text-on-accent);
+  background: var(--action);
+  color: var(--on-action);
 }
 
 .btn--ink:active {
-  background: #3a342a;
+  background: var(--action-hover);
 }
 
 .btn:disabled {
@@ -384,10 +456,12 @@ textarea:focus {
   box-shadow: none;
 }
 
-/* 잠긴 주요 CTA도 "여기가 저장이다"는 읽혀야 한다 — 죽은 회색 슬래브 금지 */
+/* 잠긴 주요 CTA도 "여기가 저장이다"는 읽혀야 한다 — 죽은 슬래브 금지 */
 .btn--primary:disabled {
-  background: var(--red-pen-soft);
-  color: rgba(192, 57, 43, 0.55);
+  background: var(--sunken);
+  color: var(--text-muted);
+  outline: 1px dashed var(--border-strong);
+  outline-offset: -1px;
 }
 
 .card {
@@ -422,7 +496,7 @@ textarea:focus {
   font-weight: var(--fw-bold);
   letter-spacing: 0.1em;
   padding-bottom: var(--sp-1);
-  border-bottom: 2px solid var(--text);
+  border-bottom: 2px solid var(--border-strong);
   align-self: flex-start;
 }
 
@@ -489,53 +563,46 @@ textarea:focus {
   top: 0;
   z-index: 20;
   display: flex;
-  gap: var(--sp-1);
-  background: var(--bg);
-  padding: var(--sp-3) var(--sp-2) 0;
+  background: var(--paper);
+  padding: 0 var(--sp-3);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
+/* 탭: 견출지 대신 밑줄 — 지면 위 목차처럼 */
 .tab {
   flex: 1;
   min-height: var(--tap-min);
-  padding: 12px 2px 10px;
-  border-radius: var(--r-md) var(--r-md) 0 0;
-  border: 1px solid var(--border);
-  border-bottom: none;
-  border-top: 2px solid transparent;
-  background: var(--surface-2);
+  padding: 13px 2px 12px;
+  background: transparent;
   color: var(--text-muted);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-semibold);
   font-size: var(--fs-base);
   white-space: nowrap;
-  transform: translateY(2px);
+  border-bottom: 2.5px solid transparent;
   transition:
-    background 0.15s ease,
     color 0.15s ease,
-    transform 0.15s ease;
+    border-color 0.15s ease;
 }
 
 .tab.on {
-  background: var(--paper);
-  color: var(--red-pen);
-  font-weight: var(--fw-bold);
-  border-color: var(--border);
-  border-top: 2px solid var(--red-pen); /* 견출지에 빨간펜 표시 */
-  transform: translateY(0);
-  box-shadow: 0 -2px 4px rgba(33, 29, 22, 0.05);
+  color: var(--text);
+  border-bottom-color: var(--red-pen);
 }
 
-/* 할 일 개수: 빨간펜 동그라미 표시 */
+/* 할 일 개수 */
 .tab-badge {
   display: inline-block;
-  min-width: 22px;
-  margin-left: 6px;
-  font-family: var(--font-hand);
-  font-size: 16px;
-  line-height: 1.15;
-  color: var(--red-pen);
-  border: 1.5px solid var(--red-pen);
-  border-radius: 50% 46% 50% 48% / 46% 50% 48% 52%;
-  padding: 0 5px;
+  min-width: 20px;
+  margin-left: 5px;
+  font-size: 11px;
+  font-weight: var(--fw-bold);
+  line-height: 18px;
+  color: var(--text-on-accent);
+  background: var(--red-pen);
+  border-radius: var(--r-pill);
+  padding: 0 6px;
 }
 
 .view {
@@ -569,10 +636,10 @@ textarea:focus {
 }
 
 .chip.on {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--text-on-accent);
-  font-weight: var(--fw-medium);
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--on-action);
+  font-weight: var(--fw-semibold);
 }
 
 .chip.math-tag {
@@ -645,14 +712,13 @@ textarea:focus {
   color: var(--text);
   letter-spacing: 0.15em;
   padding-bottom: var(--sp-1);
-  border-bottom: 2px solid var(--text);
+  border-bottom: 2px solid var(--border-strong);
   align-self: flex-start;
 }
 
 /* 힌트/주석: 파란펜 손글씨 */
 .hint {
-  font-family: var(--font-hand);
-  font-size: 17px;
+  font-size: var(--fs-sm);
   color: var(--blue-pen);
   line-height: 1.35;
   opacity: 0.9;
@@ -814,14 +880,12 @@ textarea:focus {
 .repeat-marker {
   background: transparent;
   color: var(--red-pen);
-  font-family: var(--font-hand);
   font-weight: var(--fw-bold);
-  font-size: 19px;
+  font-size: var(--fs-sm);
   line-height: 1;
   border: 2px solid var(--red-pen);
-  border-radius: 50% 45% 52% 48% / 48% 52% 45% 55%; /* 손으로 그린 원 */
+  border-radius: var(--r-pill);
   padding: 3px 9px;
-  transform: rotate(-6deg);
   flex-shrink: 0;
 }
 
@@ -1379,13 +1443,11 @@ textarea:focus {
 .memo-field textarea {
   background: var(--highlight);
   border: 1px solid var(--highlight-strong);
-  border-radius: 2px;
+  border-radius: var(--r-sm);
   box-shadow: var(--sh-sm);
-  font-family: var(--font-hand);
-  font-size: 19px;
+  font-size: var(--fs-sm);
   line-height: 1.4;
-  transform: rotate(-0.5deg);
-}
+  }
 
 .memo-field textarea:focus {
   border-color: var(--warning);
@@ -1393,34 +1455,23 @@ textarea:focus {
 }
 
 .note-detail .field-text.memo-text {
-  font-family: var(--font-hand);
-  font-size: 19px;
+  font-size: var(--fs-sm);
   background: var(--highlight);
-  border-radius: 2px;
+  border-radius: var(--r-sm);
   padding: var(--sp-2) var(--sp-3);
   display: inline-block;
-  transform: rotate(-0.4deg);
-}
+  }
 
-/* 도장 찍기: 크게 들어와서 쿵 내려앉는다.
-   0%/60%에만 명시된 속성은 100%에서 요소 고유값으로 복귀한다. */
-@keyframes stamp-in {
+/* 채점 결과는 조용히 자리를 잡는다 — 도장 흉내 대신 짧은 등장 */
+@keyframes settle-in {
   0% {
-    transform: rotate(-4deg) scale(1.9);
+    transform: translateY(-4px);
     opacity: 0;
   }
-  60% {
-    transform: rotate(-4deg) scale(0.94);
-    opacity: 1;
-  }
-}
-
-.masthead-stamp {
-  animation: stamp-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
 }
 
 .verdict-stamp {
-  animation: stamp-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  animation: settle-in 0.22s ease-out both;
 }
 
 /* 링카드 넘기기: 뒷면이 젖혀지며 나타난다 */
@@ -1441,8 +1492,7 @@ textarea:focus {
 
 /* 채점 표시 ○ / ✗ */
 .grade-mark {
-  font-family: var(--font-hand);
-  font-size: 22px;
+  font-size: var(--fs-md);
   line-height: 1;
   flex-shrink: 0;
 }
@@ -1455,30 +1505,10 @@ textarea:focus {
   color: var(--red-pen);
 }
 
-/* 단어장 링카드: 위쪽 펀치 구멍 */
-.flashcard {
-  position: relative;
-}
-
-.flashcard::before {
-  content: "";
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--bg);
-  border: 2px solid var(--border-strong);
-  box-shadow: inset 0 1px 2px rgba(33, 29, 22, 0.15);
-}
-
-/* 빈 상태: 연필 손글씨 */
+/* 빈 상태 */
 .empty {
-  font-family: var(--font-hand);
-  font-size: 20px;
-  color: var(--pencil);
+  font-size: var(--fs-base);
+  color: var(--text-muted);
 }
 
 /* ---- 문제 사진 ---- */
@@ -1543,15 +1573,10 @@ textarea:focus {
 
 .note-image-thumb {
   padding: var(--sp-1);
-  background: #fff;
+  background: var(--paper);
   border: 1px solid var(--border);
   box-shadow: var(--sh-md);
-  transform: rotate(-0.6deg);
-  border-radius: 2px;
-}
-
-.note-image-thumb:nth-child(even) {
-  transform: rotate(0.7deg);
+  border-radius: var(--r-sm);
 }
 
 .note-image-thumb img {
@@ -1668,22 +1693,25 @@ textarea:focus {
    문제 그리드 (v4) — 메인은 폼이 아니라 문제다
    ============================================================ */
 
+/* 오늘 볼 것: 색 블록이 아니라 지면 상단의 큰 숫자 + 괘선 */
 .today-strip {
   display: flex;
   align-items: center;
   gap: var(--sp-4);
   margin-bottom: var(--sp-5);
-  padding: var(--sp-4) var(--sp-5);
-  background: var(--red-pen);
-  color: var(--text-on-accent);
-  border-radius: var(--r-md);
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
 }
 
 .today-num {
   font-family: var(--font-exam);
-  font-size: 34px;
+  font-size: 38px;
   font-weight: var(--fw-bold);
   line-height: 1;
+  color: var(--red-pen);
+  letter-spacing: -0.02em;
 }
 
 .today-text {
@@ -1692,17 +1720,19 @@ textarea:focus {
   line-height: 1.5;
 }
 
-/* 빨간 배너 위에서 유일하게 밝은 것 = 눌러야 할 것 */
 .today-go {
   min-height: var(--tap-min);
-  padding: 9px 18px;
-  border-radius: var(--r-pill);
-  background: var(--paper);
-  color: var(--red-pen);
+  padding: 10px 18px;
+  border-radius: var(--r-sm);
+  background: var(--action);
+  color: var(--on-action);
   font-size: var(--fs-sm);
   font-weight: var(--fw-bold);
   white-space: nowrap;
-  box-shadow: var(--sh-sm);
+}
+
+.today-text {
+  color: var(--text-secondary);
 }
 
 /* 필터: 왼쪽 주원인(칩) / 오른쪽 토픽(드롭다운) — 축을 섞으면 지저분해진다 */
@@ -1745,11 +1775,15 @@ textarea:focus {
   opacity: 0.4;
 }
 
+/* 그룹 머리: 지면의 소제목 — 자간 넓힌 라벨 + 얇은 괘선 */
 .group-label {
-  font-family: var(--font-hand);
-  font-size: 19px;
-  color: var(--blue-pen);
-  margin: var(--sp-5) 0 var(--sp-2);
+  font-size: 11px;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.16em;
+  color: var(--text);
+  margin: var(--sp-5) 0 var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border);
 }
 
 .prob-grid {
@@ -1815,8 +1849,7 @@ textarea:focus {
 }
 
 .group-toggle {
-  font-family: var(--font-hand);
-  font-size: 19px;
+  font-size: var(--fs-sm);
   color: var(--blue-pen);
   padding: 0;
   min-height: var(--tap-min);
@@ -1840,7 +1873,7 @@ textarea:focus {
   object-fit: cover;
   object-position: top center;
   border-bottom: 1px solid var(--border);
-  background: #fff;
+  background: var(--paper);
 }
 
 /* 캡처가 없으면 문제 원문이라도 보여준다 */
@@ -1864,8 +1897,7 @@ textarea:focus {
 }
 
 .prob-shot-none {
-  font-family: var(--font-hand);
-  font-size: 18px;
+  font-size: var(--fs-xs);
   color: var(--pencil);
   opacity: 0.7;
 }
@@ -1882,8 +1914,7 @@ textarea:focus {
 }
 
 .prob-try {
-  font-family: var(--font-hand);
-  font-size: 15px;
+  font-size: 11px;
   color: var(--blue-pen);
   margin-left: 6px;
 }
@@ -1915,11 +1946,9 @@ textarea:focus {
   position: absolute;
   bottom: 13px;
   right: 11px;
-  font-family: var(--font-hand);
-  font-size: 19px;
+  font-size: 10px;
   color: var(--red-pen);
-  transform: rotate(-8deg);
-}
+  }
 
 /* 기록 FAB — 매일 하는 건 복습, 기록은 가끔 */
 .fab {
@@ -1929,8 +1958,8 @@ textarea:focus {
   min-height: var(--tap-comfy);
   padding: 14px 24px;
   border-radius: var(--r-pill);
-  background: var(--text);
-  color: var(--text-on-accent);
+  background: var(--action);
+  color: var(--on-action);
   font-size: var(--fs-base);
   font-weight: var(--fw-bold);
   box-shadow: var(--sh-lg);
@@ -1954,7 +1983,7 @@ textarea:focus {
   gap: var(--sp-3);
   padding: var(--sp-4) var(--sp-5);
   background: var(--paper);
-  border-bottom: 3px double var(--text);
+  border-bottom: 1px solid var(--border);
 }
 
 .sheet-title {
@@ -2045,8 +2074,8 @@ textarea:focus {
   min-height: var(--tap-comfy);
   padding: 13px 22px;
   border-radius: var(--r-pill);
-  background: var(--text);
-  color: var(--text-on-accent);
+  background: var(--action);
+  color: var(--on-action);
   font-size: var(--fs-sm);
   font-weight: var(--fw-bold);
   white-space: nowrap;
@@ -2082,8 +2111,7 @@ textarea:focus {
 
 .solve-prog {
   margin-left: auto;
-  font-family: var(--font-hand);
-  font-size: 20px;
+  font-size: var(--fs-sm);
   color: var(--blue-pen);
 }
 
@@ -2112,7 +2140,7 @@ textarea:focus {
 .solve-shot {
   display: block;
   width: 100%;
-  background: #fff;
+  background: var(--paper);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
 }
@@ -2139,8 +2167,7 @@ textarea:focus {
 }
 
 .veil-mark {
-  font-family: var(--font-hand);
-  font-size: 21px;
+  font-size: var(--fs-xs);
   color: var(--pencil);
 }
 
@@ -2262,13 +2289,13 @@ textarea:focus {
 }
 
 .verdict-stamp {
-  font-family: var(--font-hand);
-  font-size: 26px;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
   color: var(--red-pen);
-  border: 2px solid var(--red-pen);
+  border: 1px solid var(--red-pen);
   border-radius: var(--r-sm);
-  padding: 3px 14px;
-  transform: rotate(-4deg);
+  padding: 5px 14px;
   white-space: nowrap;
 }
 
@@ -2363,7 +2390,7 @@ textarea:focus {
 }
 
 .sol-shot {
-  background: #fff;
+  background: var(--paper);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   padding: var(--sp-4);
@@ -2477,8 +2504,7 @@ textarea:focus {
 }
 
 .traj-none {
-  font-family: var(--font-hand);
-  font-size: 15px;
+  font-size: 11px;
   color: var(--pencil);
 }
 
@@ -2520,8 +2546,7 @@ textarea:focus {
 }
 
 .attempt-memo {
-  font-family: var(--font-hand);
-  font-size: 16px;
+  font-size: var(--fs-xs);
   color: var(--blue-pen);
 }
 
@@ -2533,8 +2558,8 @@ textarea:focus {
   flex-wrap: wrap;
   padding: var(--sp-5) var(--sp-6);
   border-radius: var(--r-md);
-  background: var(--text);
-  color: var(--text-on-accent);
+  background: var(--action);
+  color: var(--on-action);
 }
 
 .sum-score {
@@ -2562,8 +2587,7 @@ textarea:focus {
 }
 
 .sec-label {
-  font-family: var(--font-hand);
-  font-size: 19px;
+  font-size: var(--fs-sm);
   color: var(--blue-pen);
   margin: var(--sp-5) 0 var(--sp-1);
 }
@@ -2603,8 +2627,7 @@ textarea:focus {
 }
 
 .cl-mark {
-  font-family: var(--font-hand);
-  font-size: 21px;
+  font-size: var(--fs-md);
   flex: 0 0 auto;
 }
 
@@ -2628,8 +2651,7 @@ textarea:focus {
 }
 
 .callout-mark {
-  font-family: var(--font-hand);
-  font-size: 22px;
+  font-size: var(--fs-sm);
   color: var(--warning);
   flex: 0 0 auto;
 }
@@ -2666,8 +2688,8 @@ textarea:focus {
   min-height: var(--tap-comfy);
   padding: 18px;
   border-radius: var(--r-md);
-  background: var(--text);
-  color: var(--text-on-accent);
+  background: var(--action);
+  color: var(--on-action);
   font-size: var(--fs-base);
   font-weight: var(--fw-bold);
 }
