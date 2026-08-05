@@ -1,0 +1,661 @@
+/* ⚠️ 자동 생성 파일 — 직접 고치지 말 것.
+   색은 src/palettes.js에서 고치고 `npm run themes`를 실행한다.
+   생성: tools/gen-themes.mjs · 검증: tools/verify-contrast.mjs */
+
+/* 기본값 — App이 data-palette를 붙이기 전에도 화면이 깨지지 않게 */
+:root {
+  color-scheme: light;
+
+  --bg: #e7ddcb;
+  --paper: #fbf7ef;
+  --surface: #fbf7ef;
+  --surface-2: #f4ede0;
+  --sunken: #eee6d8;
+  --border: #e3d9c8;
+  --border-strong: #c3b5a0;
+  --rule: #e3d9c8;
+
+  --text: #33291f;
+  --text-secondary: #63564a;
+  --text-muted: #736555;
+  --text-on-accent: #fbf7ef;
+
+  --red-pen: #a0574a;
+  --red-pen-soft: #faeeea;
+  --blue-pen: #6e6247;
+  --blue-pen-soft: #efe8d6;
+  --pencil: #736555;
+  --highlight: #f7eacb;
+  --highlight-strong: #e2cb93;
+
+  --action: #5f5145;
+  --action-hover: #726255;
+  --on-action: #fbf7ef;
+
+  --primary: var(--red-pen);
+  --primary-hover: #a0574a;
+  --primary-soft: var(--red-pen-soft);
+  --success: #5e6b4a;
+  --success-soft: #e9eddc;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #7e5f16;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(40, 32, 26, 0.06);
+  --sh-md: 0 1px 2px rgba(40, 32, 26, 0.06), 0 4px 14px rgba(40, 32, 26, 0.07);
+  --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
+}
+
+/* 야간 기본값 — 팔레트를 모르는 상태에서도 어둡게 */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1a1714;
+  --paper: #221e1a;
+  --surface: #221e1a;
+  --surface-2: #2a251f;
+  --sunken: #29241f;
+  --border: #322c25;
+  --border-strong: #4a4238;
+  --rule: #322c25;
+
+  --text: #e8e1d5;
+  --text-secondary: #b4a897;
+  --text-muted: #978b7a;
+  --text-on-accent: #221e1a;
+
+  --red-pen: #e0806c;
+  --red-pen-soft: #2e211d;
+  --blue-pen: #c4b48e;
+  --blue-pen-soft: #262117;
+  --pencil: #978b7a;
+  --highlight: #302816;
+  --highlight-strong: #5e4e28;
+
+  --action: #d9a05b;
+  --action-hover: #e5b375;
+  --on-action: #221e1a;
+
+  --primary: var(--red-pen);
+  --primary-hover: #e0806c;
+  --primary-soft: var(--red-pen-soft);
+  --success: #95ae84;
+  --success-soft: #232b1f;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #d9a05b;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* 미색 — 따뜻한 종이 · 주간 */
+:root[data-palette="warm"] {
+  color-scheme: light;
+
+  --bg: #e7ddcb;
+  --paper: #fbf7ef;
+  --surface: #fbf7ef;
+  --surface-2: #f4ede0;
+  --sunken: #eee6d8;
+  --border: #e3d9c8;
+  --border-strong: #c3b5a0;
+  --rule: #e3d9c8;
+
+  --text: #33291f;
+  --text-secondary: #63564a;
+  --text-muted: #736555;
+  --text-on-accent: #fbf7ef;
+
+  --red-pen: #a0574a;
+  --red-pen-soft: #faeeea;
+  --blue-pen: #6e6247;
+  --blue-pen-soft: #efe8d6;
+  --pencil: #736555;
+  --highlight: #f7eacb;
+  --highlight-strong: #e2cb93;
+
+  --action: #5f5145;
+  --action-hover: #726255;
+  --on-action: #fbf7ef;
+
+  --primary: var(--red-pen);
+  --primary-hover: #a0574a;
+  --primary-soft: var(--red-pen-soft);
+  --success: #5e6b4a;
+  --success-soft: #e9eddc;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #7e5f16;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(40, 32, 26, 0.06);
+  --sh-md: 0 1px 2px rgba(40, 32, 26, 0.06), 0 4px 14px rgba(40, 32, 26, 0.07);
+  --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
+}
+
+/* 미색 — 따뜻한 종이 · 야간 */
+:root[data-palette="warm"][data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1a1714;
+  --paper: #221e1a;
+  --surface: #221e1a;
+  --surface-2: #2a251f;
+  --sunken: #29241f;
+  --border: #322c25;
+  --border-strong: #4a4238;
+  --rule: #322c25;
+
+  --text: #e8e1d5;
+  --text-secondary: #b4a897;
+  --text-muted: #978b7a;
+  --text-on-accent: #221e1a;
+
+  --red-pen: #e0806c;
+  --red-pen-soft: #2e211d;
+  --blue-pen: #c4b48e;
+  --blue-pen-soft: #262117;
+  --pencil: #978b7a;
+  --highlight: #302816;
+  --highlight-strong: #5e4e28;
+
+  --action: #d9a05b;
+  --action-hover: #e5b375;
+  --on-action: #221e1a;
+
+  --primary: var(--red-pen);
+  --primary-hover: #e0806c;
+  --primary-soft: var(--red-pen-soft);
+  --success: #95ae84;
+  --success-soft: #232b1f;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #d9a05b;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* 모브 — 흐린 장밋빛 · 주간 */
+:root[data-palette="mauve"] {
+  color-scheme: light;
+
+  --bg: #e8dcda;
+  --paper: #fbf5f3;
+  --surface: #fbf5f3;
+  --surface-2: #f3eae7;
+  --sunken: #ebe0dd;
+  --border: #e5d8d4;
+  --border-strong: #bea5a1;
+  --rule: #e5d8d4;
+
+  --text: #382c2c;
+  --text-secondary: #63504f;
+  --text-muted: #6e5a59;
+  --text-on-accent: #fbf5f3;
+
+  --red-pen: #8f4b55;
+  --red-pen-soft: #f7e6e7;
+  --blue-pen: #6b5350;
+  --blue-pen-soft: #f2e7e4;
+  --pencil: #6e5a59;
+  --highlight: #f5e6df;
+  --highlight-strong: #dcc0b4;
+
+  --action: #5f4547;
+  --action-hover: #73585a;
+  --on-action: #fbf5f3;
+
+  --primary: var(--red-pen);
+  --primary-hover: #8f4b55;
+  --primary-soft: var(--red-pen-soft);
+  --success: #4f5b47;
+  --success-soft: #e9ede3;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #7d5518;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(40, 32, 26, 0.06);
+  --sh-md: 0 1px 2px rgba(40, 32, 26, 0.06), 0 4px 14px rgba(40, 32, 26, 0.07);
+  --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
+}
+
+/* 모브 — 흐린 장밋빛 · 야간 */
+:root[data-palette="mauve"][data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1b1618;
+  --paper: #241e20;
+  --surface: #241e20;
+  --surface-2: #2c2427;
+  --sunken: #2d2528;
+  --border: #332a2d;
+  --border-strong: #4c4044;
+  --rule: #332a2d;
+
+  --text: #ebe0de;
+  --text-secondary: #b7a5a4;
+  --text-muted: #9e8a87;
+  --text-on-accent: #241e20;
+
+  --red-pen: #de8792;
+  --red-pen-soft: #2e2023;
+  --blue-pen: #cbaea8;
+  --blue-pen-soft: #291f1e;
+  --pencil: #9e8a87;
+  --highlight: #2f2620;
+  --highlight-strong: #584434;
+
+  --action: #d49aa0;
+  --action-hover: #e0adb2;
+  --on-action: #241e20;
+
+  --primary: var(--red-pen);
+  --primary-hover: #de8792;
+  --primary-soft: var(--red-pen-soft);
+  --success: #9cb08a;
+  --success-soft: #212a1e;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #d9a05b;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* 자두 — 자두에서 모래로 · 주간 */
+:root[data-palette="plum"] {
+  color-scheme: light;
+
+  --bg: #dfd3be;
+  --paper: #faf5ec;
+  --surface: #faf5ec;
+  --surface-2: #f2eadc;
+  --sunken: #e8dfcc;
+  --border: #e4d9c4;
+  --border-strong: #b5a48a;
+  --rule: #e4d9c4;
+
+  --text: #372b39;
+  --text-secondary: #5c4a57;
+  --text-muted: #6b5665;
+  --text-on-accent: #faf5ec;
+
+  --red-pen: #8e4b58;
+  --red-pen-soft: #f4e4e6;
+  --blue-pen: #63524c;
+  --blue-pen-soft: #f0e8da;
+  --pencil: #6b5665;
+  --highlight: #f5e9d4;
+  --highlight-strong: #dcc59a;
+
+  --action: #523856;
+  --action-hover: #674a6b;
+  --on-action: #faf5ec;
+
+  --primary: var(--red-pen);
+  --primary-hover: #8e4b58;
+  --primary-soft: var(--red-pen-soft);
+  --success: #57633f;
+  --success-soft: #eaeddc;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #7a5a14;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(40, 32, 26, 0.06);
+  --sh-md: 0 1px 2px rgba(40, 32, 26, 0.06), 0 4px 14px rgba(40, 32, 26, 0.07);
+  --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
+}
+
+/* 자두 — 자두에서 모래로 · 야간 */
+:root[data-palette="plum"][data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1a151c;
+  --paper: #231c26;
+  --surface: #231c26;
+  --surface-2: #2b232e;
+  --sunken: #302733;
+  --border: #332a36;
+  --border-strong: #4b4050;
+  --rule: #332a36;
+
+  --text: #ede3dc;
+  --text-secondary: #b8a8b4;
+  --text-muted: #9d8ca2;
+  --text-on-accent: #231c26;
+
+  --red-pen: #dd8794;
+  --red-pen-soft: #2e2028;
+  --blue-pen: #c9b2a4;
+  --blue-pen-soft: #271f22;
+  --pencil: #9d8ca2;
+  --highlight: #2f2718;
+  --highlight-strong: #5b4a2c;
+
+  --action: #d9b98e;
+  --action-hover: #e5c9a4;
+  --on-action: #231c26;
+
+  --primary: var(--red-pen);
+  --primary-hover: #dd8794;
+  --primary-soft: var(--red-pen-soft);
+  --success: #a3b487;
+  --success-soft: #232b1e;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #d9b98e;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* 로즈 & 딥틸 — 분홍 속 진한 청록 · 주간 */
+:root[data-palette="teal"] {
+  color-scheme: light;
+
+  --bg: #e6dedc;
+  --paper: #fbf7f5;
+  --surface: #fbf7f5;
+  --surface-2: #f2ece9;
+  --sunken: #eee7e4;
+  --border: #e3dad6;
+  --border-strong: #b4a9a5;
+  --rule: #e3dad6;
+
+  --text: #2a3031;
+  --text-secondary: #4f5958;
+  --text-muted: #5f6a69;
+  --text-on-accent: #fbf7f5;
+
+  --red-pen: #a2504f;
+  --red-pen-soft: #f7e5e3;
+  --blue-pen: #4c5f61;
+  --blue-pen-soft: #e6eeee;
+  --pencil: #5f6a69;
+  --highlight: #f6e7de;
+  --highlight-strong: #dcc0b0;
+
+  --action: #25464a;
+  --action-hover: #345c61;
+  --on-action: #fbf7f5;
+
+  --primary: var(--red-pen);
+  --primary-hover: #a2504f;
+  --primary-soft: var(--red-pen-soft);
+  --success: #2f6154;
+  --success-soft: #e1ede8;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #7c5716;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(40, 32, 26, 0.06);
+  --sh-md: 0 1px 2px rgba(40, 32, 26, 0.06), 0 4px 14px rgba(40, 32, 26, 0.07);
+  --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
+}
+
+/* 로즈 & 딥틸 — 분홍 속 진한 청록 · 야간 */
+:root[data-palette="teal"][data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #141a1a;
+  --paper: #1c2424;
+  --surface: #1c2424;
+  --surface-2: #232c2c;
+  --sunken: #222b2b;
+  --border: #2a3434;
+  --border-strong: #3e4a4a;
+  --rule: #2a3434;
+
+  --text: #e3e9e7;
+  --text-secondary: #a6b3b1;
+  --text-muted: #879391;
+  --text-on-accent: #1c2424;
+
+  --red-pen: #e08c86;
+  --red-pen-soft: #2a1f1e;
+  --blue-pen: #9fbdbd;
+  --blue-pen-soft: #1a2426;
+  --pencil: #879391;
+  --highlight: #2c2620;
+  --highlight-strong: #544437;
+
+  --action: #6fb6a4;
+  --action-hover: #87c6b6;
+  --on-action: #1c2424;
+
+  --primary: var(--red-pen);
+  --primary-hover: #e08c86;
+  --primary-soft: var(--red-pen-soft);
+  --success: #7fbfa9;
+  --success-soft: #182722;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #d6a45f;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* 세이지 — 세이지와 점토 · 주간 */
+:root[data-palette="sage"] {
+  color-scheme: light;
+
+  --bg: #dde0d4;
+  --paper: #f9f8f2;
+  --surface: #f9f8f2;
+  --surface-2: #eff0e7;
+  --sunken: #e8eade;
+  --border: #dee1d5;
+  --border-strong: #a9af9c;
+  --rule: #dee1d5;
+
+  --text: #2c302a;
+  --text-secondary: #525b4b;
+  --text-muted: #626b5b;
+  --text-on-accent: #f9f8f2;
+
+  --red-pen: #96513c;
+  --red-pen-soft: #f4e4dc;
+  --blue-pen: #55604e;
+  --blue-pen-soft: #e9ece1;
+  --pencil: #626b5b;
+  --highlight: #f4ebd4;
+  --highlight-strong: #d9c89b;
+
+  --action: #434d3c;
+  --action-hover: #57634e;
+  --on-action: #f9f8f2;
+
+  --primary: var(--red-pen);
+  --primary-hover: #96513c;
+  --primary-soft: var(--red-pen-soft);
+  --success: #456046;
+  --success-soft: #e4ede1;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #775814;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(40, 32, 26, 0.06);
+  --sh-md: 0 1px 2px rgba(40, 32, 26, 0.06), 0 4px 14px rgba(40, 32, 26, 0.07);
+  --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
+}
+
+/* 세이지 — 세이지와 점토 · 야간 */
+:root[data-palette="sage"][data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #171a15;
+  --paper: #1f231c;
+  --surface: #1f231c;
+  --surface-2: #262b22;
+  --sunken: #262b23;
+  --border: #2e342a;
+  --border-strong: #434b3d;
+  --rule: #2e342a;
+
+  --text: #e4e8dc;
+  --text-secondary: #aab4a0;
+  --text-muted: #8a9482;
+  --text-on-accent: #1f231c;
+
+  --red-pen: #de9070;
+  --red-pen-soft: #2b211b;
+  --blue-pen: #adbba2;
+  --blue-pen-soft: #1f2620;
+  --pencil: #8a9482;
+  --highlight: #2c2818;
+  --highlight-strong: #55502c;
+
+  --action: #aecb90;
+  --action-hover: #bed6a4;
+  --on-action: #1f231c;
+
+  --primary: var(--red-pen);
+  --primary-hover: #de9070;
+  --primary-soft: var(--red-pen-soft);
+  --success: #8fbf92;
+  --success-soft: #1d2a1e;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #d6ab5c;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* 흐린 하늘 — 회청색과 모래 · 주간 */
+:root[data-palette="sky"] {
+  color-scheme: light;
+
+  --bg: #dce0e3;
+  --paper: #f8f9f8;
+  --surface: #f8f9f8;
+  --surface-2: #eef0f1;
+  --sunken: #e5e8ea;
+  --border: #dce0e2;
+  --border-strong: #a5aeb4;
+  --rule: #dce0e2;
+
+  --text: #282e34;
+  --text-secondary: #4e5860;
+  --text-muted: #5d6874;
+  --text-on-accent: #f8f9f8;
+
+  --red-pen: #9c5149;
+  --red-pen-soft: #f5e4e1;
+  --blue-pen: #4d5c68;
+  --blue-pen-soft: #e6ebef;
+  --pencil: #5d6874;
+  --highlight: #f3ead8;
+  --highlight-strong: #d7c7a4;
+
+  --action: #3b5165;
+  --action-hover: #4e657a;
+  --on-action: #f8f9f8;
+
+  --primary: var(--red-pen);
+  --primary-hover: #9c5149;
+  --primary-soft: var(--red-pen-soft);
+  --success: #456055;
+  --success-soft: #e2ebe6;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #755a17;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(40, 32, 26, 0.06);
+  --sh-md: 0 1px 2px rgba(40, 32, 26, 0.06), 0 4px 14px rgba(40, 32, 26, 0.07);
+  --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
+}
+
+/* 흐린 하늘 — 회청색과 모래 · 야간 */
+:root[data-palette="sky"][data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #14181c;
+  --paper: #1c2126;
+  --surface: #1c2126;
+  --surface-2: #232930;
+  --sunken: #232930;
+  --border: #2a3138;
+  --border-strong: #3e4750;
+  --rule: #2a3138;
+
+  --text: #e2e7eb;
+  --text-secondary: #a6b0ba;
+  --text-muted: #87919c;
+  --text-on-accent: #1c2126;
+
+  --red-pen: #de8b80;
+  --red-pen-soft: #2a1f1d;
+  --blue-pen: #a8b6c4;
+  --blue-pen-soft: #1e242a;
+  --pencil: #87919c;
+  --highlight: #2a2719;
+  --highlight-strong: #524b2f;
+
+  --action: #8db3d2;
+  --action-hover: #a3c3dc;
+  --on-action: #1c2126;
+
+  --primary: var(--red-pen);
+  --primary-hover: #de8b80;
+  --primary-soft: var(--red-pen-soft);
+  --success: #83b79c;
+  --success-soft: #1a2823;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #d5a95f;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}

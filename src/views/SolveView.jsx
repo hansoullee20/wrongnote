@@ -147,9 +147,14 @@ export default function SolveView({
     );
   }, [notes, filter, scope.source, queue]);
 
-  /* 큐에 담긴 노트가 도중에 사라지면(삭제 등) 세션을 끝낸다 */
+  /* 큐에 담긴 노트가 도중에 사라지면(삭제 등) 세션을 끝낸다.
+     solving뿐 아니라 graded·classifying_fail에서도 '지금 추가' → 기록 시트 →
+     '이 기록 삭제'로 들어올 수 있다. 그 경우를 빼먹으면 버튼이 하나도 없는
+     '문제 없음.' 화면에 갇히고, 탭을 눌러 빠져나가면 세션 결과가 통째로 날아간다.
+     요약으로 보내면 그때까지 쌓인 결과는 살아남는다. */
   useEffect(() => {
-    if (phase === "solving" && queue.length > 0 && !current) setPhase("summary");
+    if (phase === "idle" || phase === "summary") return;
+    if (queue.length > 0 && !current) setPhase("summary");
   }, [phase, queue, current]);
 
   if (phase === "idle") {

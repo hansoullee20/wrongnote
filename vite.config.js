@@ -21,8 +21,8 @@ export default defineConfig(({ command, isPreview }) => ({
         start_url: ".",
         scope: ".",
         display: "standalone",
-        background_color: "#efeadf",
-        theme_color: "#e7decb",
+        background_color: "#e7ddcb",
+        theme_color: "#fbf7ef",
         icons: [
           { src: "icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "icon-512.png", sizes: "512x512", type: "image/png" },

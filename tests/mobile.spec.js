@@ -115,4 +115,138 @@ test.describe("야간 모드", () => {
     });
     expect(fab).not.toBe("rgba(0, 0, 0, 0)");
   });
+
+  /* App의 테마 이펙트는 첫 페인트 뒤에 돈다. index.html의 부트스트랩
+     스크립트가 없으면 야간 사용자는 켤 때마다 주간 크림색이 번쩍인다 —
+     어두운 방에서 태블릿으로 보면 그게 제일 눈부시다. */
+  test("야간 저장 상태면 첫 페인트부터 어둡다 — 주간 번쩍임 없음", async ({
+    page,
+  }) => {
+    await freshApp(page);
+    await page.evaluate(() => localStorage.setItem("wr_theme", "dark"));
+
+    // 스타일시트는 적용됐고 React 이펙트는 아직 안 돈 시점을 잡는다
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        window.__beforeMount = {
+          theme: document.documentElement.getAttribute("data-theme"),
+          bg: getComputedStyle(document.documentElement)
+            .getPropertyValue("--bg")
+            .trim(),
+        };
+      });
+    });
+
+    await page.reload();
+    await page.locator('.tab:has-text("문제")').waitFor();
+
+    const before = await page.evaluate(() => window.__beforeMount);
+    const afterBg = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()
+    );
+
+    expect(before.theme).toBe("dark");
+    // 마운트 전후 배경색이 같아야 번쩍임이 없는 것이다
+    expect(before.bg).toBe(afterBg);
+  });
+
+  /* 모르는 팔레트 id(구버전 잔재 등)가 남아 있어도 야간은 야간이어야 한다 */
+  test("팔레트 id를 몰라도 야간 기본값으로 떨어진다", async ({ page }) => {
+    await freshApp(page);
+    await page.evaluate(() => {
+      localStorage.setItem("wr_theme", "dark");
+      localStorage.setItem("wr_palette", "존재하지-않는-팔레트");
+    });
+    await page.reload();
+
+    const bg = await page.evaluate(() => {
+      document.documentElement.setAttribute("data-palette", "존재하지-않는-팔레트");
+      return getComputedStyle(document.documentElement)
+        .getPropertyValue("--bg")
+        .trim();
+    });
+    expect(bg).toBe("#1a1714"); // 주간 크림(#e7ddcb)이 아니라 야간 숯빛
+  });
+});
+
+test.describe("화면 색 팔레트", () => {
+  test("고르면 즉시 적용되고 새로고침 후에도 유지된다", async ({ page }) => {
+    await freshApp(page);
+
+    // 기본값은 항상 명시적으로 붙는다 (브라우저 강제 반전 방지)
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.getAttribute("data-palette")
+      )
+    ).toBe("warm");
+
+    await page.click(".settings-open");
+    await page.click('.palette-card:has-text("세이지")');
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          document.documentElement.getAttribute("data-palette")
+        )
+      )
+      .toBe("sage");
+
+    // 실제로 색이 바뀌었는지 (토큰이 세이지 값인지)
+    const bg = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()
+    );
+    expect(bg).toBe("#dde0d4");
+
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.getAttribute("data-palette")
+      )
+    ).toBe("sage");
+  });
+
+  test("팔레트와 낮·밤은 서로 독립이다", async ({ page }) => {
+    await freshApp(page);
+    await page.click(".settings-open");
+    await page.click('.palette-card:has-text("흐린 하늘")');
+    await page.click(".sheet-close");
+
+    const read = () =>
+      page.evaluate(() => {
+        const s = getComputedStyle(document.documentElement);
+        return {
+          palette: document.documentElement.getAttribute("data-palette"),
+          theme: document.documentElement.getAttribute("data-theme"),
+          bg: s.getPropertyValue("--bg").trim(),
+        };
+      });
+
+    const before = await read();
+    await page.click(".theme-toggle");
+    await page.waitForTimeout(200);
+    const after = await read();
+
+    // 팔레트는 그대로, 모드만 바뀌고, 색은 달라져야 한다
+    expect(after.palette).toBe(before.palette);
+    expect(after.theme).not.toBe(before.theme);
+    expect(after.bg).not.toBe(before.bg);
+  });
+
+  test("theme-color가 고른 팔레트의 지면색을 따라간다", async ({ page }) => {
+    await freshApp(page);
+    await page.click(".settings-open");
+    await page.click('.palette-card:has-text("자두")');
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          document
+            .querySelector('meta[name="theme-color"]')
+            .getAttribute("content")
+            .toLowerCase()
+        )
+      )
+      .toBe("#faf5ec"); // 자두 주간 지면색
+  });
 });

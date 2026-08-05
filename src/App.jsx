@@ -12,11 +12,13 @@ import { loadAll, saveNotes, saveCards } from "./storage.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
 import { deleteImages, gcImages } from "./imageStore.js";
+import { PALETTES, DEFAULT_PALETTE, isPalette } from "./palettes.js";
 import ProblemsView from "./views/ProblemsView.jsx";
 import RecordView from "./views/RecordView.jsx";
 import SolveView from "./views/SolveView.jsx";
 import CardsView from "./views/CardsView.jsx";
 import StatsView from "./views/StatsView.jsx";
+import SettingsView from "./views/SettingsView.jsx";
 
 const TABS = [
   { id: "problems", label: "문제" },
@@ -26,6 +28,7 @@ const TABS = [
 ];
 
 const THEME_KEY = "wr_theme";
+const PALETTE_KEY = "wr_palette";
 
 /** 저장된 선택이 없으면 시스템 설정을 따른다 */
 function initialTheme() {
@@ -36,22 +39,40 @@ function initialTheme() {
     : "light";
 }
 
+function initialPalette() {
+  const saved = localStorage.getItem(PALETTE_KEY);
+  return isPalette(saved) ? saved : DEFAULT_PALETTE;
+}
+
 export default function App() {
   // 부팅 시 1회 로드 + 마이그레이션. 파싱 실패면 저장을 잠가 원본을 보호한다.
   const [boot] = useState(loadAll);
   const [theme, setTheme] = useState(initialTheme);
+  const [palette, setPalette] = useState(initialPalette);
 
-  /* 항상 light/dark 중 하나를 명시한다 — 브라우저가 임의로 색을 뒤집지 않게 */
+  /* 팔레트 × 주간/야간 두 축을 항상 명시한다 — 브라우저가 임의로 색을 뒤집지 않게.
+     상태표시줄 색(theme-color)도 골라둔 팔레트의 지면색으로 맞춰야
+     안드로이드에서 위쪽만 딴 색으로 뜨지 않는다. */
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+    const root = document.documentElement;
+    root.setAttribute("data-theme", theme);
+    root.setAttribute("data-palette", palette);
     localStorage.setItem(THEME_KEY, theme);
-  }, [theme]);
+    localStorage.setItem(PALETTE_KEY, palette);
+
+    const p = PALETTES.find((x) => x.id === palette) ?? PALETTES[0];
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", theme === "dark" ? p.night.paper : p.day.paper);
+  }, [theme, palette]);
   const [notes, setNotes] = useState(boot.notes);
   const [cards, setCards] = useState(boot.cards);
   const storageLocked = Boolean(boot.error);
   const [tab, setTab] = useState("problems");
   // 기록 폼은 탭이 아니라 오버레이 — 매일 하는 건 복습이고 기록은 가끔이다
   const [recording, setRecording] = useState(false);
+  // 설정도 오버레이 — 탭은 데이터에만 쓴다
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   // 문제 그리드에서 바로 세션을 시작할 때 넘기는 큐
   const [pendingQueue, setPendingQueue] = useState(null);
@@ -248,6 +269,14 @@ export default function App() {
         >
           {theme === "dark" ? "☀" : "☾"}
         </button>
+        <button
+          type="button"
+          className="theme-toggle settings-open"
+          aria-label="설정"
+          onClick={() => setSettingsOpen(true)}
+        >
+          ⚙
+        </button>
       </header>
 
       <nav className="tabs">
@@ -356,6 +385,34 @@ export default function App() {
           />
         )}
       </div>
+
+      {settingsOpen && (
+        <div className="sheet">
+          <div className="sheet-head">
+            <span className="sheet-title">설정</span>
+            <div className="sheet-actions">
+              <button
+                type="button"
+                className="sheet-close"
+                onClick={() => setSettingsOpen(false)}
+              >
+                닫기 ✕
+              </button>
+            </div>
+          </div>
+          <div className="sheet-body">
+            <SettingsView
+              notes={notes}
+              cards={cards}
+              onReplaceAll={replaceAll}
+              palette={palette}
+              onSetPalette={setPalette}
+              theme={theme}
+              onSetTheme={setTheme}
+            />
+          </div>
+        </div>
+      )}
 
       {recording && (
         <div className="sheet">

@@ -39,59 +39,14 @@
 :root {
   /* ============================================================
      컨셉: 기출 인쇄 + 요즘 앱 — 편집디자인의 규율, 앱의 여백
-     색은 전부 토큰으로만 쓴다. 야간 모드는 이 토큰만 갈아끼운다.
+     여기는 색이 아닌 것만 둔다. 색 토큰은 src/themes.css가 담당한다
+     (팔레트 × 주간/야간). 색을 고치려면 src/palettes.js → `npm run themes`.
      ============================================================ */
-  color-scheme: light;
-
-  /* 순흑 대신 회색 계단 — 종이에서 책상까지 다섯 단계 */
-  --bg: #e9ecf0; /* 책상 */
-  --paper: #ffffff; /* 지면 */
-  --surface: #ffffff;
-  --surface-2: #f4f6f9;
-  --sunken: #e4e8ed;
-  --border: #dde2e8;
-  --border-strong: #bfc6d0;
-  --rule: #dde2e8;
-
-  /* ---- 잉크: 검정이 아니라 부드러운 흑연 ---- */
-  --text: #262b33;
-  --text-secondary: #59616d;
-  --text-muted: #909aa6;
-  --text-on-accent: #ffffff;
-
-  /* ---- 의미색: 빨강은 오직 채점·실패·긴급 ---- */
-  --red-pen: #d3312b;
-  --red-pen-soft: #fdeceb;
-  --blue-pen: #3a4ea8; /* 안내·부가 정보 */
-  --blue-pen-soft: #ebeefa;
-  --pencil: #8a929e;
-  --highlight: #fdf3dc;
-  --highlight-strong: #e8cf95;
-
-  /* ---- 누르는 것 = 흑연. 밤에는 스탠드 불빛으로 바뀐다 ---- */
-  --action: #333944;
-  --action-hover: #454c59;
-  --on-action: #ffffff;
-
-  /* ---- 시맨틱 매핑 ---- */
-  --primary: var(--red-pen);
-  --primary-hover: #b4241f;
-  --primary-soft: var(--red-pen-soft);
-  --success: #1f7a55;
-  --success-soft: #e7f3ee;
-  --error: var(--red-pen);
-  --error-soft: var(--red-pen-soft);
-  --warning: #9a6b10;
-  --warning-soft: var(--highlight);
-  --info: var(--blue-pen);
-  --info-soft: var(--blue-pen-soft);
 
   /* ---- 폰트 ---- */
   --font-body: "Pretendard Variable", "Pretendard", -apple-system,
     BlinkMacSystemFont, "Noto Sans KR", "Segoe UI", sans-serif;
   --font-exam: "Nanum Myeongjo", "Noto Serif KR", serif; /* 제목·숫자 */
-  /* 손글씨는 은퇴 — 편집디자인 방향에선 굵기와 자간으로만 위계를 만든다 */
-  --font-hand: var(--font-body);
 
   /* ---- 타이포 스케일 ---- */
   --fs-xs: 12px;
@@ -124,71 +79,13 @@
   --r-xl: 16px;
   --r-pill: 999px;
 
-  /* ---- 그림자: 인쇄물답게 아주 얕게 ---- */
-  --sh-sm: 0 1px 2px rgba(20, 23, 28, 0.05);
-  --sh-md: 0 1px 2px rgba(20, 23, 28, 0.05), 0 4px 14px rgba(20, 23, 28, 0.06);
-  --sh-lg: 0 2px 4px rgba(20, 23, 28, 0.06), 0 12px 32px rgba(20, 23, 28, 0.1);
-  --focus-ring: 0 0 0 3px rgba(58, 78, 168, 0.35);
+  /* 그림자는 팔레트마다 톤이 달라 themes.css에서 정의한다 */
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--action) 42%, transparent);
 
   /* ---- 태블릿 인체공학 ---- */
   --tap-min: 44px;
   --tap-comfy: 52px;
   --maxw: 860px;
-}
-
-/* ============================================================
-   1b. 야간 자습 — 시스템 설정을 따르되, 앱 안에서 직접 끄고 켤 수 있다.
-   토큰만 갈아끼우고 컴포넌트 규칙은 건드리지 않는다.
-   ============================================================ */
-/* App이 시스템 설정을 해석해서 항상 light/dark 중 하나를 명시한다 —
-   브라우저가 멋대로 색을 뒤집지 않게 color-scheme도 같이 선언한다. */
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  /* 새까만 바닥(OLED 구멍) 대신 어두운 방의 회색 계단 */
-  --bg: #15181d;
-  --paper: #1d2128;
-  --surface: #1d2128;
-  --surface-2: #242932;
-  --sunken: #2b313b;
-  --border: #2f3641;
-  --border-strong: #454d5a;
-  --rule: #2f3641;
-
-  --text: #e8e6e0; /* 상아색 — 순백은 밤에 눈을 찌른다 */
-  --text-secondary: #a9b2be;
-  --text-muted: #78818e;
-  --text-on-accent: #ffffff;
-
-  --red-pen: #e0685c;
-  --red-pen-soft: #2a1d1c;
-  --blue-pen: #93a8dc;
-  --blue-pen-soft: #1b2231;
-  --pencil: #737c89;
-  --highlight: #2c2617;
-  --highlight-strong: #5a4c26;
-
-  /* 밤에는 잉크 검정이 안 보인다 — 스탠드 불빛이 행동색을 맡는다 */
-  --action: #e8a33d;
-  --action-hover: #f0b358;
-  --on-action: #16181d;
-
-  --primary: var(--red-pen);
-  --primary-hover: #eb8a80;
-  --primary-soft: var(--red-pen-soft);
-  --success: #7fb08a;
-  --success-soft: #1a2620;
-  --error: var(--red-pen);
-  --error-soft: var(--red-pen-soft);
-  --warning: #e8a33d;
-  --warning-soft: var(--highlight);
-  --info: var(--blue-pen);
-  --info-soft: var(--blue-pen-soft);
-
-  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
-  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
-  --focus-ring: 0 0 0 3px rgba(232, 163, 61, 0.4);
 }
 
 /* ============================================================
@@ -1382,6 +1279,84 @@ textarea:focus {
   color: var(--success);
 }
 
+/* ---- 화면 색 고르기 ---- */
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-2);
+}
+
+.palette-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  text-align: left;
+  min-height: var(--tap-comfy);
+}
+
+.palette-card.on {
+  border-color: var(--action);
+  box-shadow: inset 0 0 0 1px var(--action);
+}
+
+/* 미리보기: 책상 위에 지면·버튼·틀림 세 점 */
+.palette-swatch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  margin-bottom: 3px;
+}
+
+.palette-swatch i {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.palette-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--text);
+}
+
+.palette-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 주간/야간 두 갈래 스위치 — 설정 안에서는 상태가 눈에 보여야 한다 */
+.mode-switch {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.mode-switch-btn {
+  flex: 1;
+  min-height: var(--tap-min);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.mode-switch-btn.on {
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--on-action);
+}
+
 .io-row {
   display: flex;
   gap: var(--sp-2);
@@ -1591,7 +1566,7 @@ textarea:focus {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(33, 29, 22, 0.82);
+  background: rgba(26, 23, 20, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;

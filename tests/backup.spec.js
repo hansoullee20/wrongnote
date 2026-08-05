@@ -4,7 +4,7 @@ import { freshApp, readNotes, readCards } from "./helpers.js";
 test.describe("백업 내보내기/가져오기", () => {
   test("내보내기는 version 봉투를 쓴다", async ({ page }) => {
     await freshApp(page);
-    await page.click('.tab:has-text("통계")');
+    await page.click(".settings-open"); // 백업은 이제 설정 시트 안
 
     const downloadPromise = page.waitForEvent("download");
     await page.click('.btn:has-text("내보내기 (JSON)")');
@@ -25,7 +25,7 @@ test.describe("백업 내보내기/가져오기", () => {
     page,
   }) => {
     await freshApp(page);
-    await page.click('.tab:has-text("통계")');
+    await page.click(".settings-open"); // 백업은 이제 설정 시트 안
 
     const v1Backup = {
       notes: [
