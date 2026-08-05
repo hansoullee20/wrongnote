@@ -38,23 +38,6 @@ export default defineConfig(({ command, isPreview }) => ({
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         // Pretendard Variable 하나가 2MB에 육박해서 기본 한도(2MiB)를 넘긴다.
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            /* tesseract.js는 wasm 코어와 kor/eng 학습데이터를 CDN에서 받는다.
-               수십 MB라 미리 캐시하진 않고, 온라인에서 OCR을 한 번 돌리면
-               그 뒤로는 오프라인에서도 인식되도록 한다. */
-            urlPattern: ({ url }) =>
-              url.hostname === "cdn.jsdelivr.net" ||
-              url.hostname === "unpkg.com" ||
-              url.hostname === "tessdata.projectnaptha.com",
-            handler: "CacheFirst",
-            options: {
-              cacheName: "tesseract-assets",
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
       },
     }),
   ],

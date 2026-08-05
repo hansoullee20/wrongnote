@@ -21,7 +21,6 @@ import {
   Badge,
   NoteImages,
 } from "../components.jsx";
-import { ocrImage } from "../ocr.js";
 import { copyText } from "../clipboard.js";
 import {
   compressImage,
@@ -130,9 +129,9 @@ export default function RecordView({
   const [editingId, setEditingId] = useState(null);
   // 기록은 2페이지 — 사실을 먼저 적고, 해설은 주원인을 고른 뒤에 본다
   const [step, setStep] = useState(1);
-  const [ocr, setOcr] = useState({ busy: false, label: "", error: "" });
+  const [photo, setPhoto] = useState({ busy: false, label: "", error: "" });
   const [copied, setCopied] = useState("");
-  const ocrInputRef = useRef(null);
+  const photoInputRef = useRef(null);
 
   // 첨부 사진: {id}=IDB에 이미 저장(수정 모드), {blob,url}=이번에 붙인 것(저장 시 기록)
   const [photos, setPhotos] = useState([]);
@@ -203,47 +202,21 @@ export default function RecordView({
     setTimeout(() => setCopied(""), 2500);
   }
 
-  async function handleOcrFile(e) {
-    const file = e.target.files && e.target.files[0];
+  async function handlePhotoFiles(e) {
+    const files = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
 
-    // 1) 사진 첨부 — OCR 성패와 무관하게 사진은 남는다
-    setOcr({ busy: true, label: "사진 처리 중…", error: "" });
-    const blob = await compressImage(file);
-    setPhotos((ps) => [...ps, { blob, url: URL.createObjectURL(blob) }]);
-
-    // 2) 글자 추출 시도
-    setOcr({ busy: true, label: "준비 중…", error: "" });
+    // 사진 첨부 — 각 파일을 압축해서 그대로 붙인다. 글자 추출은 하지 않는다.
+    setPhoto({ busy: true, label: "사진 처리 중…", error: "" });
     try {
-      const text = await ocrImage(file, (m) => {
-        if (m.status === "recognizing text") {
-          setOcr({
-            busy: true,
-            label: `인식 중 ${Math.round(m.progress * 100)}%`,
-            error: "",
-          });
-        } else {
-          setOcr({
-            busy: true,
-            label: "언어 데이터 로딩 중… (최초 1회만 오래 걸림)",
-            error: "",
-          });
-        }
-      });
-      const cleaned = text.replace(/\n{3,}/g, "\n\n").trim();
-      if (!cleaned) throw new Error("empty");
-      setDraft((d) => ({
-        ...d,
-        question: d.question ? `${d.question}\n${cleaned}` : cleaned,
-      }));
-      setOcr({ busy: false, label: "", error: "" });
+      for (const file of files) {
+        const blob = await compressImage(file);
+        setPhotos((ps) => [...ps, { blob, url: URL.createObjectURL(blob) }]);
+      }
+      setPhoto({ busy: false, label: "", error: "" });
     } catch {
-      setOcr({
-        busy: false,
-        label: "",
-        error: "글자 인식 실패 — 사진은 첨부됐다. 직접 입력해도 된다.",
-      });
+      setPhoto({ busy: false, label: "", error: "사진 첨부 실패" });
     }
   }
 
@@ -397,17 +370,20 @@ export default function RecordView({
             <div className="ocr-row">
               <Button
                 variant="ghost"
-                disabled={ocr.busy}
-                onClick={() => ocrInputRef.current && ocrInputRef.current.click()}
+                disabled={photo.busy}
+                onClick={() =>
+                  photoInputRef.current && photoInputRef.current.click()
+                }
               >
-                {ocr.busy ? ocr.label : "사진 첨부 + 글자 추출"}
+                {photo.busy ? photo.label : "문제 사진 첨부"}
               </Button>
               <input
-                ref={ocrInputRef}
+                ref={photoInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 style={{ display: "none" }}
-                onChange={handleOcrFile}
+                onChange={handlePhotoFiles}
               />
               <Button
                 variant="ghost"
@@ -421,7 +397,7 @@ export default function RecordView({
                 {copied || "분류 프롬프트 복사"}
               </Button>
             </div>
-            {ocr.error && <div className="io-error">{ocr.error}</div>}
+            {photo.error && <div className="io-error">{photo.error}</div>}
             {photos.length > 0 && (
               <div className="photo-strip">
                 {photos.map((p, i) => (
@@ -439,7 +415,7 @@ export default function RecordView({
                 ))}
               </div>
             )}
-            <Field label="문제 원문 (선택)" hint="사진 OCR 결과가 여기 들어감" htmlFor="rec-question">
+            <Field label="문제 원문 (선택)" hint="필요하면 직접 입력" htmlFor="rec-question">
               <textarea
                 id="rec-question"
                 rows={2}
