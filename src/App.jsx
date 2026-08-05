@@ -256,6 +256,15 @@ export default function App() {
               setEditingNoteId(id);
               setRecording(true);
             }}
+            onSolveNote={(id) => {
+              const n = notes.find((x) => x.id === id);
+              setPendingQueue({
+                ids: [id],
+                label: n ? n.problem : "다시 풀기",
+                source: "manual",
+              });
+              setTab("solve");
+            }}
             onRecord={() => {
               setEditingNoteId(null);
               setRecording(true);
@@ -283,6 +292,7 @@ export default function App() {
           <SolveView
             notes={notes}
             cardDueCount={cardDueCount}
+            filter={filter}
             initialQueue={pendingQueue}
             onConsumeInitialQueue={() => setPendingQueue(null)}
             onRecordAttempt={recordAttempt}

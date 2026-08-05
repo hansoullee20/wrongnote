@@ -6,6 +6,7 @@ import {
   MATH_ERROR_TAGS,
   isRecheckDue,
 } from "../constants.js";
+import { buildReviewGroups } from "../review.js";
 import { getImage } from "../imageStore.js";
 import {
   Chip,
@@ -73,6 +74,7 @@ function Timer({ startedAt }) {
 export default function SolveView({
   notes,
   cardDueCount,
+  filter,
   initialQueue,
   onConsumeInitialQueue,
   onRecordAttempt,
@@ -129,6 +131,21 @@ export default function SolveView({
     () => notes.find((n) => n.id === queue[index]),
     [notes, queue, index]
   );
+
+  /* 단일(manual) 풀기가 끝나면 현재 필터 범위의 다음 불안정 문제를 잇는다.
+     졸업 문제를 멋대로 끼워넣지 않는다. */
+  const nextManualNote = useMemo(() => {
+    if (scope.source !== "manual") return null;
+    const pool = notes.filter(
+      (n) =>
+        (!filter?.cause || n.cause === filter.cause) &&
+        (!filter?.topicMain || n.topicMain === filter.topicMain)
+    );
+    return (
+      buildReviewGroups(pool).unstable.find((n) => !queue.includes(n.id)) ??
+      null
+    );
+  }, [notes, filter, scope.source, queue]);
 
   /* 큐에 담긴 노트가 도중에 사라지면(삭제 등) 세션을 끝낸다 */
   useEffect(() => {
@@ -441,8 +458,13 @@ export default function SolveView({
 
   function next() {
     if (index + 1 >= queue.length) {
-      setPhase("summary");
-      return;
+      // manual 진입이면 다음 불안정 문제로 이어간다
+      if (nextManualNote) {
+        setQueue((q) => [...q, nextManualNote.id]);
+      } else {
+        setPhase("summary");
+        return;
+      }
     }
     setIndex((i) => i + 1);
     setPicked("");
@@ -747,7 +769,9 @@ export default function SolveView({
 
           <div className="end-row">
             <button type="button" className="end-btn" onClick={next}>
-              {index + 1 >= queue.length ? "결과 보기" : "다음 문제"}
+              {index + 1 >= queue.length && !nextManualNote
+                ? "결과 보기"
+                : "다음 문제"}
             </button>
           </div>
         </>

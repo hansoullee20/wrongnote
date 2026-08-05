@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { CAUSES, MATH_TOPICS, isRecheckDue } from "../constants.js";
+import {
+  buildReviewGroups,
+  REVIEW_STATE_LABELS,
+  getLastAttempt,
+  formatDaysAgo,
+} from "../review.js";
 import { getImage } from "../imageStore.js";
-import { Chip } from "../components.jsx";
+import { Chip, TrajectoryDots } from "../components.jsx";
 
 /**
  * 문제 캡처 썸네일. 없으면 문제 원문 텍스트로 대신한다 —
@@ -44,11 +50,14 @@ export default function ProblemsView({
   filter,
   setFilter,
   onOpenNote,
+  onSolveNote,
   onRecord,
   onStartDue,
   onStartRandom,
 }) {
   const [randomSize, setRandomSize] = useState(5);
+  // 졸업은 기본 접힘 — 매일 볼 것은 불안정이지 졸업이 아니다
+  const [graduatedOpen, setGraduatedOpen] = useState(false);
 
   const causeCounts = useMemo(() => {
     const map = new Map(CAUSES.map((c) => [c, 0]));
@@ -77,40 +86,62 @@ export default function ProblemsView({
     [notes, filter]
   );
 
-  /* 복습할 것이 앞으로 온다 — "오늘 뭐 하지"를 사용자가 고르지 않게 한다 */
-  const due = useMemo(() => visible.filter((n) => isRecheckDue(n)), [visible]);
-  const rest = useMemo(() => visible.filter((n) => !isRecheckDue(n)), [visible]);
+  /* 안정성 그룹 — 불안정이 맨 앞. 예약(due)은 별도 축이라 '오늘' 표시로 남긴다 */
+  const groups = useMemo(() => buildReviewGroups(visible), [visible]);
   const recheckDueCount = useMemo(() => notes.filter((n) => isRecheckDue(n)).length, [notes]);
   const todayCount = recheckDueCount + cardDueCount;
 
-  const renderCard = (n) => (
-    <button
-      key={n.id}
-      type="button"
-      className={`prob-card${isRecheckDue(n) ? " due" : ""}`}
-      onClick={() => onOpenNote(n.id)}
-    >
-      <ProblemShot note={n} />
-      <div className="prob-meta">
-        <div className="prob-id">
-          {n.problem}
-          {n.recheckCount > 0 && (
-            <span className="prob-try">{n.recheckCount + 1}번째</span>
-          )}
-        </div>
-        <div className="prob-topic">
-          {n.topicMain}
-          {n.topicSub ? ` · ${n.topicSub}` : ""}
-        </div>
-        {n.cause ? (
-          <span className="prob-cause">{n.cause}</span>
-        ) : (
-          <span className="prob-cause none">미분류</span>
-        )}
+  const renderCard = (n) => {
+    const last = getLastAttempt(n);
+    return (
+      <div
+        key={n.id}
+        className={`prob-card${isRecheckDue(n) ? " due" : ""}`}
+      >
+        {/* 카드 본문 탭 = 바로 풀기. 수정은 오른쪽 위 연필로 */}
+        <button
+          type="button"
+          className="prob-card-main"
+          onClick={() => onSolveNote(n.id)}
+        >
+          <ProblemShot note={n} />
+          <div className="prob-meta">
+            <div className="prob-id">{n.problem}</div>
+            <div className="prob-topic">
+              {n.topicMain}
+              {n.topicSub ? ` · ${n.topicSub}` : ""}
+            </div>
+            <div className="prob-traj">
+              <TrajectoryDots attempts={n.attempts} />
+              {last && (
+                <span className="prob-last">{formatDaysAgo(last.ts)}</span>
+              )}
+            </div>
+            {n.cause ? (
+              <span className="prob-cause">{n.cause}</span>
+            ) : (
+              <span className="prob-cause none">미분류</span>
+            )}
+          </div>
+          {isRecheckDue(n) && <span className="prob-flag">오늘</span>}
+        </button>
+        <button
+          type="button"
+          className="prob-card-edit"
+          aria-label={`${n.problem} 수정`}
+          onClick={() => onOpenNote(n.id)}
+        >
+          ✎
+        </button>
       </div>
-      {isRecheckDue(n) && <span className="prob-flag">오늘</span>}
-    </button>
-  );
+    );
+  };
+
+  const groupOrder = [
+    { key: "unstable", notes: groups.unstable },
+    { key: "progress", notes: groups.progress },
+    { key: "graduated", notes: groups.graduated },
+  ];
 
   return (
     <div className="view">
@@ -179,19 +210,30 @@ export default function ProblemsView({
         </div>
       )}
 
-      {due.length > 0 && (
-        <>
-          <div className="group-label">오늘 볼 것</div>
-          <div className="prob-grid">{due.map(renderCard)}</div>
-        </>
-      )}
-
-      {rest.length > 0 && (
-        <>
-          {due.length > 0 && <div className="group-label">그 밖에</div>}
-          <div className="prob-grid">{rest.map(renderCard)}</div>
-        </>
-      )}
+      {groupOrder.map(({ key, notes: groupNotes }) => {
+        if (groupNotes.length === 0) return null;
+        const collapsible = key === "graduated";
+        const open = !collapsible || graduatedOpen;
+        return (
+          <section key={key} className={`review-group ${key}`}>
+            {collapsible ? (
+              <button
+                type="button"
+                className="group-label group-toggle"
+                onClick={() => setGraduatedOpen((o) => !o)}
+              >
+                {REVIEW_STATE_LABELS[key]} {groupNotes.length}
+                <span className="fold-arrow">{open ? "▾" : "▸"}</span>
+              </button>
+            ) : (
+              <div className="group-label">
+                {REVIEW_STATE_LABELS[key]} {groupNotes.length}
+              </div>
+            )}
+            {open && <div className="prob-grid">{groupNotes.map(renderCard)}</div>}
+          </section>
+        );
+      })}
 
       <button type="button" className="fab" onClick={onRecord}>
         ＋ 기록

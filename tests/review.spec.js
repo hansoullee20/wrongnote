@@ -202,3 +202,130 @@ test.describe("review 셀렉터", () => {
     expect(results.rate).toBe(0.5);
   });
 });
+
+/** 안정성 그룹 UI용 시드: 불안정 2(미재풀이 1) / 진행 중 1 / 졸업 1 */
+async function seedGroups(page) {
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.clear();
+    const base = (id, problem, attempts, extra = {}) => ({
+      subject: "수학",
+      problem,
+      topicMain: "수II·미분",
+      topicSub: "",
+      question: `${problem} 원문`,
+      mySol: "",
+      optSol: "최적 풀이",
+      cause: "개념 부족",
+      tags: [],
+      derived: null,
+      memo: "",
+      correctAnswer: "③",
+      myAnswer: "②",
+      attempts,
+      ts: 1700000000000,
+      id,
+      date: "2026-06-01",
+      ...extra,
+    });
+    const att = (correct, ts) => ({ ts, answer: "②", correct, seconds: 60 });
+    localStorage.setItem(
+      "wr_notes",
+      JSON.stringify([
+        base("g_unatt", "G-UNATTEMPTED", []),
+        base("g_fail", "G-FAILED", [att(false, 1700000100000)]),
+        base("g_prog", "G-PROGRESS", [att(true, 1700000200000)]),
+        base("g_grad", "G-GRAD", [
+          att(true, 1700000300000),
+          att(true, 1700000400000),
+        ]),
+      ])
+    );
+    localStorage.setItem("wr_cards", JSON.stringify([]));
+  });
+  await page.reload();
+  await page.getByRole("button", { name: /^문제/ }).waitFor();
+  await page.waitForTimeout(300);
+}
+
+test.describe("안정성 그룹 UI", () => {
+  test("그룹 헤더 건수, 졸업 기본 접힘 → 펼치기", async ({ page }) => {
+    await seedGroups(page);
+
+    await expect(page.locator(".review-group.unstable .group-label")).toContainText(
+      "불안정 2"
+    );
+    await expect(page.locator(".review-group.progress .group-label")).toContainText(
+      "진행 중 1"
+    );
+    await expect(page.locator(".group-toggle")).toContainText("졸업 1");
+
+    // 불안정 그룹에 미재풀이·실패 노트가 함께 있다
+    await expect(
+      page.locator('.review-group.unstable .prob-card:has-text("G-UNATTEMPTED")')
+    ).toBeVisible();
+    await expect(
+      page.locator('.review-group.unstable .prob-card:has-text("G-FAILED")')
+    ).toBeVisible();
+
+    // 졸업은 기본 접힘
+    await expect(
+      page.locator('.prob-card:has-text("G-GRAD")')
+    ).toHaveCount(0);
+    await page.click(".group-toggle");
+    await expect(page.locator('.prob-card:has-text("G-GRAD")')).toBeVisible();
+  });
+
+  test("카드에 궤적 도트·미재풀이·마지막 시도 상대일 표시", async ({ page }) => {
+    await seedGroups(page);
+
+    const unatt = page.locator('.prob-card:has-text("G-UNATTEMPTED")');
+    await expect(unatt.locator(".traj-none")).toHaveText("미재풀이");
+
+    const failed = page.locator('.prob-card:has-text("G-FAILED")');
+    await expect(failed.locator(".traj-dot.fail")).toHaveCount(1);
+    await expect(failed.locator(".prob-last")).toContainText("일 전");
+  });
+
+  test("카드 본문 탭 → 단일 풀기 시작, 연필 → 수정 오버레이", async ({
+    page,
+  }) => {
+    await seedGroups(page);
+
+    await page.click('.prob-card:has-text("G-FAILED") .prob-card-main');
+    await expect(page.locator(".solve-head")).toBeVisible();
+    await expect(page.locator(".solve-kind")).toHaveText("G-FAILED");
+
+    await page.click('.tab:has-text("문제")');
+    await page.click('.prob-card:has-text("G-FAILED") .prob-card-edit');
+    await expect(
+      page.locator('.sheet-title:has-text("오답 수정")')
+    ).toBeVisible();
+    // 수정 오버레이 하단에 재풀이 이력 (읽기 전용)
+    await page.click('.btn--primary:has-text("다음 — 왜 틀렸나")');
+    await expect(page.locator(".attempt-history")).toBeVisible();
+    await expect(page.locator(".attempt-line")).toContainText("원인 미기록");
+  });
+
+  test("manual 풀기 완료 → 다음 불안정 문제로 이어진다 (졸업 제외)", async ({
+    page,
+  }) => {
+    await seedGroups(page);
+
+    // 불안정 첫 카드(G-UNATTEMPTED, 활동 오래된 순) 본문 탭
+    await page.click('.prob-card:has-text("G-UNATTEMPTED") .prob-card-main');
+    await expect(page.locator(".solve-prog")).toContainText("1 / 1");
+
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+
+    // 다음 불안정(G-FAILED)이 남아 있으므로 '다음 문제'
+    await page.click('.end-btn:has-text("다음 문제")');
+    await expect(page.locator(".solve-prog")).toContainText("2 / 2");
+
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    // 더 이상 불안정이 없다 — 졸업을 끌어오지 않는다
+    await expect(page.locator('.end-btn:has-text("결과 보기")')).toBeVisible();
+  });
+});

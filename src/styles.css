@@ -1562,14 +1562,63 @@ textarea:focus {
 
 .prob-card {
   position: relative;
-  display: block;
-  width: 100%;
-  text-align: left;
   background: var(--paper);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   overflow: hidden;
   box-shadow: var(--sh-sm);
+}
+
+/* 본문 = 바로 풀기 */
+.prob-card-main {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+}
+
+/* 연필 = 수정 진입. 본문 탭과 절대 겹치지 않게 떠 있는 원 */
+.prob-card-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  color: var(--blue-pen);
+  font-size: 15px;
+  line-height: 1;
+  box-shadow: var(--sh-sm);
+  z-index: 2;
+}
+
+.prob-traj {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: 5px;
+}
+
+.prob-last {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 그룹 헤더 — 접히는 졸업은 버튼 */
+.review-group .group-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.group-toggle {
+  font-family: var(--font-hand);
+  font-size: 19px;
+  color: var(--blue-pen);
+  padding: 0;
+  min-height: var(--tap-min);
 }
 
 .prob-card.due {
