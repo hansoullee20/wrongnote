@@ -62,3 +62,57 @@ for (const vp of [
     });
   });
 }
+
+test.describe("야간 모드", () => {
+  test("토글하면 테마가 바뀌고 새로고침 후에도 유지된다", async ({ page }) => {
+    await freshApp(page);
+
+    // 시스템 설정을 해석해 항상 명시적으로 붙는다 (브라우저 강제 반전 방지)
+    const initial = await page.evaluate(() =>
+      document.documentElement.getAttribute("data-theme")
+    );
+    expect(["light", "dark"]).toContain(initial);
+
+    await page.click(".theme-toggle");
+    const toggled = initial === "dark" ? "light" : "dark";
+    await expect
+      .poll(async () =>
+        page.evaluate(() => document.documentElement.getAttribute("data-theme"))
+      )
+      .toBe(toggled);
+
+    // 선택은 저장되어 새로고침을 넘긴다
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.getAttribute("data-theme")
+      )
+    ).toBe(toggled);
+  });
+
+  test("야간 모드에서 배경과 글씨 대비가 유지된다", async ({ page }) => {
+    await freshApp(page);
+    await page.evaluate(() => localStorage.setItem("wr_theme", "dark"));
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+
+    // 순흑/순백이 아니라 회색 계단이어야 한다
+    const c = await page.evaluate(() => {
+      const s = getComputedStyle(document.documentElement);
+      return {
+        bg: s.getPropertyValue("--bg").trim(),
+        text: s.getPropertyValue("--text").trim(),
+      };
+    });
+    expect(c.bg).not.toBe("#000000");
+    expect(c.text).not.toBe("#ffffff");
+
+    // FAB가 배경에 묻히지 않는다 (야간엔 스탠드 불빛색)
+    const fab = await page.evaluate(() => {
+      const el = document.querySelector(".fab");
+      return getComputedStyle(el).backgroundColor;
+    });
+    expect(fab).not.toBe("rgba(0, 0, 0, 0)");
+  });
+});

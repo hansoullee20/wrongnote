@@ -25,9 +25,27 @@ const TABS = [
   { id: "stats", label: "통계" },
 ];
 
+const THEME_KEY = "wr_theme";
+
+/** 저장된 선택이 없으면 시스템 설정을 따른다 */
+function initialTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === "light" || saved === "dark") return saved;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 export default function App() {
   // 부팅 시 1회 로드 + 마이그레이션. 파싱 실패면 저장을 잠가 원본을 보호한다.
   const [boot] = useState(loadAll);
+  const [theme, setTheme] = useState(initialTheme);
+
+  /* 항상 light/dark 중 하나를 명시한다 — 브라우저가 임의로 색을 뒤집지 않게 */
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
   const [notes, setNotes] = useState(boot.notes);
   const [cards, setCards] = useState(boot.cards);
   const storageLocked = Boolean(boot.error);
@@ -219,9 +237,17 @@ export default function App() {
   return (
     <div className="app">
       <header className="masthead">
-        <span className="masthead-sub">대학수학능력시험 대비</span>
+        <span className="masthead-sub">수능 대비</span>
         <h1 className="masthead-title">오답노트</h1>
-        <span className="masthead-stamp">채점완료</span>
+        <span className="masthead-stamp">{notes.length}문제</span>
+        <button
+          type="button"
+          className="theme-toggle"
+          aria-label={theme === "dark" ? "주간 모드로 전환" : "야간 모드로 전환"}
+          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+        >
+          {theme === "dark" ? "☀" : "☾"}
+        </button>
       </header>
 
       <nav className="tabs">
