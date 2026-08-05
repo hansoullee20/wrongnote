@@ -59,7 +59,7 @@ export function TagBadges({ tags }) {
 
 /**
  * @param {{
- *   variant?: 'primary'|'success'|'danger'|'neutral'|'ghost',
+ *   variant?: 'primary'|'success'|'danger'|'neutral'|'ghost'|'ink',
  *   size?: 'md'|'lg',
  *   block?: boolean,
  *   disabled?: boolean,
