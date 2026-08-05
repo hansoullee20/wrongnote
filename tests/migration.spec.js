@@ -10,7 +10,7 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     const version = await page.evaluate(() =>
       localStorage.getItem("wr_schema_version")
     );
-    expect(version).toBe("4");
+    expect(version).toBe("5"); // v5: 시도별 실패 원인
 
     // v1 원본 스냅샷 존재
     const backup = await page.evaluate(() =>
@@ -216,6 +216,6 @@ test.describe("업그레이드 직전 스냅샷", () => {
     // 마이그레이션 자체는 정상 수행
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("4");
+    ).toBe("5");
   });
 });
