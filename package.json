@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "playwright test"
+    "test": "playwright test",
+    "themes": "node tools/gen-themes.mjs",
+    "contrast": "node tools/verify-contrast.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

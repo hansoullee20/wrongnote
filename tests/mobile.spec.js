@@ -116,3 +116,85 @@ test.describe("야간 모드", () => {
     expect(fab).not.toBe("rgba(0, 0, 0, 0)");
   });
 });
+
+test.describe("화면 색 팔레트", () => {
+  test("고르면 즉시 적용되고 새로고침 후에도 유지된다", async ({ page }) => {
+    await freshApp(page);
+
+    // 기본값은 항상 명시적으로 붙는다 (브라우저 강제 반전 방지)
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.getAttribute("data-palette")
+      )
+    ).toBe("warm");
+
+    await page.click('.tab:has-text("통계")');
+    await page.click('.palette-card:has-text("세이지")');
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          document.documentElement.getAttribute("data-palette")
+        )
+      )
+      .toBe("sage");
+
+    // 실제로 색이 바뀌었는지 (토큰이 세이지 값인지)
+    const bg = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()
+    );
+    expect(bg).toBe("#dde0d4");
+
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.getAttribute("data-palette")
+      )
+    ).toBe("sage");
+  });
+
+  test("팔레트와 낮·밤은 서로 독립이다", async ({ page }) => {
+    await freshApp(page);
+    await page.click('.tab:has-text("통계")');
+    await page.click('.palette-card:has-text("흐린 하늘")');
+    await page.click('.tab:has-text("문제")');
+
+    const read = () =>
+      page.evaluate(() => {
+        const s = getComputedStyle(document.documentElement);
+        return {
+          palette: document.documentElement.getAttribute("data-palette"),
+          theme: document.documentElement.getAttribute("data-theme"),
+          bg: s.getPropertyValue("--bg").trim(),
+        };
+      });
+
+    const before = await read();
+    await page.click(".theme-toggle");
+    await page.waitForTimeout(200);
+    const after = await read();
+
+    // 팔레트는 그대로, 모드만 바뀌고, 색은 달라져야 한다
+    expect(after.palette).toBe(before.palette);
+    expect(after.theme).not.toBe(before.theme);
+    expect(after.bg).not.toBe(before.bg);
+  });
+
+  test("theme-color가 고른 팔레트의 지면색을 따라간다", async ({ page }) => {
+    await freshApp(page);
+    await page.click('.tab:has-text("통계")');
+    await page.click('.palette-card:has-text("자두")');
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          document
+            .querySelector('meta[name="theme-color"]')
+            .getAttribute("content")
+            .toLowerCase()
+        )
+      )
+      .toBe("#faf5ec"); // 자두 주간 지면색
+  });
+});

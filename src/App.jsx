@@ -12,6 +12,7 @@ import { loadAll, saveNotes, saveCards } from "./storage.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
 import { deleteImages, gcImages } from "./imageStore.js";
+import { PALETTES, DEFAULT_PALETTE, isPalette } from "./palettes.js";
 import ProblemsView from "./views/ProblemsView.jsx";
 import RecordView from "./views/RecordView.jsx";
 import SolveView from "./views/SolveView.jsx";
@@ -26,6 +27,7 @@ const TABS = [
 ];
 
 const THEME_KEY = "wr_theme";
+const PALETTE_KEY = "wr_palette";
 
 /** 저장된 선택이 없으면 시스템 설정을 따른다 */
 function initialTheme() {
@@ -36,20 +38,32 @@ function initialTheme() {
     : "light";
 }
 
+function initialPalette() {
+  const saved = localStorage.getItem(PALETTE_KEY);
+  return isPalette(saved) ? saved : DEFAULT_PALETTE;
+}
+
 export default function App() {
   // 부팅 시 1회 로드 + 마이그레이션. 파싱 실패면 저장을 잠가 원본을 보호한다.
   const [boot] = useState(loadAll);
   const [theme, setTheme] = useState(initialTheme);
+  const [palette, setPalette] = useState(initialPalette);
 
-  /* 항상 light/dark 중 하나를 명시한다 — 브라우저가 임의로 색을 뒤집지 않게.
-     상태표시줄 색(theme-color)도 같이 맞춰야 안드로이드에서 위쪽만 딴 색으로 뜨지 않는다. */
+  /* 팔레트 × 주간/야간 두 축을 항상 명시한다 — 브라우저가 임의로 색을 뒤집지 않게.
+     상태표시줄 색(theme-color)도 골라둔 팔레트의 지면색으로 맞춰야
+     안드로이드에서 위쪽만 딴 색으로 뜨지 않는다. */
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+    const root = document.documentElement;
+    root.setAttribute("data-theme", theme);
+    root.setAttribute("data-palette", palette);
     localStorage.setItem(THEME_KEY, theme);
+    localStorage.setItem(PALETTE_KEY, palette);
+
+    const p = PALETTES.find((x) => x.id === palette) ?? PALETTES[0];
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", theme === "dark" ? "#221E1A" : "#FBF7EF");
-  }, [theme]);
+      ?.setAttribute("content", theme === "dark" ? p.night.paper : p.day.paper);
+  }, [theme, palette]);
   const [notes, setNotes] = useState(boot.notes);
   const [cards, setCards] = useState(boot.cards);
   const storageLocked = Boolean(boot.error);
@@ -353,6 +367,9 @@ export default function App() {
             cards={cards}
             onReplaceAll={replaceAll}
             onTopicClick={gotoProblemsWithTopic}
+            palette={palette}
+            onSetPalette={setPalette}
+            theme={theme}
             onGotoGroup={(group, unattemptedOnly) => {
               setProblemNavRequest({ group, unattemptedOnly });
               setTab("problems");

@@ -6,6 +6,7 @@ import {
   calculateImprovement,
   buildTagTrend,
 } from "../review.js";
+import { PALETTES } from "../palettes.js";
 import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
 import { exportImages, importImages } from "../imageStore.js";
 import { Section, Button } from "../components.jsx";
@@ -16,6 +17,9 @@ export default function StatsView({
   onReplaceAll,
   onTopicClick,
   onGotoGroup,
+  palette,
+  onSetPalette,
+  theme,
 }) {
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
@@ -346,6 +350,35 @@ export default function StatsView({
             개념 갭을 가리고 있음. 태깅 기준 재점검.
           </div>
         )}
+      </Section>
+
+      <Section title="화면 색">
+        <div className="palette-grid">
+          {PALETTES.map((p) => {
+            const c = theme === "dark" ? p.night : p.day;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={`palette-card${palette === p.id ? " on" : ""}`}
+                aria-pressed={palette === p.id}
+                onClick={() => onSetPalette(p.id)}
+              >
+                {/* 지금 보고 있는 모드(주간/야간) 기준으로 미리보기를 보여준다 */}
+                <span className="palette-swatch" style={{ background: c.bg }}>
+                  <i style={{ background: c.paper }} />
+                  <i style={{ background: c.act }} />
+                  <i style={{ background: c.fail }} />
+                </span>
+                <span className="palette-name">{p.name}</span>
+                <span className="palette-desc">{p.desc}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="hint">
+          낮·밤은 위쪽 ☾ 버튼으로 바꾼다 — 색을 고르면 두 모드가 함께 맞춰진다
+        </div>
       </Section>
 
       <Section title="백업">
