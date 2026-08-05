@@ -370,13 +370,13 @@ export default function RecordView({
             </Field>
             <div className="ocr-row">
               <Button
-                variant="ghost"
+                variant="ink"
                 disabled={photo.busy}
                 onClick={() =>
                   photoInputRef.current && photoInputRef.current.click()
                 }
               >
-                {photo.busy ? photo.label : "문제 사진 첨부"}
+                {photo.busy ? photo.label : "📷 문제 사진 첨부"}
               </Button>
               <input
                 ref={photoInputRef}
@@ -617,6 +617,10 @@ export default function RecordView({
               <Button variant="neutral" block onClick={() => setStep(1)}>
                 이전
               </Button>
+          {/* 잠금 사유는 잠긴 버튼 바로 위에서 말한다 */}
+          {gateActive && !gatePassed && (
+            <div className="gate-warn">판정 체크 미완료 — 저장 잠김</div>
+          )}
           <Button
             variant="primary"
             size="lg"
@@ -630,9 +634,6 @@ export default function RecordView({
             <Button variant="neutral" block onClick={cancelEdit}>
               수정 취소
             </Button>
-          )}
-          {gateActive && !gatePassed && (
-            <div className="gate-warn">판정 체크 미완료 — 저장 잠김</div>
           )}
           {/* 수정 중엔 이 문제의 재풀이 이력을 함께 보여준다 (읽기 전용) */}
           {editingId && (
