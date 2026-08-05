@@ -607,14 +607,27 @@ export default function SolveView({
             </span>
           </div>
 
-          {/* 풀이 보기로 들어왔다면 분류하는 동안 최적 풀이를 보여준다 */}
+          {/* 풀이 보기로 들어왔다면 분류하는 동안 최적 풀이를 보여준다.
+              비어 있으면 비어 있다고 말한다 — 조용히 아무것도 안 보여주면
+              버튼이 고장난 것처럼 보인다 */}
           {pendingFailure.source === "solution_reveal" &&
-            current.optSol?.trim() && (
+            (current.optSol?.trim() ? (
               <div className="reveal">
                 <div className="reveal-title">최적 풀이</div>
                 <div className="sol-shot">{current.optSol}</div>
               </div>
-            )}
+            ) : (
+              <div className="reveal empty-sol">
+                <div className="reveal-title">최적 풀이가 비어 있다</div>
+                <button
+                  type="button"
+                  className="callout-act"
+                  onClick={() => onOpenNote(current.id)}
+                >
+                  지금 추가
+                </button>
+              </div>
+            ))}
 
           {CAUSES.includes(current.cause) && (
             <div className="quick-cause-row">
@@ -699,6 +712,24 @@ export default function SolveView({
             </span>
           </div>
 
+          {/* 이번 시도를 뭐라고 분류했는지 바로 확인 — 통계까지 안 가도 보인다 */}
+          {!justResult.correct &&
+            (() => {
+              const thisAttempt = past[past.length - 1];
+              if (!thisAttempt?.cause) return null;
+              return (
+                <div className="this-cause">
+                  <span className="this-cause-label">이번 원인</span>
+                  <span className="cause-pill">{thisAttempt.cause}</span>
+                  {thisAttempt.tags?.map((t) => (
+                    <span key={t} className="sub-pill">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
+
           <div className="time-line">
             이번 <span className="time-now">{fmtSec(justResult.seconds)}</span>
             {past.length > 1 && (
@@ -756,11 +787,14 @@ export default function SolveView({
             <div className="reveal-title">처음 틀렸을 때</div>
             <div className="past-row">
               {current.cause && <span className="cause-pill">{current.cause}</span>}
-              {current.tags.map((t) => (
-                <span key={t} className="sub-pill">
-                  {t}
-                </span>
-              ))}
+              {/* 주원인과 같은 이름의 레거시 태그는 중복 표시하지 않는다 */}
+              {current.tags
+                .filter((t) => t !== current.cause)
+                .map((t) => (
+                  <span key={t} className="sub-pill">
+                    {t}
+                  </span>
+                ))}
             </div>
             {current.mySol?.trim() && (
               <div className="past-quote">{current.mySol}</div>

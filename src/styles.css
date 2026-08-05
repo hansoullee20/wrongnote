@@ -1251,9 +1251,25 @@ textarea:focus {
   background: var(--surface-2);
 }
 
+/* 개선율 숫자는 중립 잉크 — 0%를 초록으로 칠하면 거짓말이 된다 */
 .improve-line b {
-  color: var(--success);
+  color: var(--text);
   font-size: var(--fs-md);
+}
+
+/* 채점 직후: 이번 시도의 분류 확인 줄 */
+.this-cause {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
+.this-cause-label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--text-secondary);
 }
 
 .trend-row {
@@ -1811,7 +1827,8 @@ textarea:focus {
   box-shadow: 0 0 0 2px var(--red-pen-soft);
 }
 
-.prob-card:active {
+/* 본문을 눌렀을 때만 카드가 눌린다 — 연필 버튼 탭은 제외 */
+.prob-card:has(.prob-card-main:active) {
   box-shadow: var(--sh-md);
   transform: scale(0.985);
 }

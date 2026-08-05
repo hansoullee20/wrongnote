@@ -269,7 +269,7 @@ export function AttemptHistory({ attempts }) {
     <div className="attempt-history">
       <div className="attempt-history-head">
         <span className="label">재풀이 이력</span>
-        <TrajectoryDots attempts={all} />
+        {all.length > 0 && <TrajectoryDots attempts={all} />}
       </div>
       {all.length === 0 && <div className="hint">아직 다시 푼 적 없음</div>}
       {all.map((a) => (
