@@ -1159,6 +1159,74 @@ textarea:focus {
   line-height: 1.5;
 }
 
+/* ---- 재풀이 궤적 통계 (v5) ---- */
+.audit-cell.traj-cell {
+  width: 100%;
+  cursor: pointer;
+}
+
+.audit-cell.traj-cell:active {
+  background: var(--sunken);
+}
+
+.improve-line {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.improve-line b {
+  color: var(--success);
+  font-size: var(--fs-md);
+}
+
+.trend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.trend-bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bar-track.sm {
+  height: 9px;
+}
+
+.bar-fill.prev {
+  background: var(--border-strong);
+}
+
+.trend-counts {
+  width: 44px;
+  text-align: right;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.trend-marker {
+  width: 52px;
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+}
+
+.trend-marker.up {
+  color: var(--red-pen);
+}
+
+.trend-marker.down {
+  color: var(--success);
+}
+
 .io-row {
   display: flex;
   gap: var(--sp-2);

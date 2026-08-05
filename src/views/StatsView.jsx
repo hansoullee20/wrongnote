@@ -1,12 +1,37 @@
 import { useMemo, useRef, useState } from "react";
 import { CAUSES, MATH_TOPICS, isRecheckDue } from "../constants.js";
+import {
+  buildReviewGroups,
+  isUnattempted,
+  calculateImprovement,
+  buildTagTrend,
+} from "../review.js";
 import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
 import { exportImages, importImages } from "../imageStore.js";
 import { Section, Button } from "../components.jsx";
 
-export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) {
+export default function StatsView({
+  notes,
+  cards,
+  onReplaceAll,
+  onTopicClick,
+  onGotoGroup,
+}) {
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
+
+  /* 재풀이 궤적 — ProblemsView와 같은 셀렉터를 쓴다 (숫자가 어긋나면 안 된다) */
+  const groups = useMemo(() => buildReviewGroups(notes), [notes]);
+  const unattemptedCount = useMemo(
+    () => groups.unstable.filter(isUnattempted).length,
+    [groups]
+  );
+  const improvement = useMemo(() => calculateImprovement(notes), [notes]);
+  const tagTrend = useMemo(() => buildTagTrend(notes), [notes]);
+  const maxTrend = tagTrend.reduce(
+    (m, r) => Math.max(m, r.recent, r.previous),
+    1
+  );
 
   const tagCounts = useMemo(() => {
     const m = new Map();
@@ -112,6 +137,102 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
 
   return (
     <div className="view">
+      <Section title="재풀이 궤적">
+        <div className="audit-grid">
+          <button
+            type="button"
+            className="audit-cell traj-cell"
+            onClick={() => onGotoGroup("unstable", false)}
+          >
+            <div className="audit-num red">{groups.unstable.length}</div>
+            <div className="audit-label">불안정</div>
+          </button>
+          <button
+            type="button"
+            className="audit-cell traj-cell"
+            onClick={() => onGotoGroup("progress", false)}
+          >
+            <div className="audit-num">{groups.progress.length}</div>
+            <div className="audit-label">진행 중</div>
+          </button>
+          <button
+            type="button"
+            className="audit-cell traj-cell"
+            onClick={() => onGotoGroup("graduated", false)}
+          >
+            <div className="audit-num green">{groups.graduated.length}</div>
+            <div className="audit-label">졸업</div>
+          </button>
+          <button
+            type="button"
+            className="audit-cell traj-cell"
+            onClick={() => onGotoGroup("unstable", true)}
+          >
+            <div className="audit-num">{unattemptedCount}</div>
+            {/* 불안정의 부분집합 — 네 숫자를 합산하면 안 된다 */}
+            <div className="audit-label">미재풀이 · 불안정 중</div>
+          </button>
+        </div>
+        <div className="improve-line">
+          {improvement.eligible > 0 ? (
+            <>
+              틀렸던 {improvement.eligible}건 중 {improvement.improved}건 개선
+              — <b>{Math.round(improvement.rate * 100)}%</b>
+            </>
+          ) : (
+            "아직 재풀이에서 틀린 기록이 없다 — 개선율은 fail 이후에 계산된다"
+          )}
+        </div>
+        <div className="hint">숫자를 탭하면 문제 탭의 해당 그룹으로 간다</div>
+      </Section>
+
+      <Section title="재풀이 포함 태그 변화">
+        {tagTrend.length === 0 && <div className="empty">데이터 없음.</div>}
+        {tagTrend.map((row) => {
+          const lowVolume = row.recent + row.previous < 2;
+          const marker = lowVolume
+            ? ""
+            : row.recent > row.previous
+              ? "up"
+              : row.recent < row.previous
+                ? "down"
+                : "";
+          return (
+            <div key={row.tag} className="trend-row">
+              <span className="bar-label">{row.tag}</span>
+              <div className="trend-bars">
+                <div className="bar-track sm">
+                  <div
+                    className="bar-fill prev"
+                    style={{ width: `${(row.previous / maxTrend) * 100}%` }}
+                  />
+                </div>
+                <div className="bar-track sm">
+                  <div
+                    className="bar-fill"
+                    style={{ width: `${(row.recent / maxTrend) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <span className="trend-counts">
+                {row.previous}→{row.recent}
+              </span>
+              {marker === "up" && (
+                <span className="trend-marker up">↑ 증가</span>
+              )}
+              {marker === "down" && (
+                <span className="trend-marker down">↓ 감소</span>
+              )}
+              <span className="bar-count">{row.total}</span>
+            </div>
+          );
+        })}
+        <div className="hint">
+          직전 14일 → 최근 14일 (기록 + 재풀이 실패). 맨 오른쪽은 전체 발생
+          수 — 전체는 줄 수 없으니 추이는 두 창 비교로 본다
+        </div>
+      </Section>
+
       <Section title="주원인 분포">
         {notes.length === 0 && <div className="empty">데이터 없음.</div>}
         {causeCounts.map(({ cause, count }) => (
@@ -139,7 +260,8 @@ export default function StatsView({ notes, cards, onReplaceAll, onTopicClick }) 
         )}
       </Section>
 
-      <Section title="세부 태그 분포">
+      {/* 최초 기록만 센다 — 재풀이 포함 집계는 위 '태그 변화' 섹션 */}
+      <Section title="최초 기록 세부 태그 분포">
         {tagCounts.length === 0 && <div className="empty">데이터 없음.</div>}
         {tagCounts.map(([tag, count]) => (
           <div key={tag} className="bar-row">

@@ -37,6 +37,8 @@ export default function App() {
   const [editingNoteId, setEditingNoteId] = useState(null);
   // 문제 그리드에서 바로 세션을 시작할 때 넘기는 큐
   const [pendingQueue, setPendingQueue] = useState(null);
+  // 통계 → 문제 탭 그룹 이동 요청 {group, unattemptedOnly}
+  const [problemNavRequest, setProblemNavRequest] = useState(null);
   const [filter, setFilter] = useState({ tag: "", cause: "", topicMain: "" });
 
   useEffect(() => {
@@ -252,6 +254,8 @@ export default function App() {
             cardDueCount={cardDueCount}
             filter={filter}
             setFilter={setFilter}
+            navigationRequest={problemNavRequest}
+            onConsumeNavigationRequest={() => setProblemNavRequest(null)}
             onOpenNote={(id) => {
               setEditingNoteId(id);
               setRecording(true);
@@ -319,6 +323,10 @@ export default function App() {
             cards={cards}
             onReplaceAll={replaceAll}
             onTopicClick={gotoProblemsWithTopic}
+            onGotoGroup={(group, unattemptedOnly) => {
+              setProblemNavRequest({ group, unattemptedOnly });
+              setTab("problems");
+            }}
           />
         )}
       </div>

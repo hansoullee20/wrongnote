@@ -5,6 +5,7 @@ import {
   REVIEW_STATE_LABELS,
   getLastAttempt,
   formatDaysAgo,
+  isUnattempted,
 } from "../review.js";
 import { getImage } from "../imageStore.js";
 import { Chip, TrajectoryDots } from "../components.jsx";
@@ -49,6 +50,8 @@ export default function ProblemsView({
   cardDueCount,
   filter,
   setFilter,
+  navigationRequest,
+  onConsumeNavigationRequest,
   onOpenNote,
   onSolveNote,
   onRecord,
@@ -58,6 +61,23 @@ export default function ProblemsView({
   const [randomSize, setRandomSize] = useState(5);
   // 졸업은 기본 접힘 — 매일 볼 것은 불안정이지 졸업이 아니다
   const [graduatedOpen, setGraduatedOpen] = useState(false);
+  // 통계의 '미재풀이' 탭 진입 — 불안정 중 attempt 0회만 표시
+  const [unattemptedOnly, setUnattemptedOnly] = useState(false);
+
+  /* 통계에서 넘어온 그룹 이동 요청을 소비한다 */
+  useEffect(() => {
+    if (!navigationRequest) return;
+    setUnattemptedOnly(Boolean(navigationRequest.unattemptedOnly));
+    if (navigationRequest.group === "graduated") setGraduatedOpen(true);
+    const group = navigationRequest.group;
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`.review-group.${group}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    onConsumeNavigationRequest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigationRequest]);
 
   const causeCounts = useMemo(() => {
     const map = new Map(CAUSES.map((c) => [c, 0]));
@@ -138,7 +158,12 @@ export default function ProblemsView({
   };
 
   const groupOrder = [
-    { key: "unstable", notes: groups.unstable },
+    {
+      key: "unstable",
+      notes: unattemptedOnly
+        ? groups.unstable.filter(isUnattempted)
+        : groups.unstable,
+    },
     { key: "progress", notes: groups.progress },
     { key: "graduated", notes: groups.graduated },
   ];
@@ -228,6 +253,13 @@ export default function ProblemsView({
             ) : (
               <div className="group-label">
                 {REVIEW_STATE_LABELS[key]} {groupNotes.length}
+                {key === "unstable" && unattemptedOnly && (
+                  <Chip
+                    label="미재풀이만 ✕"
+                    active
+                    onClick={() => setUnattemptedOnly(false)}
+                  />
+                )}
               </div>
             )}
             {open && <div className="prob-grid">{groupNotes.map(renderCard)}</div>}

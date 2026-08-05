@@ -5,6 +5,7 @@
 import {
   GRADUATION_PASS_STREAK,
   TRAJECTORY_LIMIT,
+  TAG_TREND_WINDOW_DAYS,
   DAY_MS,
 } from "./constants.js";
 
@@ -80,6 +81,37 @@ export function buildReviewGroups(notes) {
 export function formatDaysAgo(ts, now = Date.now()) {
   const days = Math.max(0, Math.floor((now - ts) / DAY_MS));
   return days === 0 ? "오늘" : `${days}일 전`;
+}
+
+/**
+ * 태그 발생 이벤트 집계 — 최초 기록(note.ts × note.tags) +
+ * 실패 attempt(attempt.ts × attempt.tags). pass에는 이벤트가 없고,
+ * cause와 세부 tags를 섞지 않는다.
+ * lifetime total은 줄어들 수 없으므로 추이는 두 기간을 비교한다:
+ * recent [now-14d, now] / previous [now-28d, now-14d)
+ */
+export function buildTagTrend(notes, now = Date.now()) {
+  const windowMs = TAG_TREND_WINDOW_DAYS * DAY_MS;
+  const recentStart = now - windowMs;
+  const prevStart = now - 2 * windowMs;
+  const rows = new Map();
+  const bump = (tag, ts) => {
+    const row = rows.get(tag) || { tag, total: 0, recent: 0, previous: 0 };
+    row.total += 1;
+    if (ts >= recentStart && ts <= now) row.recent += 1;
+    else if (ts >= prevStart && ts < recentStart) row.previous += 1;
+    rows.set(tag, row);
+  };
+  for (const n of notes) {
+    for (const t of n.tags || []) bump(t, n.ts);
+    for (const a of getAttempts(n)) {
+      if (a.correct) continue;
+      for (const t of a.tags || []) bump(t, a.ts);
+    }
+  }
+  return [...rows.values()].sort(
+    (x, y) => y.total - x.total || (x.tag < y.tag ? -1 : 1)
+  );
 }
 
 /**
