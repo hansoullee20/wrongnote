@@ -119,15 +119,6 @@ export const FAIL_RECHECK_DAYS = 1;
 // 태그 변화 통계의 비교 창
 export const TAG_TREND_WINDOW_DAYS = 14;
 
-/** 시도 진입 경로 — attempt.source 허용값 */
-export const ATTEMPT_SOURCES = [
-  "scheduled",
-  "random",
-  "manual",
-  "solution_reveal",
-  "legacy",
-];
-
 /**
  * 재검증 대상 판정 — 탭 배지와 풀기 세션이 반드시 같은 기준을 쓴다.
  *

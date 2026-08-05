@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   SUBJECTS,
   CAUSES,
@@ -12,13 +12,8 @@ import {
 import {
   ChipRow,
   MultiChipRow,
-  Chip,
-  TagBadges,
-  Panel,
   Button,
   Field,
-  Badge,
-  NoteImages,
   ExecutionGate,
   AttemptHistory,
 } from "../components.jsx";
@@ -85,16 +80,6 @@ function buildClassifyPrompt(draft) {
   return lines.join("\n");
 }
 
-/** 오버레이에선 시트 헤더가 제목·닫기를 이미 갖고 있어 패널 껍데기가 중복된다 */
-function FormShell({ formOnly, title, open, onToggle, children }) {
-  if (formOnly) return <div className="form-shell">{children}</div>;
-  return (
-    <Panel title={title} open={open} onToggle={onToggle}>
-      {children}
-    </Panel>
-  );
-}
-
 const emptyDraft = (subject = "수학") => ({
   subject,
   cause: "",
@@ -116,17 +101,11 @@ export default function RecordView({
   notes,
   onAdd,
   onUpdate,
-  onDelete,
-  filter,
-  setFilter,
-  formOnly = false,
   initialEditId = null,
   onCancelEdit,
 }) {
   const [draft, setDraft] = useState(() => emptyDraft());
-  const [formOpen, setFormOpen] = useState(true);
   const [checks, setChecks] = useState([false, false, false, false]);
-  const [expandedId, setExpandedId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   // 기록은 2페이지 — 사실을 먼저 적고, 해설은 주원인을 고른 뒤에 본다
   const [step, setStep] = useState(1);
@@ -178,8 +157,6 @@ export default function RecordView({
     setEditingId(n.id);
     setStep(1);
     setChecks([false, false, false, false]); // 게이트는 수정에도 다시 통과해야 함
-    setFormOpen(true);
-    setExpandedId(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -287,55 +264,9 @@ export default function RecordView({
     originalImageIds.current = [];
   };
 
-  // 반복 오류 마커: topicMain+topicSub × 태그 조합 누적 횟수 (렌더 시 파생)
-  const repeatCounts = useMemo(() => {
-    const map = new Map();
-    for (const n of notes) {
-      for (const t of n.tags) {
-        const key = `${n.topicMain}||${n.topicSub}||${t}`;
-        map.set(key, (map.get(key) || 0) + 1);
-      }
-    }
-    return map;
-  }, [notes]);
-
-  const repeatN = (n) => {
-    let max = 0;
-    for (const t of n.tags) {
-      const c = repeatCounts.get(`${n.topicMain}||${n.topicSub}||${t}`) || 0;
-      if (c > max) max = c;
-    }
-    return max >= 2 ? max : 0;
-  };
-
-  const tagsInUse = useMemo(() => {
-    const present = new Set();
-    notes.forEach((n) => n.tags.forEach((t) => present.add(t)));
-    const order = [...CAUSES, ...MATH_ERROR_TAGS];
-    return [
-      ...order.filter((t) => present.has(t)),
-      ...[...present].filter((t) => !order.includes(t)),
-    ];
-  }, [notes]);
-
-  const visible = useMemo(
-    () =>
-      notes.filter(
-        (n) =>
-          (!filter.tag || n.tags.includes(filter.tag)) &&
-          (!filter.topicMain || n.topicMain === filter.topicMain)
-      ),
-    [notes, filter]
-  );
-
   return (
     <div className="view">
-      <FormShell
-        formOnly={formOnly}
-        title={editingId ? "오답 수정 중" : "오답 기록"}
-        open={formOpen}
-        onToggle={() => setFormOpen((o) => !o)}
-      >
+      <div className="form-shell">
         <div className="form">
           <div className="steps">
             <span className={`step${step === 1 ? " on" : ""}`}>
@@ -644,137 +575,7 @@ export default function RecordView({
             </>
           )}
         </div>
-      </FormShell>
-
-      {!formOnly && (
-        <>
-      <div className="filter-row chip-row">
-        <Chip
-          label="전체"
-          active={!filter.tag && !filter.topicMain}
-          onClick={() => setFilter({ tag: "", topicMain: "" })}
-        />
-        {filter.topicMain && (
-          <Chip
-            label={`${filter.topicMain} ✕`}
-            active
-            onClick={() => setFilter((f) => ({ ...f, topicMain: "" }))}
-          />
-        )}
-        {tagsInUse.map((t) => (
-          <Chip
-            key={t}
-            label={t}
-            active={filter.tag === t}
-            onClick={() =>
-              setFilter((f) => ({ ...f, tag: f.tag === t ? "" : t }))
-            }
-          />
-        ))}
       </div>
-
-      <div className="note-list">
-        {visible.length === 0 && (
-          <div className="empty">기록 없음.</div>
-        )}
-        {visible.map((n) => {
-          const N = repeatN(n);
-          const open = expandedId === n.id;
-          return (
-            <div key={n.id} className={`note${open ? " open" : ""}`}>
-              <button
-                type="button"
-                className="note-row"
-                onClick={() => setExpandedId(open ? null : n.id)}
-              >
-                <div className="note-row-head">
-                  <Badge tone="info">{n.subject}</Badge>
-                  <span className="note-prob">{n.problem}</span>
-                  <span className="note-topic">
-                    {n.topicMain}
-                    {n.topicSub ? `·${n.topicSub}` : ""}
-                  </span>
-                  <span className="note-date">{n.date}</span>
-                  {n.images?.length > 0 && (
-                    <span className="photo-count">
-                      📷{n.images.length > 1 ? n.images.length : ""}
-                    </span>
-                  )}
-                  {N > 0 && <span className="repeat-marker">×{N}</span>}
-                </div>
-                {n.question && !open && (
-                  <div className="note-preview">{n.question}</div>
-                )}
-              </button>
-              {open && (
-                <div className="note-detail">
-                  <TagBadges tags={n.tags} />
-                  <NoteImages ids={n.images} />
-                  {n.question && (
-                    <div className="field">
-                      <div className="field-label">문제</div>
-                      <div className="field-text">{n.question}</div>
-                    </div>
-                  )}
-                  {n.mySol && (
-                    <div className="field">
-                      <div className="field-label red">내 풀이</div>
-                      <div className="field-text">{n.mySol}</div>
-                    </div>
-                  )}
-                  {n.optSol && (
-                    <div className="field">
-                      <div className="field-label green">최적 풀이</div>
-                      <div className="field-text">{n.optSol}</div>
-                    </div>
-                  )}
-                  {n.memo && (
-                    <div className="field">
-                      <div className="field-label">메모</div>
-                      <div className="field-text memo-text">{n.memo}</div>
-                    </div>
-                  )}
-                  {n.rechecked && (
-                    <div className="recheck-mark">
-                      <span
-                        className={`grade-mark ${
-                          n.recheckResult === "pass" ? "pass" : "fail"
-                        }`}
-                      >
-                        {n.recheckResult === "pass" ? "○" : "✗"}
-                      </span>{" "}
-                      재검증:{" "}
-                      {n.recheckResult === "pass"
-                        ? "실행 실수 확정"
-                        : "개념 갭 재분류"}
-                    </div>
-                  )}
-                  <div className="note-actions">
-                    <button
-                      type="button"
-                      className="edit-btn"
-                      onClick={() => startEdit(n)}
-                    >
-                      수정
-                    </button>
-                    <button
-                      type="button"
-                      className="del-btn"
-                      onClick={() => {
-                        if (confirm("이 기록을 삭제할까?")) onDelete(n.id);
-                      }}
-                    >
-                      삭제
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-        </>
-      )}
     </div>
   );
 }

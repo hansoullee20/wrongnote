@@ -376,7 +376,6 @@ export default function App() {
           <StatsView
             notes={notes}
             cards={cards}
-            onReplaceAll={replaceAll}
             onTopicClick={gotoProblemsWithTopic}
             onGotoGroup={(group, unattemptedOnly) => {
               setProblemNavRequest({ group, unattemptedOnly });
@@ -460,14 +459,6 @@ export default function App() {
                 setRecording(false);
                 setEditingNoteId(null);
               }}
-              onDelete={(id) => {
-                deleteNote(id);
-                setRecording(false);
-                setEditingNoteId(null);
-              }}
-              filter={filter}
-              setFilter={setFilter}
-              formOnly
               initialEditId={editingNoteId}
               onCancelEdit={() => setEditingNoteId(null)}
             />

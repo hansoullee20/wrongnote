@@ -368,11 +368,6 @@ textarea:focus {
   box-shadow: var(--sh-md);
 }
 
-.card--interactive:active {
-  box-shadow: var(--sh-sm);
-  background: var(--surface-2);
-}
-
 .section {
   padding: var(--sp-4);
   display: flex;
@@ -551,28 +546,6 @@ textarea:focus {
    5. 입력 패널
    ============================================================ */
 
-.panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  box-shadow: var(--sh-md);
-}
-
-.panel-head {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: var(--tap-min);
-  padding: var(--sp-3) var(--sp-4);
-  font-family: var(--font-exam);
-  font-weight: var(--fw-bold);
-  font-size: var(--fs-md);
-  letter-spacing: 0.12em;
-  border-bottom: 1px solid var(--border);
-}
-
 .fold-arrow {
   color: var(--text-muted);
 }
@@ -664,29 +637,6 @@ textarea:focus {
   text-align: center;
 }
 
-.save-btn {
-  width: 100%;
-  min-height: var(--tap-comfy);
-  background: var(--primary);
-  color: var(--text-on-accent);
-  font-weight: var(--fw-semibold);
-  font-size: var(--fs-base);
-  padding: var(--sp-3);
-  border-radius: var(--r-md);
-  box-shadow: var(--sh-sm);
-}
-
-.save-btn:active {
-  background: var(--primary-hover);
-}
-
-.save-btn:disabled {
-  background: var(--sunken);
-  color: var(--text-muted);
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
 /* ============================================================
    7. 노트 리스트
    ============================================================ */
@@ -744,12 +694,6 @@ textarea:focus {
   border-left: 2px solid var(--rule);
 }
 
-.note-subj {
-  color: var(--primary);
-  font-weight: var(--fw-bold);
-  flex-shrink: 0;
-}
-
 .note-prob {
   font-weight: var(--fw-semibold);
   font-size: var(--fs-base);
@@ -758,106 +702,11 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.note-topic {
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 1;
-}
-
 .note-date {
   color: var(--text-muted);
   margin-left: auto;
   flex-shrink: 0;
   font-size: var(--fs-xs);
-}
-
-/* 빨간펜으로 동그라미 친 반복 횟수 */
-.repeat-marker {
-  background: transparent;
-  color: var(--red-pen);
-  font-weight: var(--fw-bold);
-  font-size: var(--fs-sm);
-  line-height: 1;
-  border: 2px solid var(--red-pen);
-  border-radius: var(--r-pill);
-  padding: 3px 9px;
-  flex-shrink: 0;
-}
-
-.note-detail {
-  padding: 0 var(--sp-3) var(--sp-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  border-top: 1px solid var(--border);
-  padding-top: var(--sp-3);
-}
-
-.tag-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-}
-
-.tag-badge {
-  font-size: var(--fs-xs);
-  border: 1px solid var(--border);
-  border-radius: var(--r-pill);
-  padding: 2px 8px;
-  color: var(--text-secondary);
-  background: var(--surface-2);
-}
-
-.field-label {
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-bold);
-  color: var(--text-secondary);
-  margin-bottom: 3px;
-}
-
-.field-label.red {
-  color: var(--error);
-}
-
-.field-label.green {
-  color: var(--success);
-}
-
-.field-text {
-  font-size: var(--fs-sm);
-  line-height: var(--lh-body);
-  white-space: pre-wrap;
-}
-
-.recheck-mark {
-  font-size: var(--fs-xs);
-  color: var(--warning);
-}
-
-.note-actions {
-  display: flex;
-  gap: var(--sp-2);
-  justify-content: flex-end;
-}
-
-.edit-btn {
-  min-height: var(--tap-min);
-  color: var(--blue-pen);
-  font-size: var(--fs-sm);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 6px 16px;
-}
-
-.del-btn {
-  min-height: var(--tap-min);
-  color: var(--error);
-  font-size: var(--fs-sm);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 6px 16px;
 }
 
 .empty {
@@ -871,53 +720,6 @@ textarea:focus {
    8. 재검증
    ============================================================ */
 
-.notice {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--warning);
-  border-radius: var(--r-sm);
-  padding: var(--sp-3);
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-  line-height: 1.5;
-  box-shadow: var(--sh-sm);
-}
-
-.recheck-item {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: var(--sp-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  box-shadow: var(--sh-sm);
-}
-
-.rc-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--fs-sm);
-}
-
-.rc-question {
-  font-size: var(--fs-sm);
-  line-height: var(--lh-body);
-  white-space: pre-wrap;
-}
-
-.rc-actions {
-  display: flex;
-  gap: var(--sp-2);
-}
-
-.rc-actions .btn {
-  flex: 1;
-  font-size: var(--fs-sm);
-  padding: 10px 6px;
-}
-
 .io-row .btn {
   flex: 1;
   font-size: var(--fs-sm);
@@ -926,28 +728,6 @@ textarea:focus {
 .ocr-row .btn {
   flex: 1;
   font-size: var(--fs-sm);
-}
-
-.rc-pass,
-.rc-fail {
-  flex: 1;
-  min-height: var(--tap-min);
-  padding: 10px 6px;
-  border-radius: var(--r-sm);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-}
-
-.rc-pass {
-  background: var(--success-soft);
-  border: 1px solid var(--success);
-  color: var(--success);
-}
-
-.rc-fail {
-  background: var(--error-soft);
-  border: 1px solid var(--error);
-  color: var(--error);
 }
 
 /* ============================================================
@@ -1037,36 +817,9 @@ textarea:focus {
   color: var(--text-muted);
 }
 
-.next-btn {
-  width: 100%;
-  min-height: var(--tap-min);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: var(--sp-3);
-  font-weight: var(--fw-semibold);
-  box-shadow: var(--sh-sm);
-}
-
 /* ============================================================
    10. 통계
    ============================================================ */
-
-.stats-section {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: var(--sp-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  box-shadow: var(--sh-md);
-}
-
-.stats-title {
-  font-size: var(--fs-md);
-  font-weight: var(--fw-semibold);
-}
 
 .bar-row {
   display: flex;
@@ -1362,17 +1115,6 @@ textarea:focus {
   gap: var(--sp-2);
 }
 
-.io-btn {
-  flex: 1;
-  min-height: var(--tap-min);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 11px 6px;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-}
-
 .io-error {
   color: var(--error);
   font-size: var(--fs-sm);
@@ -1382,32 +1124,9 @@ textarea:focus {
    11. 필터 & OCR
    ============================================================ */
 
-.filter-row {
-  padding: 2px 0;
-}
-
 .ocr-row {
   display: flex;
   gap: var(--sp-2);
-}
-
-.ocr-btn {
-  flex: 1;
-  min-height: var(--tap-min);
-  background: var(--info-soft);
-  border: 1px dashed var(--info);
-  border-radius: var(--r-sm);
-  padding: 11px 6px;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--info);
-}
-
-.ocr-btn:disabled {
-  color: var(--text-muted);
-  border-color: var(--border);
-  background: var(--surface-2);
-  cursor: wait;
 }
 
 /* ============================================================
@@ -1428,14 +1147,6 @@ textarea:focus {
   border-color: var(--warning);
   box-shadow: var(--sh-md);
 }
-
-.note-detail .field-text.memo-text {
-  font-size: var(--fs-sm);
-  background: var(--highlight);
-  border-radius: var(--r-sm);
-  padding: var(--sp-2) var(--sp-3);
-  display: inline-block;
-  }
 
 /* 채점 결과는 조용히 자리를 잡는다 — 도장 흉내 대신 짧은 등장 */
 @keyframes settle-in {
@@ -1533,53 +1244,10 @@ textarea:focus {
 }
 
 /* 접힌 노트 행의 사진 표시 */
-.photo-count {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
 
 /* 노트 상세/재검증의 사진: 폴라로이드처럼 살짝 기울여 붙임 */
-.note-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
-}
-
-.note-image-thumb {
-  padding: var(--sp-1);
-  background: var(--paper);
-  border: 1px solid var(--border);
-  box-shadow: var(--sh-md);
-  border-radius: var(--r-sm);
-}
-
-.note-image-thumb img {
-  max-height: 220px;
-  max-width: 100%;
-  display: block;
-  border-radius: 1px;
-}
 
 /* 전체 화면 보기 */
-.lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: rgba(26, 23, 20, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--sp-4);
-  cursor: zoom-out;
-}
-
-.lightbox img {
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: var(--r-sm);
-  box-shadow: var(--sh-lg);
-}
 
 /* ============================================================
    12. 태블릿 미디어
@@ -1607,10 +1275,6 @@ textarea:focus {
   .form {
     gap: var(--sp-4);
     padding: 0 var(--sp-5) var(--sp-5);
-  }
-
-  .panel-head {
-    padding: var(--sp-4) var(--sp-5);
   }
 
   .flashcard {
@@ -1886,12 +1550,6 @@ textarea:focus {
   font-size: var(--fs-base);
   font-weight: var(--fw-bold);
   color: var(--text);
-}
-
-.prob-try {
-  font-size: 11px;
-  color: var(--blue-pen);
-  margin-left: 6px;
 }
 
 .prob-topic {

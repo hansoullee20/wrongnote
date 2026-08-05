@@ -1,6 +1,6 @@
 // 스키마 버전 & 마이그레이션 — 전부 순수 함수, 몇 번 돌려도 같은 결과(idempotent)
 
-import { LEGACY_CAUSE_MAP, LEGACY_DROPPED_TAG, CAUSES } from "./constants.js";
+import { LEGACY_CAUSE_MAP, CAUSES } from "./constants.js";
 
 export const SCHEMA_VERSION = 5; // v5: 시도별 실패 원인 (attempt superset)
 

@@ -11,7 +11,6 @@ import { Section } from "../components.jsx";
 export default function StatsView({
   notes,
   cards,
-  onReplaceAll,
   onTopicClick,
   onGotoGroup,
 }) {
