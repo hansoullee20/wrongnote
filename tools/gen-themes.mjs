@@ -70,6 +70,16 @@ ${tokens(def.day, "light")}
 ${shadows(false)}
 }`);
 
+/* 야간 기본값. data-theme만 있고 data-palette가 없거나 모르는 값일 때
+   (구버전에서 남은 id 등) 주간 색으로 떨어지지 않게 한다.
+   :root[data-palette=...] 와 특이도가 같으므로 반드시 그 앞에 온다 —
+   팔레트가 유효하면 [data-palette][data-theme] 블록이 더 높은 특이도로 이긴다. */
+blocks.push(`/* 야간 기본값 — 팔레트를 모르는 상태에서도 어둡게 */
+:root[data-theme="dark"] {
+${tokens(def.night, "dark")}
+${shadows(true)}
+}`);
+
 for (const p of PALETTES) {
   blocks.push(`/* ${p.name} — ${p.desc} · 주간 */
 :root[data-palette="${p.id}"] {

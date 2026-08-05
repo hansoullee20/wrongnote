@@ -27,6 +27,11 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm test
+      # 색 대비 4.5:1 게이트 — 팔레트 전 조합을 실제로 계산해서 검사한다
+      - run: npm run contrast
+      # themes.css는 생성물이다. 손으로 고쳤거나 palettes.js만 바꾸고
+      # `npm run themes`를 안 돌렸으면 여기서 잡힌다 (조용히 배포되면 안 된다).
+      - run: npm run themes && git diff --exit-code src/themes.css
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

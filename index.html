@@ -5,6 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- 주간 지면색. 야간 전환 시 App이 이 값을 바꿔 상태표시줄까지 맞춘다 -->
     <meta name="theme-color" content="#FBF7EF" />
+    <!--
+      첫 페인트 전에 팔레트·주야를 확정한다.
+      App의 테마 이펙트는 페인트 뒤에 돌기 때문에, 이 스크립트가 없으면
+      야간 사용자가 앱을 켤 때마다 주간 크림색이 한 번 번쩍인다 —
+      어두운 방에서 태블릿으로 보면 그게 제일 눈부시다.
+      폴백 규칙은 src/App.jsx의 initialTheme/initialPalette와 같아야 한다.
+      번들보다 먼저 돌아 palettes.js를 못 읽으므로 기본 팔레트 id만 하드코딩한다
+      (모르는 id가 와도 themes.css의 야간 기본값이 받아준다).
+      마운트 뒤의 단일 소스는 계속 App이다. 여기선 번쩍임만 막는다.
+    -->
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("wr_theme");
+          if (theme !== "light" && theme !== "dark") {
+            theme = window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          }
+          var root = document.documentElement;
+          root.setAttribute("data-theme", theme);
+          // DEFAULT_PALETTE (src/palettes.js)
+          root.setAttribute(
+            "data-palette",
+            localStorage.getItem("wr_palette") || "warm"
+          );
+        } catch (e) {
+          /* localStorage 차단(프라이빗 모드 등) — 기본값 그대로 간다 */
+        }
+      })();
+    </script>
     <link
       rel="preload"
       href="/fonts/PretendardVariable.woff2"

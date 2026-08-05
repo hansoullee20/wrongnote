@@ -9,9 +9,12 @@ async function classifyFail(page, cause = "개념 부족") {
 }
 
 /** 정답이 있는 노트 하나만 남기고 나머지를 치운다 — 큐를 예측 가능하게 */
-async function seedOneSolvable(page, { correctAnswer = "③" } = {}) {
+async function seedOneSolvable(
+  page,
+  { correctAnswer = "③", optSol = "이렇게 푸는 게 빠르다" } = {}
+) {
   await page.goto("/");
-  await page.evaluate((ans) => {
+  await page.evaluate(({ ans, opt }) => {
     localStorage.clear();
     localStorage.setItem(
       "wr_notes",
@@ -23,7 +26,7 @@ async function seedOneSolvable(page, { correctAnswer = "③" } = {}) {
           topicSub: "접선",
           question: "다시 풀 문제 원문",
           mySol: "처음에 이렇게 틀렸다",
-          optSol: "이렇게 푸는 게 빠르다",
+          optSol: opt,
           cause: "실행 실수",
           correctAnswer: ans,
           myAnswer: "②",
@@ -38,7 +41,7 @@ async function seedOneSolvable(page, { correctAnswer = "③" } = {}) {
       ])
     );
     localStorage.setItem("wr_cards", JSON.stringify([]));
-  }, correctAnswer);
+  }, { ans: correctAnswer, opt: optSol });
   await page.reload();
   await page.getByRole("button", { name: /^문제/ }).waitFor();
   await page.waitForTimeout(300);
@@ -152,6 +155,31 @@ test.describe("다시 풀기 세션", () => {
     await page.click(".today-go");
     await expect(page.locator(".solve-head")).toBeVisible();
     await expect(page.locator(".solve-prog")).toContainText("1 / 1");
+  });
+
+  /* 채점 결과에서 '지금 추가' → 기록 시트 → 삭제로 노트를 지울 수 있다.
+     예전엔 복구 이펙트가 solving 페이즈만 봐서, 버튼이 하나도 없는
+     '문제 없음.' 화면에 갇혔다 (탭으로 빠져나가면 세션 결과가 날아갔다). */
+  test("풀기 도중 노트가 삭제되면 요약으로 빠진다 — 막다른 화면 없음", async ({
+    page,
+  }) => {
+    await seedOneSolvable(page, { optSol: "" }); // 비어야 '지금 추가'가 뜬다
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await expect(page.locator(".verdict-stamp.ok")).toBeVisible();
+
+    page.on("dialog", (d) => d.accept());
+    await page.click(".reveal.empty-sol .callout-act");
+    await page.locator(".sheet .form").first().waitFor();
+    await page.click(".sheet-delete");
+
+    // 요약으로 넘어가고, 지우기 전까지 쌓인 결과는 살아 있어야 한다
+    await expect(page.locator(".sum-head")).toBeVisible();
+    await expect(page.locator(".sum-score")).toContainText("1");
+    await expect(page.locator(".view .empty")).toHaveCount(0);
   });
 });
 

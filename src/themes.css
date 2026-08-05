@@ -49,6 +49,53 @@
   --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
 }
 
+/* 야간 기본값 — 팔레트를 모르는 상태에서도 어둡게 */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1a1714;
+  --paper: #221e1a;
+  --surface: #221e1a;
+  --surface-2: #2a251f;
+  --sunken: #29241f;
+  --border: #322c25;
+  --border-strong: #4a4238;
+  --rule: #322c25;
+
+  --text: #e8e1d5;
+  --text-secondary: #b4a897;
+  --text-muted: #978b7a;
+  --text-on-accent: #221e1a;
+
+  --red-pen: #e0806c;
+  --red-pen-soft: #2e211d;
+  --blue-pen: #c4b48e;
+  --blue-pen-soft: #262117;
+  --pencil: #978b7a;
+  --highlight: #302816;
+  --highlight-strong: #5e4e28;
+
+  --action: #d9a05b;
+  --action-hover: #e5b375;
+  --on-action: #221e1a;
+
+  --primary: var(--red-pen);
+  --primary-hover: #e0806c;
+  --primary-soft: var(--red-pen-soft);
+  --success: #95ae84;
+  --success-soft: #232b1f;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #d9a05b;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
 /* 미색 — 따뜻한 종이 · 주간 */
 :root[data-palette="warm"] {
   color-scheme: light;

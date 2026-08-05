@@ -115,6 +115,58 @@ test.describe("야간 모드", () => {
     });
     expect(fab).not.toBe("rgba(0, 0, 0, 0)");
   });
+
+  /* App의 테마 이펙트는 첫 페인트 뒤에 돈다. index.html의 부트스트랩
+     스크립트가 없으면 야간 사용자는 켤 때마다 주간 크림색이 번쩍인다 —
+     어두운 방에서 태블릿으로 보면 그게 제일 눈부시다. */
+  test("야간 저장 상태면 첫 페인트부터 어둡다 — 주간 번쩍임 없음", async ({
+    page,
+  }) => {
+    await freshApp(page);
+    await page.evaluate(() => localStorage.setItem("wr_theme", "dark"));
+
+    // 스타일시트는 적용됐고 React 이펙트는 아직 안 돈 시점을 잡는다
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        window.__beforeMount = {
+          theme: document.documentElement.getAttribute("data-theme"),
+          bg: getComputedStyle(document.documentElement)
+            .getPropertyValue("--bg")
+            .trim(),
+        };
+      });
+    });
+
+    await page.reload();
+    await page.locator('.tab:has-text("문제")').waitFor();
+
+    const before = await page.evaluate(() => window.__beforeMount);
+    const afterBg = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--bg").trim()
+    );
+
+    expect(before.theme).toBe("dark");
+    // 마운트 전후 배경색이 같아야 번쩍임이 없는 것이다
+    expect(before.bg).toBe(afterBg);
+  });
+
+  /* 모르는 팔레트 id(구버전 잔재 등)가 남아 있어도 야간은 야간이어야 한다 */
+  test("팔레트 id를 몰라도 야간 기본값으로 떨어진다", async ({ page }) => {
+    await freshApp(page);
+    await page.evaluate(() => {
+      localStorage.setItem("wr_theme", "dark");
+      localStorage.setItem("wr_palette", "존재하지-않는-팔레트");
+    });
+    await page.reload();
+
+    const bg = await page.evaluate(() => {
+      document.documentElement.setAttribute("data-palette", "존재하지-않는-팔레트");
+      return getComputedStyle(document.documentElement)
+        .getPropertyValue("--bg")
+        .trim();
+    });
+    expect(bg).toBe("#1a1714"); // 주간 크림(#e7ddcb)이 아니라 야간 숯빛
+  });
 });
 
 test.describe("화면 색 팔레트", () => {
