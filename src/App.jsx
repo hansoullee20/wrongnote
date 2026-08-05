@@ -41,10 +41,14 @@ export default function App() {
   const [boot] = useState(loadAll);
   const [theme, setTheme] = useState(initialTheme);
 
-  /* 항상 light/dark 중 하나를 명시한다 — 브라우저가 임의로 색을 뒤집지 않게 */
+  /* 항상 light/dark 중 하나를 명시한다 — 브라우저가 임의로 색을 뒤집지 않게.
+     상태표시줄 색(theme-color)도 같이 맞춰야 안드로이드에서 위쪽만 딴 색으로 뜨지 않는다. */
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(THEME_KEY, theme);
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", theme === "dark" ? "#221E1A" : "#FBF7EF");
   }, [theme]);
   const [notes, setNotes] = useState(boot.notes);
   const [cards, setCards] = useState(boot.cards);
