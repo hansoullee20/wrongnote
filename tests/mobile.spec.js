@@ -128,7 +128,7 @@ test.describe("화면 색 팔레트", () => {
       )
     ).toBe("warm");
 
-    await page.click('.tab:has-text("통계")');
+    await page.click(".settings-open");
     await page.click('.palette-card:has-text("세이지")');
 
     await expect
@@ -156,9 +156,9 @@ test.describe("화면 색 팔레트", () => {
 
   test("팔레트와 낮·밤은 서로 독립이다", async ({ page }) => {
     await freshApp(page);
-    await page.click('.tab:has-text("통계")');
+    await page.click(".settings-open");
     await page.click('.palette-card:has-text("흐린 하늘")');
-    await page.click('.tab:has-text("문제")');
+    await page.click(".sheet-close");
 
     const read = () =>
       page.evaluate(() => {
@@ -183,7 +183,7 @@ test.describe("화면 색 팔레트", () => {
 
   test("theme-color가 고른 팔레트의 지면색을 따라간다", async ({ page }) => {
     await freshApp(page);
-    await page.click('.tab:has-text("통계")');
+    await page.click(".settings-open");
     await page.click('.palette-card:has-text("자두")');
 
     await expect

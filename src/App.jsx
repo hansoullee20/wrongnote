@@ -18,6 +18,7 @@ import RecordView from "./views/RecordView.jsx";
 import SolveView from "./views/SolveView.jsx";
 import CardsView from "./views/CardsView.jsx";
 import StatsView from "./views/StatsView.jsx";
+import SettingsView from "./views/SettingsView.jsx";
 
 const TABS = [
   { id: "problems", label: "문제" },
@@ -70,6 +71,8 @@ export default function App() {
   const [tab, setTab] = useState("problems");
   // 기록 폼은 탭이 아니라 오버레이 — 매일 하는 건 복습이고 기록은 가끔이다
   const [recording, setRecording] = useState(false);
+  // 설정도 오버레이 — 탭은 데이터에만 쓴다
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   // 문제 그리드에서 바로 세션을 시작할 때 넘기는 큐
   const [pendingQueue, setPendingQueue] = useState(null);
@@ -266,6 +269,14 @@ export default function App() {
         >
           {theme === "dark" ? "☀" : "☾"}
         </button>
+        <button
+          type="button"
+          className="theme-toggle settings-open"
+          aria-label="설정"
+          onClick={() => setSettingsOpen(true)}
+        >
+          ⚙
+        </button>
       </header>
 
       <nav className="tabs">
@@ -367,9 +378,6 @@ export default function App() {
             cards={cards}
             onReplaceAll={replaceAll}
             onTopicClick={gotoProblemsWithTopic}
-            palette={palette}
-            onSetPalette={setPalette}
-            theme={theme}
             onGotoGroup={(group, unattemptedOnly) => {
               setProblemNavRequest({ group, unattemptedOnly });
               setTab("problems");
@@ -377,6 +385,34 @@ export default function App() {
           />
         )}
       </div>
+
+      {settingsOpen && (
+        <div className="sheet">
+          <div className="sheet-head">
+            <span className="sheet-title">설정</span>
+            <div className="sheet-actions">
+              <button
+                type="button"
+                className="sheet-close"
+                onClick={() => setSettingsOpen(false)}
+              >
+                닫기 ✕
+              </button>
+            </div>
+          </div>
+          <div className="sheet-body">
+            <SettingsView
+              notes={notes}
+              cards={cards}
+              onReplaceAll={replaceAll}
+              palette={palette}
+              onSetPalette={setPalette}
+              theme={theme}
+              onSetTheme={setTheme}
+            />
+          </div>
+        </div>
+      )}
 
       {recording && (
         <div className="sheet">

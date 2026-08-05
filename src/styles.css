@@ -1334,6 +1334,29 @@ textarea:focus {
   color: var(--text-muted);
 }
 
+/* 주간/야간 두 갈래 스위치 — 설정 안에서는 상태가 눈에 보여야 한다 */
+.mode-switch {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.mode-switch-btn {
+  flex: 1;
+  min-height: var(--tap-min);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.mode-switch-btn.on {
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--on-action);
+}
+
 .io-row {
   display: flex;
   gap: var(--sp-2);
