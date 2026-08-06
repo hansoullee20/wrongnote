@@ -1,0 +1,44 @@
+name: PR checks
+
+# 이 리포는 오랫동안 main push에만 CI가 걸려 있었다 — 즉 머지가 곧 배포였고,
+# 리뷰와 로컬 테스트에 강제력이 없었다. 이 워크플로가 그걸 막는다.
+# 배포는 하지 않는다. 배포는 deploy.yml이 main push에서만 한다.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 같은 PR에 새 커밋이 오면 이전 실행은 취소한다 (배포와 달리 끝까지 둘 이유가 없다)
+concurrency:
+  group: pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      # 아래 두 게이트는 deploy.yml과 **같아야 한다**. 여기서 빠지면
+      # PR이 초록불인데 머지 직후 main 배포가 깨진다.
+      - run: npm run contrast
+      - run: npm run themes && git diff --exit-code src/themes.css
+      - run: npm run build
+      # 실패한 실행을 눈으로 확인할 수 있게 아티팩트를 남긴다
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+          if-no-files-found: ignore
