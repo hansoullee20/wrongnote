@@ -129,6 +129,18 @@ export const TAG_TREND_WINDOW_DAYS = 14;
 export const isRecheckDue = (n, now = Date.now()) =>
   now >= (n.nextRecheckTs ?? n.ts + RECHECK_DAYS * DAY_MS);
 
+/**
+ * 노트가 참조하는 모든 IDB 이미지 id — 문제 사진 + 풀이 사진.
+ *
+ * 사진 필드가 둘(images, solutionImages)이라 수명주기를 다루는 곳은 반드시
+ * 이 함수를 거쳐야 한다. 예전엔 삭제·GC·내보내기가 각자 n.images만 봐서,
+ * solutionImages가 채워지는 순간 GC가 살아 있는 사진을 지웠다.
+ */
+export const noteImageIds = (n) => [
+  ...(n?.images || []),
+  ...(n?.solutionImages || []),
+];
+
 export const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()

@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { PALETTES } from "../palettes.js";
+import { noteImageIds } from "../constants.js";
 import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
 import { exportImages, importImages } from "../imageStore.js";
 import { Section, Button } from "../components.jsx";
@@ -24,8 +25,8 @@ export default function SettingsView({
     const d = new Date();
     const p = (n) => String(n).padStart(2, "0");
     const name = `wr_backup_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
-    // 첨부 사진(base64)까지 포함한 완전 백업
-    const images = await exportImages(notes.flatMap((n) => n.images || []));
+    // 첨부 사진(base64)까지 포함한 완전 백업 — 문제 사진 + 풀이 사진
+    const images = await exportImages(notes.flatMap(noteImageIds));
     downloadJSON(name, { ...exportEnvelope(notes, cards), images });
   }
 
@@ -44,7 +45,7 @@ export default function SettingsView({
         );
         if (!ok) return;
         // 교체 직전 기존 데이터 자동 백업 다운로드 (사진 포함)
-        const curImages = await exportImages(notes.flatMap((n) => n.images || []));
+        const curImages = await exportImages(notes.flatMap(noteImageIds));
         downloadJSON("wr_backup_before_import.json", {
           ...exportEnvelope(notes, cards),
           images: curImages,

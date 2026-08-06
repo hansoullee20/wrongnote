@@ -6,6 +6,7 @@ import {
   fmtDate,
   uid,
   isRecheckDue,
+  noteImageIds,
   CAUSES,
 } from "./constants.js";
 import { loadAll, saveNotes, saveCards } from "./storage.js";
@@ -163,9 +164,10 @@ export default function App() {
   }
 
   function deleteNote(id) {
-    // 노트의 첨부 사진도 IDB에서 정리
+    // 노트의 첨부 사진도 IDB에서 정리 (문제 사진 + 풀이 사진)
     const target = notes.find((n) => n.id === id);
-    if (target?.images?.length) deleteImages(target.images);
+    const ids = noteImageIds(target);
+    if (ids.length) deleteImages(ids);
     setNotes((ns) => ns.filter((n) => n.id !== id));
     // 이 노트에서 자동 생성된 카드도 정리 (수동 카드는 noteId=null이라 생존)
     setCards((cs) => cs.filter((c) => c.noteId !== id));
@@ -246,8 +248,9 @@ export default function App() {
   function replaceAll(newNotes, newCards) {
     setNotes(newNotes);
     setCards(newCards);
-    // 가져온 노트가 참조하지 않는 고아 사진 정리
-    gcImages(newNotes.flatMap((n) => n.images || []));
+    // 가져온 노트가 참조하지 않는 고아 사진 정리.
+    // 풀이 사진을 빠뜨리면 GC가 살아 있는 사진을 지운다 — 누수가 아니라 손실이다.
+    gcImages(newNotes.flatMap(noteImageIds));
   }
 
   function gotoProblemsWithTopic(topicMain) {
