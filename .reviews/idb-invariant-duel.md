@@ -51,7 +51,7 @@ IDB와 localStorage는 **다른 저장소이고 쿼터도 따로**라, localStor
 | | 내용 | 상태 |
 |---|---|---|
 | **D** | IDB 파괴 순서 | **D-min만 완료** (`5d385af`). 근본 수정 D-gc는 미착수 |
-| **E** | notes+cards 단일 내구성 단위 (고아 카드) | ⬜ 미착수 · **high** ← 다음 |
+| **E** | notes+cards 단일 내구성 단위 (고아 카드) | ⬜ **Tier 2로 확정** · high · §E-2 참고 |
 | **F** | `putImage` try/catch + `importImages` 실패 반환 | ✅ 완료 (`508cad9`, `29cf671`, `d2e71fd`) |
 | **G** | 배너 중복 제거 + `role="alert"` | ✅ 완료 (`5d385af`) |
 | **H** | 테스트 보강 (사용 중 실패·부분 실패·IDB 쿼터) | 🔶 부분 — IDB 쿼터는 F에서 추가됨 |
@@ -140,3 +140,49 @@ f532785 fix: 저장소 쓰기 실패에 앱이 죽지 않는다 — 파싱 실�
 그 다음 D-gc를 Tier 2로 — 반드시 §5 안전 3조건과 함께.
 
 관련 문서: `CODEX_HANDOFF_CLEANUP.md` §11 표, §11.1
+
+---
+
+## E-2 — Tier 2 확정 (DEBATE 합의, 2026-08-06)
+
+**결론: 중간 완화(ref 게이트) 없이 바로 Tier 2.**
+
+### 왜 ref 게이트를 안 하나
+
+- ref는 `addNote`의 `notes → cards` **한 방향만** 막는다
+- `deleteNote`는 notes에서 노트를, cards에서 연결 카드를 지운다 →
+  **notes 성공 / cards 실패**면 재시작 후 옛 카드가 없는 noteId를 가리킨다.
+  `replaceAll`도 동일. 즉 **역방향도 고아를 만들고 ref는 E를 닫지 못한다**
+- D-min을 중간 완화로 넣은 것과 판단이 다른 이유: D는 **영구 손실**(blob)이고
+  E는 **불일치**(카드 삭제로 복구 가능)다. 임시 경로의 구현·리뷰 비용이
+  E-2에서 곧 걷힐 코드에 붙는다
+
+### 왜 Tier 2인가 (CLAUDE.md: data/risky)
+
+새 권위키 `wr_state` 도입 + legacy 전환 + fallback + `readNotes`/`readCards`
+헬퍼 변경 + `migration.spec` 전면 조정. 저장 스키마 변경이고
+`SCHEMA_VERSION`·`wr_backup_v{n}` 규약이 걸린 영역이다.
+
+### 설계 방향 (Codex 초안, 합의됨)
+
+`{version, notes, cards}`를 단일 키 `wr_state`에 저장. 한 `setItem`의
+성공/실패가 두 배열에 함께 적용된다. `saveNotes`/`saveCards` → `saveState` 하나.
+`App`의 두 저장 이펙트 → `[notes, cards, storageLocked]` 의존 단일 이펙트.
+레거시 키는 **삭제하지 않는다** (삭제 실패를 새 위험으로 만들지 않는다).
+
+### ⚠️ Tier 2 계획이 반드시 답해야 할 3가지 (DEBATE에서 도출)
+
+1. **최초 전환 쓰기가 quota로 실패하면?** state=absent + legacy=present가 지속된다.
+   매 부팅 재시도라 손실은 아니지만, `wr_backup_v{n}` 스냅샷 조건
+   (`storedVersion < SCHEMA_VERSION && backupKey === null`)과의 상호작용,
+   그리고 legacy→state 전환을 '버전 승격'으로 볼지가 미정이다
+2. **이미 존재하는 고아 카드**는 E-2로도 안 사라진다. 자동삭제는 손실 위험이라
+   **비파괴 탐지/진단**만 할지 무시할지가 설계 결정이다
+3. **테스트 트랩 확장 필요.** 현재 `installQuotaTrap`은 `BLOCKED` 배열 하드코딩 +
+   단일 on/off라 **키별로 막을 수 없다.** `armQuota(page, keys)`로 바꿔야
+   'wr_notes만 실패 / wr_cards는 성공' 같은 고아 재현이 가능하다
+
+### Tier 2 절차
+
+CLAUDE.md대로 **양쪽이 전체 계획을 쓰고** 비교 → 발산 지점만 논쟁 → Han 판단 →
+실행 → 계획 안 쓴 쪽이 리뷰 → **DEBATE 필수**(Tier 2는 심각도 무관) → CI 검증.
