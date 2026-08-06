@@ -29,7 +29,8 @@ export default function SettingsView({
   palette,
   onSetPalette,
   theme,
-  onSetTheme,
+  themePreference = "system",
+  onSetThemePreference,
 }) {
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
@@ -150,7 +151,12 @@ export default function SettingsView({
                   <i style={{ background: c.act }} />
                   <i style={{ background: c.fail }} />
                 </span>
-                <span className="palette-name">{p.name}</span>
+                {/* 선택 표시를 색에만 의존하지 않는다 — 테두리 색만으로는
+                    색각 차이가 있거나 대비가 낮은 팔레트에서 안 보인다. */}
+                <span className="palette-name">
+                  {palette === p.id && <span aria-hidden="true">✓ </span>}
+                  {p.name}
+                </span>
                 <span className="palette-desc">{p.desc}</span>
               </button>
             );
@@ -159,24 +165,35 @@ export default function SettingsView({
       </Section>
 
       <Section title="낮 · 밤">
+        {/* 선택은 셋, 화면에 찍히는 값은 여전히 둘이다.
+            "시스템 설정"은 기기 설정을 계속 따라간다 — 앱을 켜둔 채로
+            기기가 바뀌어도 즉시 반영된다. */}
         <div className="mode-switch">
           {[
+            { id: "system", label: "⚙ 시스템 설정" },
             { id: "light", label: "☀ 주간" },
             { id: "dark", label: "☾ 야간" },
           ].map((m) => (
             <button
               key={m.id}
               type="button"
-              className={`mode-switch-btn${theme === m.id ? " on" : ""}`}
-              aria-pressed={theme === m.id}
-              onClick={() => onSetTheme(m.id)}
+              className={`mode-switch-btn${themePreference === m.id ? " on" : ""}`}
+              aria-pressed={themePreference === m.id}
+              onClick={() => onSetThemePreference(m.id)}
             >
               {m.label}
             </button>
           ))}
         </div>
+        {/* 시스템을 고르면 "지금 뭐로 해석됐는지"를 알려준다 —
+            안 그러면 왜 어두운지/밝은지 알 방법이 없다. */}
+        {themePreference === "system" && (
+          <div className="hint resolved-theme">
+            현재 기기 설정: {theme === "dark" ? "야간" : "주간"}
+          </div>
+        )}
         <div className="hint">
-          맨 위 ☾ 버튼으로도 바로 바꿀 수 있다. 처음엔 기기 설정을 따른다
+          맨 위 ☾ 버튼을 누르면 주간·야간으로 고정된다
         </div>
       </Section>
 

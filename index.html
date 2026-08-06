@@ -18,7 +18,14 @@
     <script>
       (function () {
         try {
-          var theme = localStorage.getItem("wr_theme");
+          /* 저장값은 system|light|dark. system(그리고 미설정·읽기 실패)은
+             기기 설정으로 해석한다. localStorage가 막힌 환경에서도 야간
+             사용자가 흰 화면 번쩍임을 보지 않도록 읽기를 따로 감싼다. */
+          var saved = null;
+          try {
+            saved = localStorage.getItem("wr_theme");
+          } catch (e) {}
+          var theme = saved;
           if (theme !== "light" && theme !== "dark") {
             theme = window.matchMedia("(prefers-color-scheme: dark)").matches
               ? "dark"

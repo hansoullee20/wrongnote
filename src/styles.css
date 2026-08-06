@@ -1090,11 +1090,12 @@ textarea:focus {
 /* 주간/야간 두 갈래 스위치 — 설정 안에서는 상태가 눈에 보여야 한다 */
 .mode-switch {
   display: flex;
+  flex-wrap: wrap; /* 3개로 늘어 좁은 화면에서 글자가 꺾이지 않게 */
   gap: var(--sp-2);
 }
 
 .mode-switch-btn {
-  flex: 1;
+  flex: 1 1 96px; /* 세 칸이 안 들어가면 줄바꿈, 각 칸은 탭하기 충분한 폭 유지 */
   min-height: var(--tap-min);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
