@@ -10,7 +10,13 @@ import {
   shuffle,
   CAUSES,
 } from "./constants.js";
-import { loadAll, saveNotes, saveCards } from "./storage.js";
+import {
+  loadAll,
+  saveNotes,
+  saveCards,
+  savePref,
+  WRITE_ERROR_MESSAGE,
+} from "./storage.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
 import { deleteImages, gcImages } from "./imageStore.js";
@@ -59,8 +65,11 @@ export default function App() {
     const root = document.documentElement;
     root.setAttribute("data-theme", theme);
     root.setAttribute("data-palette", palette);
-    localStorage.setItem(THEME_KEY, theme);
-    localStorage.setItem(PALETTE_KEY, palette);
+    /* 꽉 찬 저장소에서 ☾ 한 번에 앱이 죽으면 안 된다. 설정은 사용자 데이터가
+       아니라 취향이라 저장 실패해도 화면에는 적용하고 조용히 넘어간다 —
+       배너는 노트/카드 저장 실패가 띄운다. */
+    savePref(THEME_KEY, theme);
+    savePref(PALETTE_KEY, palette);
 
     const p = PALETTES.find((x) => x.id === palette) ?? PALETTES[0];
     document
@@ -69,7 +78,12 @@ export default function App() {
   }, [theme, palette]);
   const [notes, setNotes] = useState(boot.notes);
   const [cards, setCards] = useState(boot.cards);
-  const storageLocked = Boolean(boot.error);
+  /* 두 실패는 성격이 다르다 — storage.js의 loadAll 주석 참고.
+     parseError: 메모리가 비어 있다 → 내보내기까지 막는다 (빈 백업 방지)
+     writeError: 메모리는 온전하다 → 내보내기는 열어둔다 (유일한 구조 수단) */
+  const parseError = boot.error;
+  const [writeError, setWriteError] = useState(boot.writeError);
+  const storageLocked = Boolean(parseError) || Boolean(writeError);
   const [tab, setTab] = useState("problems");
   // 기록 폼은 탭이 아니라 오버레이 — 매일 하는 건 복습이고 기록은 가끔이다
   const [recording, setRecording] = useState(false);
@@ -83,10 +97,12 @@ export default function App() {
   const [filter, setFilter] = useState({ tag: "", cause: "", topicMain: "" });
 
   useEffect(() => {
-    if (!storageLocked) saveNotes(notes);
+    if (storageLocked) return;
+    if (!saveNotes(notes)) setWriteError(WRITE_ERROR_MESSAGE);
   }, [notes, storageLocked]);
   useEffect(() => {
-    if (!storageLocked) saveCards(cards);
+    if (storageLocked) return;
+    if (!saveCards(cards)) setWriteError(WRITE_ERROR_MESSAGE);
   }, [cards, storageLocked]);
 
   // 풀기 배지 — 풀기 세션과 동일한 isRecheckDue 기준
@@ -306,7 +322,9 @@ export default function App() {
       </nav>
 
       <div className="paper-sheet">
-        {storageLocked && <div className="audit-warn">{boot.error}</div>}
+        {storageLocked && (
+          <div className="audit-warn">{parseError || writeError}</div>
+        )}
         {tab === "problems" && (
           <ProblemsView
             notes={notes}
@@ -407,6 +425,8 @@ export default function App() {
             <SettingsView
               notes={notes}
               cards={cards}
+              parseError={parseError}
+              writeError={writeError}
               onReplaceAll={replaceAll}
               palette={palette}
               onSetPalette={setPalette}

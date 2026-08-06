@@ -16,11 +16,35 @@ function parseArray(raw) {
   return parsed;
 }
 
+/* 저장 실패(용량 초과 등)는 던지지 않는다. 던지면 부팅 경로에서는
+   useState(loadAll) 안이라 영구 백지가 되고, 저장 이펙트 안에서는
+   React가 트리를 언마운트한다. 어느 쪽이든 데이터를 구조할 화면이 사라진다.
+   대신 실패를 값으로 돌려주고 호출부가 잠근다. */
+function safeSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const WRITE_ERROR_MESSAGE =
+  "저장 공간이 부족하거나 브라우저 저장소에 쓸 수 없다. 원본 보호를 위해 저장을 " +
+  "중단했다. 지금부터의 변경은 저장되지 않는다. 먼저 내보낸 뒤 이 사이트의 " +
+  "저장공간을 정리하고 앱을 다시 열어라.";
+
 /**
  * 전체 로드 + 마이그레이션. 앱 부팅 시 1회 호출.
- * 파싱 실패 시 데이터를 절대 덮어쓰지 않도록 error를 반환한다 —
- * App은 error가 있으면 저장 이펙트를 잠근다.
- * @returns {{notes: object[], cards: object[], error: string}}
+ *
+ * 실패는 두 종류이고 **절대 합치면 안 된다**:
+ * - `error` (파싱 실패): 원본을 못 읽었다. 메모리의 notes/cards는 빈 배열이다.
+ *   따라서 이 상태에서는 내보내기도 막아야 한다 — 안 막으면 "정상 백업"처럼
+ *   보이는 빈 파일을 만들어준다. 원본은 localStorage에 그대로 있다.
+ * - `writeError` (쓰기 실패): 읽기는 성공했다. 메모리 데이터는 온전하고
+ *   디스크가 뒤처진다. 내보내기가 유일한 구조 수단이므로 반드시 열어둔다.
+ *
+ * @returns {{notes: object[], cards: object[], error: string, writeError: string}}
  */
 export function loadAll() {
   const storedVersion = Number(localStorage.getItem(VERSION_KEY) || 1);
@@ -46,6 +70,7 @@ export function loadAll() {
   }
 
   let error = "";
+  let writeError = "";
   let notes;
   let cards;
 
@@ -68,19 +93,25 @@ export function loadAll() {
   cards = cards.map((c) => migrateCard(c, now));
 
   // 정상 로드일 때만 마이그레이션 결과를 영속화하고 버전 승격 (idempotent)
+  // 순서는 notes → cards → 버전. localStorage에 트랜잭션이 없어 부분 성공이
+  // 가능하지만, 버전 승격이 마지막이라 다음 부팅에서 멱등 마이그레이션을 다시 돈다.
   if (!error) {
-    localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-    localStorage.setItem(CARDS_KEY, JSON.stringify(cards));
-    localStorage.setItem(VERSION_KEY, String(SCHEMA_VERSION));
+    const ok =
+      safeSet(NOTES_KEY, JSON.stringify(notes)) &&
+      safeSet(CARDS_KEY, JSON.stringify(cards)) &&
+      safeSet(VERSION_KEY, String(SCHEMA_VERSION));
+    if (!ok) writeError = WRITE_ERROR_MESSAGE;
   }
 
-  return { notes, cards, error };
+  return { notes, cards, error, writeError };
 }
 
-export const saveNotes = (notes) =>
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-export const saveCards = (cards) =>
-  localStorage.setItem(CARDS_KEY, JSON.stringify(cards));
+/** @returns {boolean} 저장 성공 여부. 실패해도 던지지 않는다 */
+export const saveNotes = (notes) => safeSet(NOTES_KEY, JSON.stringify(notes));
+/** @returns {boolean} 저장 성공 여부. 실패해도 던지지 않는다 */
+export const saveCards = (cards) => safeSet(CARDS_KEY, JSON.stringify(cards));
+/** 설정(테마·팔레트)용 안전 쓰기 — 꽉 찬 저장소에서 토글이 앱을 죽이면 안 된다 */
+export const savePref = (key, value) => safeSet(key, value);
 
 /** 백업 내보내기용 버전 포함 봉투 */
 export function exportEnvelope(notes, cards) {

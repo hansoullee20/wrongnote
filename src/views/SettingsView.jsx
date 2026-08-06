@@ -12,6 +12,8 @@ import { Section, Button } from "../components.jsx";
 export default function SettingsView({
   notes,
   cards,
+  parseError = "",
+  writeError = "",
   onReplaceAll,
   palette,
   onSetPalette,
@@ -21,7 +23,17 @@ export default function SettingsView({
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
 
+  /* 파싱 실패 상태에서는 notes/cards가 빈 배열이다. 내보내기를 열어두면
+     "정상 백업"처럼 보이는 빈 파일을 쥐여주게 된다 — 원본은 localStorage에
+     멀쩡히 있는데도. 그래서 이때만 내보내기까지 막는다.
+     쓰기 실패는 반대다. 메모리 데이터가 온전하고 내보내기가 유일한 구조
+     수단이라 반드시 열어둔다. 다만 가져오기는 둘 다 막는다 — 저장할 수 없는
+     상태에서 전체 교체를 허용하면 되돌릴 방법이 없다. */
+  const exportBlocked = Boolean(parseError);
+  const importBlocked = Boolean(parseError) || Boolean(writeError);
+
   async function handleExport() {
+    if (exportBlocked) return; // 버튼도 막지만 호출부가 늘어도 안전하게
     const d = new Date();
     const p = (n) => String(n).padStart(2, "0");
     const name = `wr_backup_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
@@ -33,7 +45,7 @@ export default function SettingsView({
   function handleImportFile(e) {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
-    if (!file) return;
+    if (!file || importBlocked) return;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
@@ -112,11 +124,16 @@ export default function SettingsView({
 
       <Section title="백업">
         <div className="io-row">
-          <Button variant="neutral" onClick={handleExport}>
+          <Button
+            variant="neutral"
+            disabled={exportBlocked}
+            onClick={handleExport}
+          >
             내보내기 (JSON)
           </Button>
           <Button
             variant="neutral"
+            disabled={importBlocked}
             onClick={() => fileRef.current && fileRef.current.click()}
           >
             가져오기 (전체 교체)
@@ -130,6 +147,18 @@ export default function SettingsView({
           />
         </div>
         {importError && <div className="io-error">{importError}</div>}
+        {parseError && (
+          <div className="io-error">
+            데이터를 읽지 못해 내보내기·가져오기를 막았다. 지금 내보내면 빈 파일이
+            나온다 — 원본은 이 브라우저에 그대로 있으니 덮어쓰지 마라.
+          </div>
+        )}
+        {!parseError && writeError && (
+          <div className="io-error">
+            저장이 잠겨 가져오기를 막았다. 내보내기는 지금 하는 게 좋다 — 화면의
+            데이터는 온전하다.
+          </div>
+        )}
         <div className="hint">
           저장소는 이 브라우저의 localStorage뿐이다. 주기적으로 내보내라.
           가져오기 직전 기존 데이터는 wr_backup_before_import.json으로 자동
