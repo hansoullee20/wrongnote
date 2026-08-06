@@ -17,13 +17,18 @@ export async function freshApp(page) {
    silently weakens, it shows up against this baseline, not after a mass edit. */
 const readState = (page, field) =>
   page.evaluate((f) => {
+    /* Once wr_state exists it is authoritative — we never fall back to legacy
+       from here, whether it failed to parse OR parsed without the array.
+       Falling back on the second case would hide a half-written envelope
+       behind stale legacy data, which is the exact divergence E-2 exists
+       to surface. Unusable envelope => null, loudly. */
     const raw = localStorage.getItem("wr_state");
     if (raw !== null) {
       try {
         const env = JSON.parse(raw);
-        if (env && Array.isArray(env[f])) return env[f];
+        return env && Array.isArray(env[f]) ? env[f] : null;
       } catch {
-        return null; // 손상된 envelope는 레거시로 감추지 않는다
+        return null;
       }
     }
     const legacy = localStorage.getItem(f === "notes" ? "wr_notes" : "wr_cards");
