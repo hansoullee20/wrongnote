@@ -1,0 +1,144 @@
+/**
+ * 저장소 건강 상태 — 브라우저 메타데이터만 다룬다. 노트/카드 데이터는 건드리지 않는다.
+ *
+ * 왜 필요한가: 이 앱은 서버가 없고 기기 한 대에만 산다. 그런데 origin 저장소가
+ * 기본은 **best-effort**라, 안드로이드가 공간이 부족하면 **조용히 통째로 지운다.**
+ * 쿼터 초과보다 이쪽이 실제로 데이터를 잃는 경로다 —
+ * 노트 2,000건이라야 2.4MB라 쿼터에는 닿지도 않는다.
+ *
+ * 여기 쓰는 두 키는 `wr_state`(E-2가 만들 예정) **바깥의 최상위 메타데이터**다.
+ * E-2의 envelope는 이 키들을 읽지도, 옮기지도, 지우지도 않는다 —
+ * 설정 성격이라 노트/카드와 생명주기가 다르다.
+ */
+import { DAY_MS, USER_DATA_KEY } from "./constants.js";
+import { savePref } from "./storage.js";
+
+const PERSIST_KEY = "wr_meta_persistence_v1";
+const LAST_EXPORT_KEY = "wr_meta_last_export_attempt";
+const CONFIRMED_EXPORT_KEY = "wr_meta_last_export_confirmed";
+
+/** 마지막 내보내기가 이보다 오래되면 설정에서 조용히 알린다.
+    수능 대비는 매일 쌓이므로 2주는 너무 느슨하다. */
+export const EXPORT_STALE_AFTER_MS = 7 * DAY_MS;
+
+const readJSON = (key) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? null : JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 영구 저장소 요청. 자동 경로는 **딱 한 번만** 시도한다 —
+ * 실행할 때마다 물으면 잔소리가 되고, 크롬은 참여도 휴리스틱으로
+ * 프롬프트 없이 승인하기도 해서 반복 호출에 의미가 없다.
+ *
+ * @param {{force?: boolean}} opts force=true는 설정 화면의 명시적 재시도 전용
+ * @returns {Promise<string>} granted|denied|unsupported|unavailable|skipped
+ */
+export async function requestPersistentStorage({ force = false } = {}) {
+  const s = typeof navigator !== "undefined" ? navigator.storage : undefined;
+  /* persist()만 있으면 요청은 가능하다. persisted()가 **없다는 이유로**
+     unsupported로 끝내면, readStorageHealth는 canRequest를 persist() 기준으로
+     정하므로 설정에 뜬 "영구 보관 요청" 버튼이 아무것도 못 하는 장식이 된다.
+     확인 수단이 없는 것과 요청 수단이 없는 것은 다르다. */
+  if (!s || typeof s.persist !== "function") {
+    savePref(PERSIST_KEY, JSON.stringify({ outcome: "unsupported", checkedAt: Date.now() }));
+    return "unsupported";
+  }
+  // 자동 경로는 이미 판정이 있으면 건너뛴다. 재시도는 사용자가 설정에서 누를 때만.
+  if (!force && readJSON(PERSIST_KEY) !== null) return "skipped";
+
+  /* persisted() 실패가 persist()까지 막으면 안 된다. 확인이 안 되는 상태에서
+     설정의 "영구 보관 요청" 버튼이 아무것도 못 하는 장식이 되기 때문이다 —
+     모르면 보장되지 않은 것이고, 그럴수록 요청은 해봐야 한다. */
+  let already = false;
+  if (typeof s.persisted === "function") {
+    try {
+      already = await s.persisted();
+    } catch {
+      already = false; // 확인 실패는 "아니오"로 취급하고 요청까지 진행
+    }
+  }
+
+  let outcome;
+  if (already) {
+    outcome = "granted"; // 이미 영구면 불필요한 프롬프트를 만들지 않는다
+  } else {
+    try {
+      outcome = (await s.persist()) ? "granted" : "denied";
+    } catch {
+      outcome = "unavailable";
+    }
+  }
+  savePref(PERSIST_KEY, JSON.stringify({ outcome, checkedAt: Date.now() }));
+  return outcome;
+}
+
+/**
+ * 설정 화면용 실시간 조회. 캐시된 판정이 아니라 **지금** 값을 읽는다 —
+ * 크롬이 나중에 승인해줬을 수 있는데 옛 "denied"를 보여주면 거짓말이 된다.
+ * 두 API는 독립적으로 실패할 수 있어 따로 판정한다.
+ */
+export async function readStorageHealth() {
+  const s = typeof navigator !== "undefined" ? navigator.storage : undefined;
+  if (!s) return { supported: false, persisted: null, usage: null, quota: null };
+
+  const [p, e] = await Promise.allSettled([
+    typeof s.persisted === "function" ? s.persisted() : Promise.reject(),
+    typeof s.estimate === "function" ? s.estimate() : Promise.reject(),
+  ]);
+
+  const est = e.status === "fulfilled" && e.value ? e.value : {};
+  const num = (v) => (Number.isFinite(v) ? v : null);
+
+  return {
+    supported: true,
+    canRequest: typeof s.persist === "function",
+    persisted: p.status === "fulfilled" ? Boolean(p.value) : null,
+    usage: num(est.usage),
+    quota: num(est.quota),
+  };
+}
+
+/**
+ * ⚠️ 이건 "내보내기에 **성공**한 시각"이 아니라 "**시도**한 시각"이다.
+ * downloadJSON은 <a>.click()이라 브라우저가 완료를 알려주지 않는다 —
+ * 차단되거나 저장 대화상자를 취소해도 여기까지는 온다.
+ * 그래서 설정에 날짜를 그대로 보여준다. 사용자가 "그때 받은 적 없는데"를
+ * 알아챌 수 있어야 조용한 실패가 드러난다.
+ */
+export const readLastExportAttempt = () => {
+  const v = Number(localStorage.getItem(LAST_EXPORT_KEY));
+  return Number.isFinite(v) && v > 0 ? v : null;
+};
+
+/** 다운로드를 띄운 뒤 기록한다. 기록 실패는 삼킨다(내보내기 자체는 성공). */
+export const recordExportAttempt = (now) => savePref(LAST_EXPORT_KEY, String(now));
+
+/** 사용자가 파일을 받았다고 **확인한** 시각. 신선도는 이것만 본다. */
+export const readLastExportConfirmed = () => {
+  const v = Number(localStorage.getItem(CONFIRMED_EXPORT_KEY));
+  return Number.isFinite(v) && v > 0 ? v : null;
+};
+export const recordExportConfirmed = (now) =>
+  savePref(CONFIRMED_EXPORT_KEY, String(now));
+
+/* 시드 데이터는 사용자 데이터가 아니다. 새로 깔자마자 "백업 안 했다"고
+   경고하면 아직 잃을 게 없는 시점에 소음만 낸다. */
+export const markUserDataWritten = () => savePref(USER_DATA_KEY, "1");
+export const hasUserData = () => localStorage.getItem(USER_DATA_KEY) === "1";
+
+/** 확인된 내보내기 기준. 시도만 하고 확인 안 했으면 여전히 오래된 것으로 본다. */
+export const isExportStale = (lastAt, now) =>
+  lastAt === null || now - lastAt >= EXPORT_STALE_AFTER_MS;
+
+/** 바이트 → 사람이 읽는 크기. 값이 없으면 빈 문자열 (없는 걸 0으로 꾸미지 않는다) */
+export const fmtBytes = (b) => {
+  if (!Number.isFinite(b)) return "";
+  if (b < 1024) return `${b}B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)}KB`;
+  return `${(b / 1024 / 1024).toFixed(1)}MB`;
+};

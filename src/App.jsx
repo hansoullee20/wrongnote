@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   RECHECK_DAYS,
   FAIL_RECHECK_DAYS,
@@ -9,6 +9,7 @@ import {
   noteImageIds,
   shuffle,
   CAUSES,
+  USER_DATA_KEY,
 } from "./constants.js";
 import {
   loadAll,
@@ -17,6 +18,10 @@ import {
   savePref,
   WRITE_ERROR_MESSAGE,
 } from "./storage.js";
+import {
+  requestPersistentStorage,
+  markUserDataWritten,
+} from "./storageHealth.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
 import { deleteImages, gcImages } from "./imageStore.js";
@@ -83,6 +88,24 @@ export default function App() {
      writeError: 메모리는 온전하다 → 내보내기는 열어둔다 (유일한 구조 수단) */
   const parseError = boot.error;
   const [writeError, setWriteError] = useState(boot.writeError);
+  // 사용자가 실제로 노트를 만들었을 때만 참 — 시드/마이그레이션 쓰기와 구분한다
+  const pendingPersistRequest = useRef(false);
+
+  /* 이 플래그는 나중에 추가됐다. 이미 노트를 쌓아둔 사용자는 addNote를 다시
+     부르기 전까지 플래그가 없어서 **백업 경고가 조용히 꺼진다** — 정작 잃을
+     게 가장 많은 사람이 경고를 못 받는다. 부팅 때 한 번 메운다.
+
+     새 설치는 storage.js가 시드 저장 **전에** "0"을 각인하므로, 키가 아예
+     없는데 노트가 있다 = 플래그 도입 이전부터 쓰던 사용자다. */
+  useEffect(() => {
+    /* 키가 **아예 없을 때만** 메운다. "0"은 "새 설치임을 이미 확인했다"는
+       뜻이라 덮어쓰면 안 된다 — StrictMode 2회차는 시드가 저장된 뒤라
+       hadStoredData가 참이므로, !hasUserData()로 판정하면 새 설치를
+       기존 사용자로 잘못 승격시킨다. */
+    if (boot.hadStoredData && localStorage.getItem(USER_DATA_KEY) === null) {
+      markUserDataWritten();
+    }
+  }, [boot.hadStoredData]);
   const storageLocked = Boolean(parseError) || Boolean(writeError);
 
   /* 배너는 탭 화면(.paper-sheet)과 **시트 안쪽 둘 다** 띄운다.
@@ -108,7 +131,19 @@ export default function App() {
 
   useEffect(() => {
     if (storageLocked) return;
-    if (!saveNotes(notes)) setWriteError(WRITE_ERROR_MESSAGE);
+    if (!saveNotes(notes)) {
+      setWriteError(WRITE_ERROR_MESSAGE);
+      return;
+    }
+    /* 영구 저장소는 **실제 노트가 디스크에 안착한 뒤** 한 번만 요청한다.
+       부팅마다 물으면 잔소리가 되고, 시드/마이그레이션 쓰기로 요청하면
+       사용자가 아직 아무것도 안 만든 시점에 프롬프트가 뜬다.
+       크롬은 참여도 휴리스틱으로 조용히 승인하기도 하므로, 진짜 기록이
+       생긴 순간이 승인 확률이 가장 높은 시점이기도 하다. */
+    if (pendingPersistRequest.current) {
+      pendingPersistRequest.current = false;
+      requestPersistentStorage();
+    }
   }, [notes, storageLocked]);
   useEffect(() => {
     if (storageLocked) return;
@@ -133,6 +168,8 @@ export default function App() {
   }
 
   function addNote(rawDraft) {
+    pendingPersistRequest.current = true;
+    markUserDataWritten();
     const draft = applyDerivedTag(rawDraft);
     const ts = Date.now();
     const note = {
@@ -278,6 +315,10 @@ export default function App() {
   }
 
   function replaceAll(newNotes, newCards) {
+    /* 가져오기도 진짜 사용자 데이터를 쓴다 — 기기를 갈아탄 직후가 내구성이
+       가장 절실한 순간인데, addNote에서만 요청하면 그때를 놓친다. */
+    pendingPersistRequest.current = true;
+    markUserDataWritten();
     setNotes(newNotes);
     setCards(newCards);
     // 가져온 노트가 참조하지 않는 고아 사진 정리.

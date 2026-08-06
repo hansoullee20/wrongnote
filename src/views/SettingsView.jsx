@@ -1,9 +1,20 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PALETTES } from "../palettes.js";
 import { noteImageIds } from "../constants.js";
 import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
 import { exportImages, importImages } from "../imageStore.js";
 import { Section, Button } from "../components.jsx";
+import {
+  readStorageHealth,
+  requestPersistentStorage,
+  fmtBytes,
+  readLastExportAttempt,
+  recordExportAttempt,
+  readLastExportConfirmed,
+  recordExportConfirmed,
+  hasUserData,
+  isExportStale,
+} from "../storageHealth.js";
 
 /**
  * 설정 — 통계(데이터)와 섞이면 안 되는 것들만 모은다.
@@ -22,6 +33,21 @@ export default function SettingsView({
 }) {
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
+  const [health, setHealth] = useState(null);
+  const [lastExport, setLastExport] = useState(() => readLastExportAttempt());
+  const [confirmedExport, setConfirmedExport] = useState(() =>
+    readLastExportConfirmed()
+  );
+
+  /* 캐시된 판정이 아니라 **지금** 값을 읽는다 — 크롬이 나중에 조용히 승인해줬을 수
+     있는데 옛 "denied"를 보여주면 화면이 거짓말을 한다. */
+  const refreshHealth = useCallback(
+    () => readStorageHealth().then(setHealth),
+    []
+  );
+  useEffect(() => {
+    refreshHealth();
+  }, [refreshHealth]);
 
   /* 파싱 실패 상태에서는 notes/cards가 빈 배열이다. 내보내기를 열어두면
      "정상 백업"처럼 보이는 빈 파일을 쥐여주게 된다 — 원본은 localStorage에
@@ -40,6 +66,13 @@ export default function SettingsView({
     // 첨부 사진(base64)까지 포함한 완전 백업 — 문제 사진 + 풀이 사진
     const images = await exportImages(notes.flatMap(noteImageIds));
     downloadJSON(name, { ...exportEnvelope(notes, cards), images });
+    /* 여기서 기록하는 건 **시도** 시각이다. downloadJSON은 <a>.click()이라
+       브라우저가 완료를 알려주지 않는다 — 차단되거나 저장 취소돼도 여기 온다.
+       그래서 아래에 날짜를 보여준다: 사용자가 "그때 받은 적 없는데"를
+       알아채는 게 조용한 실패를 드러내는 유일한 경로다. */
+    const now = Date.now();
+    recordExportAttempt(now);
+    setLastExport(now);
   }
 
   function handleImportFile(e) {
@@ -147,6 +180,68 @@ export default function SettingsView({
         </div>
       </Section>
 
+      <Section title="저장소" className="storage-health">
+        {health === null ? (
+          <div className="hint">확인 중…</div>
+        ) : !health.supported ? (
+          <div className="hint">
+            이 브라우저는 저장소 상태를 알려주지 않는다. 내보내기를 자주 해라.
+          </div>
+        ) : (
+          <>
+            <div className="storage-row">
+              <span className="storage-label">영구 보관</span>
+              <span
+                className={`storage-value${health.persisted ? " ok" : " warn"}`}
+              >
+                {health.persisted === null
+                  ? "알 수 없음"
+                  : health.persisted
+                    ? "예"
+                    : "아니오"}
+              </span>
+            </div>
+            <div className="storage-row">
+              <span className="storage-label">사용량</span>
+              <span className="storage-value">
+                {/* 값이 없으면 0으로 꾸미지 않는다 */}
+                {health.usage === null
+                  ? "알 수 없음"
+                  : `${fmtBytes(health.usage)}${health.quota ? ` / ${fmtBytes(health.quota)}` : ""}`}
+              </span>
+            </div>
+            {/* 영구가 아니면 절대 "안전하다"고 말하지 않는다.
+                **확인 실패(null)도 안전하지 않은 쪽으로 친다** — persisted()만
+                거부되고 estimate()는 살아 있는 부분 실패가 실제로 가능한데,
+                그때 경고도 재요청 버튼도 없으면 확인이 안 되는 순간에 오히려
+                보호가 얇아진다. 모르면 보장되지 않은 것이다. */}
+            {health.persisted !== true && (
+              <div className="storage-warn">
+                {health.persisted === null
+                  ? "영구 보관 여부를 확인하지 못했다. 보장된 상태가 아니므로 브라우저가 데이터를 지울 수 있다. 내보내기를 자주 해라."
+                  : "기기 저장 공간이 부족하면 브라우저가 이 앱의 데이터를 통째로 지울 수 있다. 내보내기를 자주 해라."}
+              </div>
+            )}
+            {health.persisted === true && (
+              <div className="hint">
+                브라우저가 임의로 지우지 않는다. 다만 사용자가 직접 사이트 데이터를
+                삭제하면 그대로 사라진다 — 내보내기는 여전히 필요하다.
+              </div>
+            )}
+            {health.persisted !== true && health.canRequest && (
+              <Button
+                variant="neutral"
+                onClick={() =>
+                  requestPersistentStorage({ force: true }).then(refreshHealth)
+                }
+              >
+                영구 보관 요청
+              </Button>
+            )}
+          </>
+        )}
+      </Section>
+
       <Section title="백업">
         <div className="io-row">
           <Button
@@ -171,6 +266,40 @@ export default function SettingsView({
             onChange={handleImportFile}
           />
         </div>
+        {/* 알림은 설정 안에서만, 수동적으로. 배너·토스트·배지로 띄우면
+            매일 쓰는 앱에서 소음이 되고 결국 무시하게 된다. */}
+        {/* 확인 대기: 시도만으로는 경고를 끄지 않는다. downloadJSON은
+            <a>.click()이라 차단·취소를 알 수 없어서, 사용자가 파일을 실제로
+            받았다고 말해줘야 그때 신선한 것으로 친다. */}
+        {lastExport !== null &&
+          (confirmedExport === null || lastExport > confirmedExport) && (
+            <div className="export-confirm">
+              <span>내보낸 파일을 실제로 받았나?</span>
+              <Button
+                variant="neutral"
+                onClick={() => {
+                  const now = Date.now();
+                  recordExportConfirmed(now);
+                  setConfirmedExport(now);
+                }}
+              >
+                받았다
+              </Button>
+            </div>
+          )}
+        {hasUserData() && isExportStale(confirmedExport, Date.now()) && (
+          <div className="backup-stale">
+            {confirmedExport === null
+              ? "확인된 백업이 아직 없다. 이 앱은 이 기기에만 저장된다."
+              : "마지막 확인된 백업이 일주일이 넘었다."}
+          </div>
+        )}
+        {confirmedExport !== null && (
+          <div className="hint last-export">
+            마지막 확인된 백업:{" "}
+            {new Date(confirmedExport).toLocaleDateString("ko-KR")}
+          </div>
+        )}
         {importError && <div className="io-error">{importError}</div>}
         {parseError && (
           <div className="io-error">

@@ -1,5 +1,6 @@
 import { seedNotes, seedCards } from "./seed.js";
 import { SCHEMA_VERSION, migrateNote, migrateCard } from "./migrate.js";
+import { USER_DATA_KEY } from "./constants.js";
 
 const NOTES_KEY = "wr_notes";
 const CARDS_KEY = "wr_cards";
@@ -74,6 +75,14 @@ export function loadAll() {
   let notes;
   let cards;
 
+  /* 새 설치임을 **시드를 저장하기 전에, 동기적으로** 각인한다.
+     StrictMode가 useState(loadAll) 초기화를 두 번 부르는데, 1회차가 시드를
+     저장해버리면 2회차는 "저장된 노트가 있다"를 보고 기존 사용자로 오판한다.
+     여기서 먼저 찍어두면 2회차도 같은 결론에 도달한다. */
+  if (rawNotes === null && localStorage.getItem(USER_DATA_KEY) === null) {
+    safeSet(USER_DATA_KEY, "0"); // 시드는 사용자 데이터가 아니다
+  }
+
   try {
     notes = rawNotes === null ? seedNotes() : parseArray(rawNotes);
   } catch {
@@ -103,7 +112,10 @@ export function loadAll() {
     if (!ok) writeError = WRITE_ERROR_MESSAGE;
   }
 
-  return { notes, cards, error, writeError };
+  /* 이미 저장된 노트가 있었다 = 기존 사용자다. 시드 첫 실행과 구분해야
+     사용자 데이터 플래그를 뒤늦게 채울 수 있다 (storageHealth를 여기서
+     import하면 순환이 되므로 사실만 돌려주고 판단은 App이 한다). */
+  return { notes, cards, error, writeError, hadStoredData: rawNotes !== null };
 }
 
 /** @returns {boolean} 저장 성공 여부. 실패해도 던지지 않는다 */
