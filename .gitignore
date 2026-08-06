@@ -1,3 +1,16 @@
 node_modules
 dist
 .DS_Store
+
+# 테스트 산출물 — 로컬 실행마다 diff가 뜬다
+test-results
+playwright-report
+
+# 스크래치 스크립트 (일회성 프로브)
+*.tmp.mjs
+
+# 에디터 설정
+.vscode/
+
+# 스크린샷(*.png)은 **의도적으로 무시하지 않는다** — 디자인 확인용으로
+# 남겨둔 자료라, 넓게 무시하면 의도된 것까지 숨긴다.

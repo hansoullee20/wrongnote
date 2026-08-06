@@ -12,6 +12,8 @@ import { Section, Button } from "../components.jsx";
 export default function SettingsView({
   notes,
   cards,
+  parseError = "",
+  writeError = "",
   onReplaceAll,
   palette,
   onSetPalette,
@@ -21,7 +23,17 @@ export default function SettingsView({
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
 
+  /* 파싱 실패 상태에서는 notes/cards가 빈 배열이다. 내보내기를 열어두면
+     "정상 백업"처럼 보이는 빈 파일을 쥐여주게 된다 — 원본은 localStorage에
+     멀쩡히 있는데도. 그래서 이때만 내보내기까지 막는다.
+     쓰기 실패는 반대다. 메모리 데이터가 온전하고 내보내기가 유일한 구조
+     수단이라 반드시 열어둔다. 다만 가져오기는 둘 다 막는다 — 저장할 수 없는
+     상태에서 전체 교체를 허용하면 되돌릴 방법이 없다. */
+  const exportBlocked = Boolean(parseError);
+  const importBlocked = Boolean(parseError) || Boolean(writeError);
+
   async function handleExport() {
+    if (exportBlocked) return; // 버튼도 막지만 호출부가 늘어도 안전하게
     const d = new Date();
     const p = (n) => String(n).padStart(2, "0");
     const name = `wr_backup_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
@@ -33,7 +45,7 @@ export default function SettingsView({
   function handleImportFile(e) {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
-    if (!file) return;
+    if (!file || importBlocked) return;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
@@ -44,13 +56,38 @@ export default function SettingsView({
           `가져오면 현재 데이터 전체가 교체된다 (노트 ${migrated.notes.length}건, 카드 ${migrated.cards.length}장). 계속?`
         );
         if (!ok) return;
-        // 교체 직전 기존 데이터 자동 백업 다운로드 (사진 포함)
-        const curImages = await exportImages(notes.flatMap(noteImageIds));
-        downloadJSON("wr_backup_before_import.json", {
-          ...exportEnvelope(notes, cards),
-          images: curImages,
-        });
-        await importImages(parsed.images);
+        /* 사진을 먼저 복원한다. 하나라도 실패하면 교체를 취소하는데,
+           자동 백업을 그 앞에서 받으면 아무것도 안 바뀌었는데 "가져오기 직전
+           백업" 파일만 손에 쥐게 돼 혼란스럽다. 그래서 사진 복원 성공 뒤로 옮겼다.
+           (이 시점까지 notes/cards는 그대로라 백업 내용은 동일하다) */
+        if (!(await importImages(parsed.images))) {
+          /* 문구가 정확해야 한다. 여기까지 왔으면 일부 사진은 **이미 IDB에
+             쓰였다** — 노트·카드는 그대로지만 "아무것도 안 바뀌었다"는 거짓이다.
+             하필 사용자의 문제가 공간 부족이라 더 그렇다. */
+          setImportError(
+            "사진 복원에 실패했다. 기존 노트·카드는 그대로다. 다만 복원하다 만 사진이 저장소에 남아 있을 수 있으니, 공간을 정리한 뒤 다시 시도해라."
+          );
+          return; // onReplaceAll을 부르지 않는다 → 상태 교체도 GC도 없다
+        }
+        /* 교체 직전 기존 데이터 자동 백업 다운로드 (사진 포함).
+           이 백업은 되돌릴 수 없는 전체 교체의 유일한 안전망이라, 못 만들면
+           교체를 진행하지 않는다. 자체 try/catch로 감싸는 이유: 바깥 catch가
+           잡으면 원인과 무관한 "파싱 실패 — JSON 파일을 확인해라"가 뜬다. */
+        try {
+          const curImages = await exportImages(notes.flatMap(noteImageIds));
+          downloadJSON("wr_backup_before_import.json", {
+            ...exportEnvelope(notes, cards),
+            images: curImages,
+          });
+        } catch {
+          /* 이 시점엔 importImages가 성공했으므로 백업의 사진이 **전부 IDB에
+             들어가 있다.** 교체를 취소하면 그것들은 아무 노트도 참조하지 않는
+             고아가 된다 — 그래서 "변경 없음"이라고 말하지 않는다. */
+          setImportError(
+            "교체 직전 백업을 만들지 못해 가져오기를 취소했다. 기존 노트·카드는 그대로다. 다만 복원된 사진이 저장소에 남아 있으니, 다시 가져오거나 공간을 정리해라."
+          );
+          return;
+        }
         onReplaceAll(migrated.notes, migrated.cards);
         setImportError("");
       } catch {
@@ -112,11 +149,16 @@ export default function SettingsView({
 
       <Section title="백업">
         <div className="io-row">
-          <Button variant="neutral" onClick={handleExport}>
+          <Button
+            variant="neutral"
+            disabled={exportBlocked}
+            onClick={handleExport}
+          >
             내보내기 (JSON)
           </Button>
           <Button
             variant="neutral"
+            disabled={importBlocked}
             onClick={() => fileRef.current && fileRef.current.click()}
           >
             가져오기 (전체 교체)
@@ -130,6 +172,18 @@ export default function SettingsView({
           />
         </div>
         {importError && <div className="io-error">{importError}</div>}
+        {parseError && (
+          <div className="io-error">
+            데이터를 읽지 못해 내보내기·가져오기를 막았다. 지금 내보내면 빈 파일이
+            나온다 — 원본은 이 브라우저에 그대로 있으니 덮어쓰지 마라.
+          </div>
+        )}
+        {!parseError && writeError && (
+          <div className="io-error">
+            저장이 잠겨 가져오기를 막았다. 내보내기는 지금 하는 게 좋다 — 화면의
+            데이터는 온전하다.
+          </div>
+        )}
         <div className="hint">
           저장소는 이 브라우저의 localStorage뿐이다. 주기적으로 내보내라.
           가져오기 직전 기존 데이터는 wr_backup_before_import.json으로 자동
