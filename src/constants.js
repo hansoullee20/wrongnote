@@ -109,6 +109,11 @@ export const GATE_CHECKLIST = [
 export const RECHECK_DAYS = 14;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+/* "사용자가 실제로 데이터를 만들었나". 시드는 아니다.
+   storage.js(시드 시점 각인)와 storageHealth.js(판정) 양쪽이 써야 해서
+   여기 둔다 — 둘이 서로 import하면 순환이 된다. */
+export const USER_DATA_KEY = "wr_meta_has_user_data";
+
 /* ---- 재풀이 궤적 (v5) ---- */
 // 연속 pass 이 횟수 이상이면 '졸업' — 판정·테스트 모두 이 상수만 쓴다
 export const GRADUATION_PASS_STREAK = 2;

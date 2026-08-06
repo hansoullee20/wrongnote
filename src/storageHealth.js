@@ -10,13 +10,12 @@
  * E-2의 envelope는 이 키들을 읽지도, 옮기지도, 지우지도 않는다 —
  * 설정 성격이라 노트/카드와 생명주기가 다르다.
  */
-import { DAY_MS } from "./constants.js";
+import { DAY_MS, USER_DATA_KEY } from "./constants.js";
 import { savePref } from "./storage.js";
 
 const PERSIST_KEY = "wr_meta_persistence_v1";
 const LAST_EXPORT_KEY = "wr_meta_last_export_attempt";
 const CONFIRMED_EXPORT_KEY = "wr_meta_last_export_confirmed";
-const USER_DATA_KEY = "wr_meta_has_user_data";
 
 /** 마지막 내보내기가 이보다 오래되면 설정에서 조용히 알린다.
     수능 대비는 매일 쌓이므로 2주는 너무 느슨하다. */

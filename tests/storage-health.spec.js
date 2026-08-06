@@ -254,3 +254,19 @@ test.describe("내보내기 신선도 — 시도가 아니라 확인 기준", ()
     await expect(page.locator(".backup-stale")).toContainText("확인된 백업이 아직 없다");
   });
 });
+
+test("플래그 없이 노트를 쌓아둔 기존 사용자도 경고를 받는다", async ({ page }) => {
+  /* 플래그는 나중에 추가됐다. 백필이 없으면 기존 사용자는 addNote를 다시
+     부를 때까지 경고가 꺼진 채로 남는다 — 잃을 게 가장 많은 사람이. */
+  await freshApp(page);
+  await page.evaluate(() => {
+    localStorage.removeItem("wr_meta_has_user_data");
+    localStorage.removeItem("wr_meta_last_export_confirmed");
+  });
+  await page.reload();
+  await page.getByRole("button", { name: /^문제/ }).waitFor();
+
+  expect(await page.evaluate(() => localStorage.getItem("wr_meta_has_user_data"))).toBe("1");
+  await page.click(".settings-open");
+  await expect(page.locator(".backup-stale")).toContainText("확인된 백업이 아직 없다");
+});

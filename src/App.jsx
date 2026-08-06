@@ -9,6 +9,7 @@ import {
   noteImageIds,
   shuffle,
   CAUSES,
+  USER_DATA_KEY,
 } from "./constants.js";
 import {
   loadAll,
@@ -17,7 +18,10 @@ import {
   savePref,
   WRITE_ERROR_MESSAGE,
 } from "./storage.js";
-import { requestPersistentStorage, markUserDataWritten } from "./storageHealth.js";
+import {
+  requestPersistentStorage,
+  markUserDataWritten,
+} from "./storageHealth.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
 import { deleteImages, gcImages } from "./imageStore.js";
@@ -86,6 +90,22 @@ export default function App() {
   const [writeError, setWriteError] = useState(boot.writeError);
   // 사용자가 실제로 노트를 만들었을 때만 참 — 시드/마이그레이션 쓰기와 구분한다
   const pendingPersistRequest = useRef(false);
+
+  /* 이 플래그는 나중에 추가됐다. 이미 노트를 쌓아둔 사용자는 addNote를 다시
+     부르기 전까지 플래그가 없어서 **백업 경고가 조용히 꺼진다** — 정작 잃을
+     게 가장 많은 사람이 경고를 못 받는다. 부팅 때 한 번 메운다.
+
+     새 설치는 storage.js가 시드 저장 **전에** "0"을 각인하므로, 키가 아예
+     없는데 노트가 있다 = 플래그 도입 이전부터 쓰던 사용자다. */
+  useEffect(() => {
+    /* 키가 **아예 없을 때만** 메운다. "0"은 "새 설치임을 이미 확인했다"는
+       뜻이라 덮어쓰면 안 된다 — StrictMode 2회차는 시드가 저장된 뒤라
+       hadStoredData가 참이므로, !hasUserData()로 판정하면 새 설치를
+       기존 사용자로 잘못 승격시킨다. */
+    if (boot.hadStoredData && localStorage.getItem(USER_DATA_KEY) === null) {
+      markUserDataWritten();
+    }
+  }, [boot.hadStoredData]);
   const storageLocked = Boolean(parseError) || Boolean(writeError);
 
   /* 배너는 탭 화면(.paper-sheet)과 **시트 안쪽 둘 다** 띄운다.
