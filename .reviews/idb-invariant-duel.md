@@ -51,10 +51,37 @@ IDB와 localStorage는 **다른 저장소이고 쿼터도 따로**라, localStor
 | | 내용 | 상태 |
 |---|---|---|
 | **D** | IDB 파괴 순서 | **D-min만 완료** (`5d385af`). 근본 수정 D-gc는 미착수 |
-| **E** | notes+cards 단일 내구성 단위 (고아 카드) | ⬜ 미착수 · **high** |
-| **F** | `putImage` try/catch + `importImages` 실패 반환 | ⬜ 미착수 · med ×2 |
+| **E** | notes+cards 단일 내구성 단위 (고아 카드) | ⬜ 미착수 · **high** ← 다음 |
+| **F** | `putImage` try/catch + `importImages` 실패 반환 | ✅ 완료 (`508cad9`, `29cf671`, `d2e71fd`) |
 | **G** | 배너 중복 제거 + `role="alert"` | ✅ 완료 (`5d385af`) |
-| **H** | 테스트 보강 (사용 중 실패·부분 실패·IDB 쿼터) | 🔶 부분 (D-min 케이스만) |
+| **H** | 테스트 보강 (사용 중 실패·부분 실패·IDB 쿼터) | 🔶 부분 — IDB 쿼터는 F에서 추가됨 |
+
+### F 실행 결과 (Tier 1 · 계획 Codex · 리뷰 Claude)
+
+계획에서 **바꾼 것 2건** (내 CRITIQUE를 Han이 승인):
+
+1. `deleteImages(removed)`를 중단 경로에서 뺐다. `putImage` 실패는 "저장할 수
+   없다"지만 이건 "옛 사진이 남는다"(누수)일 뿐이라, *정리* 실패로 사용자의
+   편집을 버리는 건 과하다. 게다가 D-gc가 이 삭제를 없앨 예정이라 지금
+   중단 의미를 부여하면 나중에 되돌려야 한다.
+2. 자동 백업 다운로드를 `importImages` 성공 뒤로 옮겼다. 앞에 두면 교체가
+   취소됐는데 "가져오기 직전 백업" 파일만 손에 쥐게 돼 혼란스럽다.
+
+핵심 구현 포인트:
+- 성공한 blob은 즉시 `photos`에 id로 **체크포인트** → 재시도 시 `p.id` 경로를
+  타 같은 사진이 두 번째 blob으로 중복 저장되지 않는다
+- object URL은 노트 저장이 **실제로 성공한 뒤에만** 해제 (실패 후 미리보기 유지)
+- 실패 문구를 저장 버튼 위에도 렌더 — 기존 `photo.error` 자리는 `step===1`
+  블록 안이라 실패가 일어나는 2페이지에서 보이지 않았다
+- catch에서 blob을 지우지 않는다 (§5 안전 3조건 준수)
+
+REVIEW 결과: blocker/high 없음 → DEBATE 스킵. [med] 1건은 `d2e71fd`로 수정,
+[low] 1건(제출 중 시트 닫기 미잠금, 동작상 무해)은 남겨둠.
+
+테스트 트랩이 추가됐다: `installIdbPutTrap` / `armIdbFailAt` / `disarmIdb`.
+localStorage용 `installQuotaTrap`과 **다른 저장소**라 재사용 불가 —
+이 구분이 F와 D의 공통 원인이기도 하다. `seedBlobs`도 raw `put`을 쓰므로
+반드시 시드 **뒤에** arm해야 한다.
 
 **Han 결정:** "D 최소+G 먼저, 구조 변경은 별도 Tier 2."
 
@@ -104,9 +131,12 @@ c5061d4 fix: 배너를 기록 시트에도 + 문서 거짓 주장 정정
 f532785 fix: 저장소 쓰기 실패에 앱이 죽지 않는다 — 파싱 실패와 분리
 ```
 
-78/78 · contrast 204/204 · themes 드리프트 없음 · 빌드 성공.
+80/80 · contrast 204/204 · themes 드리프트 없음 · 빌드 성공.
+(위 커밋 목록은 F 이전 시점이다. 최신은 `git log`로 확인할 것)
 
-**다음 세션 추천:** F 먼저(작고 독립적, `putImage`는 localStorage가 멀쩡해도
-IDB 쿼터만 차면 도달) → 그 다음 D-gc + E를 Tier 2로.
+**다음 세션 추천:** **E**(고아 카드, high)를 먼저. `addNote`가 notes·cards를
+같은 렌더에서 바꾸는데 두 저장 이펙트가 같은 flush에서 **같은 stale
+`storageLocked`를 캡처**하는 게 원인이라, D-gc와 독립적으로 고칠 수 있다.
+그 다음 D-gc를 Tier 2로 — 반드시 §5 안전 3조건과 함께.
 
 관련 문서: `CODEX_HANDOFF_CLEANUP.md` §11 표, §11.1
