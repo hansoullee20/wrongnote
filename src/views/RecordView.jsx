@@ -103,6 +103,7 @@ export default function RecordView({
   onUpdate,
   initialEditId = null,
   onCancelEdit,
+  storageLocked = false,
 }) {
   const [draft, setDraft] = useState(() => emptyDraft());
   const [checks, setChecks] = useState([false, false, false, false]);
@@ -244,11 +245,14 @@ export default function RecordView({
         if (p.url) URL.revokeObjectURL(p.url);
       }
     }
-    // 수정 중 제거한 기존 사진은 IDB에서도 삭제
+    // 수정 중 제거한 기존 사진은 IDB에서도 삭제.
+    // 저장이 잠겼으면 지우지 않는다 — onUpdate가 디스크에 안 남으므로
+    // 새로고침하면 옛 노트가 이미 지워진 사진 id를 가리키게 된다.
+    // (App.deleteNote와 같은 최소 완화책 — 근본 수정은 별도 Tier 2)
     const removed = originalImageIds.current.filter(
       (id) => !imageIds.includes(id)
     );
-    if (removed.length) await deleteImages(removed);
+    if (removed.length && !storageLocked) await deleteImages(removed);
 
     const payload = { ...draft, problem: draft.problem.trim(), images: imageIds };
     if (editingId) {

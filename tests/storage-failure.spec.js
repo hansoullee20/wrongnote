@@ -1,5 +1,93 @@
 import { test, expect } from "@playwright/test";
-import { freshApp, readNotes } from "./helpers.js";
+import { freshApp, readNotes, openNoteByProblem } from "./helpers.js";
+
+// 1×1 픽셀 PNG (solution-images.spec.js와 같은 방식)
+const TINY_PNG_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+const readImageIds = (page) =>
+  page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const req = indexedDB.open("wrongnote", 1);
+        req.onupgradeneeded = () => {
+          if (!req.result.objectStoreNames.contains("images")) {
+            req.result.createObjectStore("images");
+          }
+        };
+        req.onsuccess = () => {
+          const r = req.result
+            .transaction("images", "readonly")
+            .objectStore("images")
+            .getAllKeys();
+          r.onsuccess = () => resolve(r.result.sort());
+          r.onerror = () => resolve([]);
+        };
+        req.onerror = () => resolve([]);
+      })
+  );
+
+const seedBlobs = (page, ids) =>
+  page.evaluate(
+    ({ ids, url }) =>
+      new Promise((resolve) => {
+        const req = indexedDB.open("wrongnote", 1);
+        req.onupgradeneeded = () => {
+          if (!req.result.objectStoreNames.contains("images")) {
+            req.result.createObjectStore("images");
+          }
+        };
+        req.onsuccess = async () => {
+          const blob = await (await fetch(url)).blob();
+          const tx = req.result.transaction("images", "readwrite");
+          const store = tx.objectStore("images");
+          ids.forEach((id) => store.put(blob, id));
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+        };
+        req.onerror = () => resolve();
+      }),
+    { ids, url: TINY_PNG_URL }
+  );
+
+const seedNoteWithImages = (page, { problem, images }) =>
+  page.evaluate(
+    ({ problem, images }) => {
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            id: "lock_n1",
+            subject: "수학",
+            problem,
+            topicMain: "",
+            topicSub: "",
+            question: "",
+            mySol: "",
+            optSol: "",
+            cause: "개념 부족",
+            correctAnswer: "",
+            myAnswer: "",
+            examTime: "",
+            derived: null,
+            tags: [],
+            memo: "",
+            images,
+            solutionImages: [],
+            attempts: [],
+            ts: Date.now(),
+            date: "2026-08-06",
+            rechecked: false,
+            recheckResult: null,
+            recheckCount: 0,
+            nextRecheckTs: null,
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", "[]");
+    },
+    { problem, images }
+  );
 
 /**
  * 저장소 실패 계약.
@@ -139,6 +227,50 @@ test.describe("쓰기 실패 — 죽지 않고, 구조 수단은 열어둔다", 
     // 저장되지 않고 사라지므로, 바로 이 화면에서 경고가 보여야 한다.
     await page.click(".fab"); // 문제 탭의 기록 버튼
     await expect(page.locator('.sheet-title:has-text("오답 기록")')).toBeVisible();
+    await expect(page.locator(".sheet .audit-warn")).toBeVisible();
+  });
+
+  /* 잠긴 상태에서는 되돌릴 수 없는 IDB 파괴를 하지 않는다.
+     IDB는 localStorage와 다른 저장소라 storageLocked가 자동으로 안 막는다.
+     그대로 두면 노트 삭제는 디스크에 안 남고(=되살아남) 사진만 영구 소실된다.
+     ⚠️ 최소 완화책이라 '첫 실패가 감지되기 전' 창은 남는다 — 근본 수정은 별도 Tier 2. */
+  test("잠긴 상태의 노트 삭제는 사진을 지우지 않는다", async ({ page }) => {
+    await freshApp(page);
+    await seedBlobs(page, ["lock_img"]);
+    await seedNoteWithImages(page, { problem: "LOCK-DEL", images: ["lock_img"] });
+
+    await installQuotaTrap(page);
+    await page.goto("/");
+    await armQuota(page);
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    expect(await readImageIds(page)).toEqual(["lock_img"]);
+
+    await openNoteByProblem(page, "LOCK-DEL");
+    page.once("dialog", (d) => d.accept());
+    await page.click(".sheet-delete");
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+
+    // 노트는 디스크에 그대로 남아 새로고침하면 되살아난다.
+    // 따라서 사진도 살아 있어야 한다 — 아니면 사진 없는 노트가 부활한다.
+    expect(await readImageIds(page)).toEqual(["lock_img"]);
+    const raw = await readRaw(page, "wr_notes");
+    expect(raw).toContain("lock_img");
+  });
+
+  test("배경 배너와 시트 배너가 동시에 DOM에 남지 않는다", async ({ page }) => {
+    await freshApp(page);
+    await installQuotaTrap(page);
+    await page.goto("/");
+    await armQuota(page);
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+
+    await expect(page.locator(".audit-warn")).toHaveCount(1);
+    await page.click(".fab");
+    await expect(page.locator('.sheet-title:has-text("오답 기록")')).toBeVisible();
+    // 시트가 열려도 경고는 한 벌만 — 접근성 트리에 중복이 남으면 안 된다
+    await expect(page.locator(".audit-warn")).toHaveCount(1);
     await expect(page.locator(".sheet .audit-warn")).toBeVisible();
   });
 

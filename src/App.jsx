@@ -90,7 +90,9 @@ export default function App() {
      하필 사용자가 새 노트를 쓰는 순간 — 저장 안 될 데이터를 만드는 바로 그
      순간 — 경고가 가려진다. */
   const storageBanner = storageLocked ? (
-    <div className="audit-warn">{parseError || writeError}</div>
+    <div className="audit-warn" role="alert">
+      {parseError || writeError}
+    </div>
   ) : null;
   const [tab, setTab] = useState("problems");
   // 기록 폼은 탭이 아니라 오버레이 — 매일 하는 건 복습이고 기록은 가끔이다
@@ -192,7 +194,12 @@ export default function App() {
     // 노트의 첨부 사진도 IDB에서 정리 (문제 사진 + 풀이 사진)
     const target = notes.find((n) => n.id === id);
     const ids = noteImageIds(target);
-    if (ids.length) deleteImages(ids);
+    /* 저장이 잠긴 상태에서는 사진을 지우지 않는다. IDB는 localStorage와 다른
+       저장소라 잠금이 안 걸리는데, 노트 삭제는 디스크에 안 남는다. 그대로 두면
+       새로고침 때 노트는 되살아나고 사진만 영구히 사라진다.
+       ⚠️ 이건 최소 완화책이다 — 첫 저장 실패가 감지되기 *전*의 삭제에는
+       여전히 창이 남는다. 근본 수정(영속 성공 뒤에만 수거)은 별도 Tier 2. */
+    if (ids.length && !storageLocked) deleteImages(ids);
     setNotes((ns) => ns.filter((n) => n.id !== id));
     // 이 노트에서 자동 생성된 카드도 정리 (수동 카드는 noteId=null이라 생존)
     setCards((cs) => cs.filter((c) => c.noteId !== id));
@@ -275,7 +282,9 @@ export default function App() {
     setCards(newCards);
     // 가져온 노트가 참조하지 않는 고아 사진 정리.
     // 풀이 사진을 빠뜨리면 GC가 살아 있는 사진을 지운다 — 누수가 아니라 손실이다.
-    gcImages(newNotes.flatMap(noteImageIds));
+    // 저장이 잠겼으면 GC도 돌리지 않는다 — 교체 결과가 디스크에 안 남는데
+    // 옛 사진을 수거하면 새로고침 후 옛 노트가 없는 사진을 가리킨다.
+    if (!storageLocked) gcImages(newNotes.flatMap(noteImageIds));
   }
 
   function gotoProblemsWithTopic(topicMain) {
@@ -330,7 +339,10 @@ export default function App() {
       </nav>
 
       <div className="paper-sheet">
-        {storageBanner}
+        {/* 시트가 열려 있으면 배경 배너는 렌더하지 않는다 — 시각적으로는 덮이지만
+            접근성 트리에는 같은 경고가 두 벌 남기 때문이다. 기록 시트는 자체
+            배너를 갖고, 설정 시트는 상황별 안내를 따로 띄운다. */}
+        {!recording && !settingsOpen && storageBanner}
         {tab === "problems" && (
           <ProblemsView
             notes={notes}
@@ -480,6 +492,7 @@ export default function App() {
           <div className="sheet-body">
             {storageBanner}
             <RecordView
+              storageLocked={storageLocked}
               notes={notes}
               onAdd={(payload) => {
                 addNote(payload);
