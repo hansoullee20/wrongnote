@@ -66,12 +66,22 @@ export default function SettingsView({
           );
           return; // onReplaceAll을 부르지 않는다 → 상태 교체도 GC도 없다
         }
-        // 교체 직전 기존 데이터 자동 백업 다운로드 (사진 포함)
-        const curImages = await exportImages(notes.flatMap(noteImageIds));
-        downloadJSON("wr_backup_before_import.json", {
-          ...exportEnvelope(notes, cards),
-          images: curImages,
-        });
+        /* 교체 직전 기존 데이터 자동 백업 다운로드 (사진 포함).
+           이 백업은 되돌릴 수 없는 전체 교체의 유일한 안전망이라, 못 만들면
+           교체를 진행하지 않는다. 자체 try/catch로 감싸는 이유: 바깥 catch가
+           잡으면 원인과 무관한 "파싱 실패 — JSON 파일을 확인해라"가 뜬다. */
+        try {
+          const curImages = await exportImages(notes.flatMap(noteImageIds));
+          downloadJSON("wr_backup_before_import.json", {
+            ...exportEnvelope(notes, cards),
+            images: curImages,
+          });
+        } catch {
+          setImportError(
+            "교체 직전 백업을 만들지 못해 가져오기를 취소했다. 데이터는 변경하지 않았다."
+          );
+          return;
+        }
         onReplaceAll(migrated.notes, migrated.cards);
         setImportError("");
       } catch {
