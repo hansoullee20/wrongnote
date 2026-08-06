@@ -61,6 +61,8 @@ Tier 2에서는 심각도와 무관하게 DEBATE 필수 — 클린해 보이는 
 - Findings/plans in the fixed format only; no prose padding.
 - Never paste file contents when a path reference suffices.
 - Batch questions to Han into one message.
+- All output is English: agent-to-agent (plans, reviews, rebuttals, Codex
+  prompts) and summaries to Han alike. Korean is not needed anywhere unless directed.
 
 ## Context hygiene (token)
 
