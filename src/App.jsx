@@ -17,7 +17,7 @@ import {
   savePref,
   WRITE_ERROR_MESSAGE,
 } from "./storage.js";
-import { requestPersistentStorage } from "./storageHealth.js";
+import { requestPersistentStorage, markUserDataWritten } from "./storageHealth.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
 import { deleteImages, gcImages } from "./imageStore.js";
@@ -149,6 +149,7 @@ export default function App() {
 
   function addNote(rawDraft) {
     pendingPersistRequest.current = true;
+    markUserDataWritten();
     const draft = applyDerivedTag(rawDraft);
     const ts = Date.now();
     const note = {
@@ -294,6 +295,10 @@ export default function App() {
   }
 
   function replaceAll(newNotes, newCards) {
+    /* 가져오기도 진짜 사용자 데이터를 쓴다 — 기기를 갈아탄 직후가 내구성이
+       가장 절실한 순간인데, addNote에서만 요청하면 그때를 놓친다. */
+    pendingPersistRequest.current = true;
+    markUserDataWritten();
     setNotes(newNotes);
     setCards(newCards);
     // 가져온 노트가 참조하지 않는 고아 사진 정리.

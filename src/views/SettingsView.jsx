@@ -10,6 +10,9 @@ import {
   fmtBytes,
   readLastExportAttempt,
   recordExportAttempt,
+  readLastExportConfirmed,
+  recordExportConfirmed,
+  hasUserData,
   isExportStale,
 } from "../storageHealth.js";
 
@@ -32,6 +35,9 @@ export default function SettingsView({
   const [importError, setImportError] = useState("");
   const [health, setHealth] = useState(null);
   const [lastExport, setLastExport] = useState(() => readLastExportAttempt());
+  const [confirmedExport, setConfirmedExport] = useState(() =>
+    readLastExportConfirmed()
+  );
 
   /* 캐시된 판정이 아니라 **지금** 값을 읽는다 — 크롬이 나중에 조용히 승인해줬을 수
      있는데 옛 "denied"를 보여주면 화면이 거짓말을 한다. */
@@ -257,17 +263,36 @@ export default function SettingsView({
         </div>
         {/* 알림은 설정 안에서만, 수동적으로. 배너·토스트·배지로 띄우면
             매일 쓰는 앱에서 소음이 되고 결국 무시하게 된다. */}
-        {notes.length > 0 && isExportStale(lastExport, Date.now()) && (
+        {/* 확인 대기: 시도만으로는 경고를 끄지 않는다. downloadJSON은
+            <a>.click()이라 차단·취소를 알 수 없어서, 사용자가 파일을 실제로
+            받았다고 말해줘야 그때 신선한 것으로 친다. */}
+        {lastExport !== null &&
+          (confirmedExport === null || lastExport > confirmedExport) && (
+            <div className="export-confirm">
+              <span>내보낸 파일을 실제로 받았나?</span>
+              <Button
+                variant="neutral"
+                onClick={() => {
+                  const now = Date.now();
+                  recordExportConfirmed(now);
+                  setConfirmedExport(now);
+                }}
+              >
+                받았다
+              </Button>
+            </div>
+          )}
+        {hasUserData() && isExportStale(confirmedExport, Date.now()) && (
           <div className="backup-stale">
-            {lastExport === null
-              ? "아직 한 번도 내보내지 않았다. 이 앱은 이 기기에만 저장된다."
-              : "마지막 내보내기가 일주일이 넘었다."}
+            {confirmedExport === null
+              ? "확인된 백업이 아직 없다. 이 앱은 이 기기에만 저장된다."
+              : "마지막 확인된 백업이 일주일이 넘었다."}
           </div>
         )}
-        {lastExport !== null && (
+        {confirmedExport !== null && (
           <div className="hint last-export">
-            마지막 내보내기: {new Date(lastExport).toLocaleDateString("ko-KR")}
-            {" — "}받은 기억이 없으면 다시 내보내라
+            마지막 확인된 백업:{" "}
+            {new Date(confirmedExport).toLocaleDateString("ko-KR")}
           </div>
         )}
         {importError && <div className="io-error">{importError}</div>}

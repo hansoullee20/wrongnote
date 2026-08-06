@@ -15,6 +15,8 @@ import { savePref } from "./storage.js";
 
 const PERSIST_KEY = "wr_meta_persistence_v1";
 const LAST_EXPORT_KEY = "wr_meta_last_export_attempt";
+const CONFIRMED_EXPORT_KEY = "wr_meta_last_export_confirmed";
+const USER_DATA_KEY = "wr_meta_has_user_data";
 
 /** 마지막 내보내기가 이보다 오래되면 설정에서 조용히 알린다.
     수능 대비는 매일 쌓이므로 2주는 너무 느슨하다. */
@@ -98,6 +100,20 @@ export const readLastExportAttempt = () => {
 /** 다운로드를 띄운 뒤 기록한다. 기록 실패는 삼킨다(내보내기 자체는 성공). */
 export const recordExportAttempt = (now) => savePref(LAST_EXPORT_KEY, String(now));
 
+/** 사용자가 파일을 받았다고 **확인한** 시각. 신선도는 이것만 본다. */
+export const readLastExportConfirmed = () => {
+  const v = Number(localStorage.getItem(CONFIRMED_EXPORT_KEY));
+  return Number.isFinite(v) && v > 0 ? v : null;
+};
+export const recordExportConfirmed = (now) =>
+  savePref(CONFIRMED_EXPORT_KEY, String(now));
+
+/* 시드 데이터는 사용자 데이터가 아니다. 새로 깔자마자 "백업 안 했다"고
+   경고하면 아직 잃을 게 없는 시점에 소음만 낸다. */
+export const markUserDataWritten = () => savePref(USER_DATA_KEY, "1");
+export const hasUserData = () => localStorage.getItem(USER_DATA_KEY) === "1";
+
+/** 확인된 내보내기 기준. 시도만 하고 확인 안 했으면 여전히 오래된 것으로 본다. */
 export const isExportStale = (lastAt, now) =>
   lastAt === null || now - lastAt >= EXPORT_STALE_AFTER_MS;
 

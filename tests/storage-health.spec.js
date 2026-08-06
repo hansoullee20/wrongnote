@@ -177,57 +177,80 @@ test.describe("설정 — 저장소 상태를 정직하게 보여준다", () => 
   });
 });
 
-test.describe("내보내기 신선도 알림", () => {
+test.describe("내보내기 신선도 — 시도가 아니라 확인 기준", () => {
   const openSettings = (page) => page.click(".settings-open");
-  const setLastExport = (page, ms) =>
-    page.evaluate((v) => localStorage.setItem("wr_meta_last_export_attempt", String(v)), ms);
+  const DAY = 24 * 60 * 60 * 1000;
+  const seedUserData = (page) =>
+    page.evaluate(() => localStorage.setItem("wr_meta_has_user_data", "1"));
+  const setConfirmed = (page, ms) =>
+    page.evaluate(
+      (v) => localStorage.setItem("wr_meta_last_export_confirmed", String(v)),
+      ms
+    );
 
-  test("한 번도 안 했으면 알리고, 내보내면 즉시 사라진다", async ({ page }) => {
+  test("내보내기만으로는 경고가 꺼지지 않는다 — 받았다고 확인해야 꺼진다", async ({
+    page,
+  }) => {
     await freshApp(page);
+    await seedUserData(page);
+    await page.reload();
     await openSettings(page);
-    await expect(page.locator(".backup-stale")).toContainText("아직 한 번도 내보내지 않았다");
+    await expect(page.locator(".backup-stale")).toContainText("확인된 백업이 아직 없다");
 
     const dl = page.waitForEvent("download");
     await page.click('.btn:has-text("내보내기 (JSON)")');
     await dl;
 
-    // 기록은 파일이 나간 뒤에만 — 그리고 화면에서 바로 없어져야 한다
-    await expect(page.locator(".backup-stale")).toHaveCount(0);
-    expect(
-      await page.evaluate(() => localStorage.getItem("wr_meta_last_export_attempt"))
-    ).not.toBeNull();
+    /* 다운로드가 차단·취소돼도 여기까지는 온다. 그래서 아직 경고는 살아 있고
+       확인을 요구한다 — 이게 조용한 백업 실패를 막는 유일한 장치다. */
+    await expect(page.locator(".backup-stale")).toBeVisible();
+    await expect(page.locator(".export-confirm")).toContainText("실제로 받았나");
 
-    /* 다운로드는 <a>.click()이라 브라우저가 완료를 알려주지 않는다.
-       그래서 날짜를 노출해 조용한 실패를 사용자가 알아챌 수 있게 한다. */
-    await expect(page.locator(".last-export")).toContainText("받은 기억이 없으면");
+    await page.click('.export-confirm .btn:has-text("받았다")');
+    await expect(page.locator(".backup-stale")).toHaveCount(0);
+    await expect(page.locator(".export-confirm")).toHaveCount(0);
   });
 
-  test("일주일이 넘으면 알리고, 최근이면 조용하다", async ({ page }) => {
-    const DAY = 24 * 60 * 60 * 1000;
+  test("확인된 백업이 일주일 넘으면 다시 알린다", async ({ page }) => {
     await freshApp(page);
-
-    await setLastExport(page, Date.now() - 8 * DAY);
+    await seedUserData(page);
+    await setConfirmed(page, Date.now() - 8 * DAY);
     await page.reload();
     await openSettings(page);
     await expect(page.locator(".backup-stale")).toContainText("일주일이 넘었다");
 
-    await setLastExport(page, Date.now() - 2 * DAY);
+    await setConfirmed(page, Date.now() - 2 * DAY);
     await page.reload();
     await openSettings(page);
     await expect(page.locator(".backup-stale")).toHaveCount(0);
+    await expect(page.locator(".last-export")).toContainText("마지막 확인된 백업");
+  });
+
+  test("시드 데이터만 있는 새 설치에는 경고하지 않는다", async ({ page }) => {
+    await freshApp(page); // 시드 노트는 있지만 사용자가 만든 건 없다
+    await openSettings(page);
+    await expect(page.locator(".backup-stale")).toHaveCount(0);
+  });
+
+  test("노트를 하나 만들면 그때부터 경고한다", async ({ page }) => {
+    await freshApp(page);
+    await saveNote(page, "BACKUP-GATE");
+    await openSettings(page);
+    await expect(page.locator(".backup-stale")).toContainText("확인된 백업이 아직 없다");
   });
 
   test("알림은 설정 안에만 있다 — 탭 화면에 배너를 띄우지 않는다", async ({
     page,
   }) => {
     await freshApp(page);
-    // 설정을 열기 전 어느 탭에도 경고가 없어야 한다
+    await seedUserData(page);
+    await page.reload();
     for (const tab of ["문제", "풀기", "카드", "통계"]) {
       await page.getByRole("button", { name: new RegExp(`^${tab}`) }).first().click();
       await expect(page.locator(".backup-stale")).toHaveCount(0);
       await expect(page.locator(".audit-warn")).toHaveCount(0);
     }
     await openSettings(page);
-    await expect(page.locator(".backup-stale")).toContainText("아직 한 번도");
+    await expect(page.locator(".backup-stale")).toContainText("확인된 백업이 아직 없다");
   });
 });

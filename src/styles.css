@@ -1123,6 +1123,16 @@ textarea:focus {
 /* 백업 신선도 알림. .io-error와 생김새는 같지만 **클래스를 나눈다** —
    같이 쓰면 "가져오기 실패"를 겨냥한 선택자가 이 알림까지 잡아
    strict mode 위반이 난다 (실제로 CI에서 터졌다). 뜻이 다르면 훅도 다르게. */
+.export-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
 .backup-stale,
 .storage-warn {
   color: var(--error);
