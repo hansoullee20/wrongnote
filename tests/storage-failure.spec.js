@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { freshApp, readNotes, openNoteByProblem } from "./helpers.js";
+import {
+  freshApp,
+  readNotes,
+  openNoteByProblem,
+  openRecord,
+  goAnalysis,
+  pickCause,
+} from "./helpers.js";
 
 // 1×1 픽셀 PNG (solution-images.spec.js와 같은 방식)
 const TINY_PNG_URL =
@@ -128,6 +135,50 @@ const installQuotaTrap = (page) =>
 
 const armQuota = (page) =>
   page.evaluate(() => sessionStorage.setItem("__quota", "on"));
+
+/**
+ * IndexedDB 쓰기 실패 트랩. localStorage용 installQuotaTrap과 **다른 저장소**라
+ * 재사용할 수 없다 — 이 구분이 이번 수정의 핵심이기도 하다.
+ * `images` store의 N번째 put에서만 던진다. seedBlobs도 raw put을 쓰므로
+ * 반드시 시드가 끝난 **뒤에** arm해야 한다.
+ */
+const installIdbPutTrap = (page) =>
+  page.addInitScript(() => {
+    const original = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args) {
+      const failAt = Number(sessionStorage.getItem("__idbFailAt") || 0);
+      if (failAt > 0 && this.name === "images") {
+        const n = Number(sessionStorage.getItem("__idbPutCount") || 0) + 1;
+        sessionStorage.setItem("__idbPutCount", String(n));
+        if (n >= failAt) {
+          const err = new Error("idb quota");
+          err.name = "QuotaExceededError";
+          throw err;
+        }
+      }
+      return original.apply(this, args);
+    };
+  });
+
+const armIdbFailAt = (page, n) =>
+  page.evaluate((n) => {
+    sessionStorage.setItem("__idbPutCount", "0");
+    sessionStorage.setItem("__idbFailAt", String(n));
+  }, n);
+
+const disarmIdb = (page) =>
+  page.evaluate(() => sessionStorage.removeItem("__idbFailAt"));
+
+/** 파일 선택기로 사진 N장 첨부 */
+const attachPhotos = async (page, count) => {
+  const files = Array.from({ length: count }, (_, i) => ({
+    name: `p${i}.png`,
+    mimeType: "image/png",
+    buffer: Buffer.from(TINY_PNG_URL.split(",")[1], "base64"),
+  }));
+  await page.setInputFiles('input[type="file"][accept="image/*"]', files);
+  await expect(page.locator(".photo-strip-item")).toHaveCount(count);
+};
 
 const readRaw = (page, key) =>
   page.evaluate((k) => localStorage.getItem(k), key);
@@ -299,5 +350,54 @@ test.describe("쓰기 실패 — 죽지 않고, 구조 수단은 열어둔다", 
     // 앱이 살아 있고 화면에는 반영됐다
     await expect(page.getByRole("button", { name: /^문제/ })).toBeVisible();
     expect(await page.getAttribute("html", "data-theme")).not.toBe(before);
+  });
+});
+
+/**
+ * IDB 쓰기 실패 (F). localStorage와 **다른 저장소**라 쿼터도 따로 찬다 —
+ * localStorage가 멀쩡해도 여기는 찰 수 있다.
+ *
+ * 예전엔 submit()이 async인데 try/catch가 없어서 putImage가 reject하면
+ * unhandled rejection이 나고 onAdd가 안 불렸다. 즉 **노트가 통째로 저장되지
+ * 않는데 사용자에겐 아무 메시지도 없었다.**
+ */
+test.describe("IDB 저장 실패 — 조용히 삼키지 않는다", () => {
+  test("두 번째 사진 저장 실패 → 기록 중단·문구 표시, 재시도 시 중복 저장 없음", async ({
+    page,
+  }) => {
+    const pageErrors = [];
+    await installIdbPutTrap(page);
+    await freshApp(page);
+    page.on("pageerror", (e) => pageErrors.push(e.message));
+
+    await openRecord(page);
+    await page.fill("#rec-problem", "IDB-FAIL");
+    await attachPhotos(page, 2);
+    await goAnalysis(page);
+    await pickCause(page);
+
+    // 두 번째 put에서 실패
+    await armIdbFailAt(page, 2);
+    await page.click('.btn--primary:has-text("저장")');
+
+    // 실패는 저장 버튼이 있는 2페이지에서 보여야 한다
+    await expect(page.locator(".io-error")).toContainText("사진 저장에 실패했다");
+    expect((await readNotes(page)).some((n) => n.problem === "IDB-FAIL")).toBe(
+      false
+    );
+    expect(pageErrors).toEqual([]); // unhandled rejection 없음
+    expect((await readImageIds(page)).length).toBe(1); // 첫 장만 들어갔다
+
+    // 재시도 — 첫 장은 체크포인트돼 있어 다시 저장하지 않는다
+    await disarmIdb(page);
+    await page.click('.btn--primary:has-text("저장")');
+    await expect
+      .poll(async () => (await readNotes(page)).some((n) => n.problem === "IDB-FAIL"))
+      .toBe(true);
+
+    const saved = (await readNotes(page)).find((n) => n.problem === "IDB-FAIL");
+    expect(saved.images.length).toBe(2);
+    // 총 blob이 2개 — 첫 장이 세 번째 blob으로 중복 저장되지 않았다
+    expect((await readImageIds(page)).length).toBe(2);
   });
 });

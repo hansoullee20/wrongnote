@@ -117,6 +117,8 @@ export default function RecordView({
   // 첨부 사진: {id}=IDB에 이미 저장(수정 모드), {blob,url}=이번에 붙인 것(저장 시 기록)
   const [photos, setPhotos] = useState([]);
   const originalImageIds = useRef([]); // 수정 시작 시점의 저장된 사진 id
+  // IDB 쓰기 중 photos 스냅샷이 바뀌면 안 된다 — 중복 클릭·첨부·제거를 잠근다
+  const [submitting, setSubmitting] = useState(false);
 
   function clearPendingPhotos() {
     setPhotos((ps) => {
@@ -233,26 +235,57 @@ export default function RecordView({
   };
 
   const submit = async () => {
-    if (!canSave) return;
+    if (!canSave || submitting) return;
+    setSubmitting(true);
+    setPhoto((p) => ({ ...p, error: "" }));
 
-    // 이번에 붙인 사진을 IDB에 기록, 유지한 기존 id와 합침
+    // 이번에 붙인 사진을 IDB에 기록, 유지한 기존 id와 합침.
+    // IDB 쿼터는 localStorage와 따로 찬다 — 여기서 던지면 onAdd가 안 불려
+    // 노트가 통째로 사라지는데 예전엔 사용자에게 아무 말도 없었다.
     const imageIds = [];
-    for (const p of photos) {
-      if (p.id) {
-        imageIds.push(p.id);
-      } else {
-        imageIds.push(await putImage(p.blob));
-        if (p.url) URL.revokeObjectURL(p.url);
+    try {
+      for (const p of photos) {
+        if (p.id) {
+          imageIds.push(p.id);
+        } else {
+          const newId = await putImage(p.blob);
+          imageIds.push(newId);
+          /* 성공한 blob은 즉시 photos에 체크포인트한다. 재시도 때 p.id 경로를
+             타므로 같은 사진이 두 번째 blob으로 중복 저장되지 않는다.
+             object URL은 노트 저장이 실제로 성공한 뒤에만 해제한다 —
+             여기서 풀면 실패 후 미리보기가 깨진 채 남는다. */
+          setPhotos((ps) => ps.map((x) => (x === p ? { ...x, id: newId } : x)));
+        }
       }
+    } catch {
+      /* 실패해도 이미 저장된 blob을 지우지 않는다. 지금 즉시 삭제를 넣으면
+         나중 D-gc(영속 성공 뒤 수거)와 싸운다 — .reviews/idb-invariant-duel.md
+         §5의 안전 3조건 참고. 남는 건 D-gc가 회수할 고아 blob이다. */
+      setPhoto((p) => ({
+        ...p,
+        error:
+          "사진 저장에 실패했다. 노트 변경은 저장하지 않았다. 저장공간을 정리한 뒤 다시 시도해라.",
+      }));
+      setSubmitting(false);
+      return; // draft·첨부·수정 상태를 그대로 둬서 재시도할 수 있게 한다
     }
-    // 수정 중 제거한 기존 사진은 IDB에서도 삭제.
-    // 저장이 잠겼으면 지우지 않는다 — onUpdate가 디스크에 안 남으므로
-    // 새로고침하면 옛 노트가 이미 지워진 사진 id를 가리키게 된다.
-    // (App.deleteNote와 같은 최소 완화책 — 근본 수정은 별도 Tier 2)
+
+    /* 수정 중 제거한 기존 사진은 IDB에서도 삭제.
+       이건 정리일 뿐이라 실패해도 노트 저장을 막지 않는다 — putImage 실패는
+       "저장할 수 없다"지만 이건 "옛 사진이 남는다"(누수)에 불과하다.
+       저장이 잠겼으면 아예 건너뛴다 — onUpdate가 디스크에 안 남으므로
+       새로고침하면 옛 노트가 이미 지워진 사진 id를 가리키게 된다.
+       (App.deleteNote와 같은 최소 완화책 — 근본 수정은 별도 Tier 2) */
     const removed = originalImageIds.current.filter(
       (id) => !imageIds.includes(id)
     );
-    if (removed.length && !storageLocked) await deleteImages(removed);
+    if (removed.length && !storageLocked) {
+      try {
+        await deleteImages(removed);
+      } catch {
+        // 정리 실패는 삼킨다 — 고아 blob은 D-gc가 회수한다
+      }
+    }
 
     const payload = { ...draft, problem: draft.problem.trim(), images: imageIds };
     if (editingId) {
@@ -264,8 +297,9 @@ export default function RecordView({
     setDraft(emptyDraft(draft.subject));
     setStep(1);
     setChecks([false, false, false, false]);
-    setPhotos([]);
+    clearPendingPhotos(); // 성공했을 때만 object URL을 해제한다
     originalImageIds.current = [];
+    setSubmitting(false);
   };
 
   return (
@@ -306,7 +340,7 @@ export default function RecordView({
             <div className="ocr-row">
               <Button
                 variant="ink"
-                disabled={photo.busy}
+                disabled={photo.busy || submitting}
                 onClick={() =>
                   photoInputRef.current && photoInputRef.current.click()
                 }
@@ -342,6 +376,7 @@ export default function RecordView({
                     <button
                       type="button"
                       className="photo-remove"
+                      disabled={submitting}
                       onClick={() => removePhoto(i)}
                       aria-label="사진 제거"
                     >
@@ -556,11 +591,14 @@ export default function RecordView({
           {gateActive && !gatePassed && (
             <div className="gate-warn">판정 체크 미완료 — 저장 잠김</div>
           )}
+          {/* 사진 저장 실패는 여기서도 보여야 한다. 원래 문구 자리(1페이지
+              첨부 영역)는 실패가 일어나는 2페이지에서 보이지 않는다. */}
+          {photo.error && <div className="io-error">{photo.error}</div>}
           <Button
             variant="primary"
             size="lg"
             block
-            disabled={!canSave}
+            disabled={!canSave || submitting}
             onClick={submit}
           >
             {editingId ? "수정 저장" : "저장"}
