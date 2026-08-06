@@ -33,11 +33,16 @@
           }
           var root = document.documentElement;
           root.setAttribute("data-theme", theme);
+          /* 팔레트 읽기도 따로 감싼다. data-theme은 위에서 이미 찍었으니
+             여기서 던져도 야간 사용자가 흰 화면을 보지는 않지만
+             (themes.css의 :root[data-theme="dark"] 기본값이 받는다),
+             첫 페인트의 정확성을 문장 순서에 기대게 두지 않는다. */
+          var savedPalette = null;
+          try {
+            savedPalette = localStorage.getItem("wr_palette");
+          } catch (e) {}
           // DEFAULT_PALETTE (src/palettes.js)
-          root.setAttribute(
-            "data-palette",
-            localStorage.getItem("wr_palette") || "warm"
-          );
+          root.setAttribute("data-palette", savedPalette || "warm");
         } catch (e) {
           /* localStorage 차단(프라이빗 모드 등) — 기본값 그대로 간다 */
         }
