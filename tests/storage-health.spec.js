@@ -176,3 +176,54 @@ test.describe("설정 — 저장소 상태를 정직하게 보여준다", () => 
     await expect(page.locator('.btn:has-text("영구 보관 요청")')).toHaveCount(0);
   });
 });
+
+test.describe("내보내기 신선도 알림", () => {
+  const openSettings = (page) => page.click(".settings-open");
+  const setLastExport = (page, ms) =>
+    page.evaluate((v) => localStorage.setItem("wr_meta_last_exported_at", String(v)), ms);
+
+  test("한 번도 안 했으면 알리고, 내보내면 즉시 사라진다", async ({ page }) => {
+    await freshApp(page);
+    await openSettings(page);
+    await expect(page.locator(".backup-stale")).toContainText("아직 한 번도 내보내지 않았다");
+
+    const dl = page.waitForEvent("download");
+    await page.click('.btn:has-text("내보내기 (JSON)")');
+    await dl;
+
+    // 기록은 파일이 나간 뒤에만 — 그리고 화면에서 바로 없어져야 한다
+    await expect(page.locator(".backup-stale")).toHaveCount(0);
+    expect(
+      await page.evaluate(() => localStorage.getItem("wr_meta_last_exported_at"))
+    ).not.toBeNull();
+  });
+
+  test("일주일이 넘으면 알리고, 최근이면 조용하다", async ({ page }) => {
+    const DAY = 24 * 60 * 60 * 1000;
+    await freshApp(page);
+
+    await setLastExport(page, Date.now() - 8 * DAY);
+    await page.reload();
+    await openSettings(page);
+    await expect(page.locator(".backup-stale")).toContainText("일주일이 넘었다");
+
+    await setLastExport(page, Date.now() - 2 * DAY);
+    await page.reload();
+    await openSettings(page);
+    await expect(page.locator(".backup-stale")).toHaveCount(0);
+  });
+
+  test("알림은 설정 안에만 있다 — 탭 화면에 배너를 띄우지 않는다", async ({
+    page,
+  }) => {
+    await freshApp(page);
+    // 설정을 열기 전 어느 탭에도 경고가 없어야 한다
+    for (const tab of ["문제", "풀기", "카드", "통계"]) {
+      await page.getByRole("button", { name: new RegExp(`^${tab}`) }).first().click();
+      await expect(page.locator(".backup-stale")).toHaveCount(0);
+      await expect(page.locator(".audit-warn")).toHaveCount(0);
+    }
+    await openSettings(page);
+    await expect(page.locator(".backup-stale")).toContainText("아직 한 번도");
+  });
+});

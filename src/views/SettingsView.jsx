@@ -8,6 +8,9 @@ import {
   readStorageHealth,
   requestPersistentStorage,
   fmtBytes,
+  readLastExportedAt,
+  recordExportedAt,
+  isExportStale,
 } from "../storageHealth.js";
 
 /**
@@ -28,6 +31,7 @@ export default function SettingsView({
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
   const [health, setHealth] = useState(null);
+  const [lastExport, setLastExport] = useState(() => readLastExportedAt());
 
   /* 캐시된 판정이 아니라 **지금** 값을 읽는다 — 크롬이 나중에 조용히 승인해줬을 수
      있는데 옛 "denied"를 보여주면 화면이 거짓말을 한다. */
@@ -56,6 +60,11 @@ export default function SettingsView({
     // 첨부 사진(base64)까지 포함한 완전 백업 — 문제 사진 + 풀이 사진
     const images = await exportImages(notes.flatMap(noteImageIds));
     downloadJSON(name, { ...exportEnvelope(notes, cards), images });
+    /* 파일이 실제로 나간 뒤에만 기록한다 — 중간에 실패했는데 "방금 백업함"으로
+       남으면 알림이 꺼져서 오히려 위험해진다. 기록 실패는 삼킨다(내보내기는 성공). */
+    const now = Date.now();
+    recordExportedAt(now);
+    setLastExport(now);
   }
 
   function handleImportFile(e) {
@@ -244,6 +253,15 @@ export default function SettingsView({
             onChange={handleImportFile}
           />
         </div>
+        {/* 알림은 설정 안에서만, 수동적으로. 배너·토스트·배지로 띄우면
+            매일 쓰는 앱에서 소음이 되고 결국 무시하게 된다. */}
+        {notes.length > 0 && isExportStale(lastExport, Date.now()) && (
+          <div className="io-error backup-stale">
+            {lastExport === null
+              ? "아직 한 번도 내보내지 않았다. 이 앱은 이 기기에만 저장된다."
+              : "마지막 내보내기가 일주일이 넘었다."}
+          </div>
+        )}
         {importError && <div className="io-error">{importError}</div>}
         {parseError && (
           <div className="io-error">
