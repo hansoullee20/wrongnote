@@ -125,6 +125,23 @@ test.describe("쓰기 실패 — 죽지 않고, 구조 수단은 열어둔다", 
     expect(parsed.notes.length).toBeGreaterThan(0);
   });
 
+  test("기록 시트 안에서도 배너가 보인다 — 경고가 가장 필요한 순간이다", async ({
+    page,
+  }) => {
+    await freshApp(page);
+    await installQuotaTrap(page);
+    await page.goto("/");
+    await armQuota(page);
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+
+    // 기록 시트는 .paper-sheet 밖의 전체화면 오버레이다. 여기서 만든 노트는
+    // 저장되지 않고 사라지므로, 바로 이 화면에서 경고가 보여야 한다.
+    await page.click(".fab"); // 문제 탭의 기록 버튼
+    await expect(page.locator('.sheet-title:has-text("오답 기록")')).toBeVisible();
+    await expect(page.locator(".sheet .audit-warn")).toBeVisible();
+  });
+
   test("테마·팔레트 저장이 막혀도 앱이 죽지 않고 화면에는 적용된다", async ({
     page,
   }) => {

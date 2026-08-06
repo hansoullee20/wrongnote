@@ -84,6 +84,14 @@ export default function App() {
   const parseError = boot.error;
   const [writeError, setWriteError] = useState(boot.writeError);
   const storageLocked = Boolean(parseError) || Boolean(writeError);
+
+  /* 배너는 탭 화면(.paper-sheet)과 **시트 안쪽 둘 다** 띄운다.
+     기록 시트는 .paper-sheet 밖의 전체화면 오버레이라, 시트에만 안 띄우면
+     하필 사용자가 새 노트를 쓰는 순간 — 저장 안 될 데이터를 만드는 바로 그
+     순간 — 경고가 가려진다. */
+  const storageBanner = storageLocked ? (
+    <div className="audit-warn">{parseError || writeError}</div>
+  ) : null;
   const [tab, setTab] = useState("problems");
   // 기록 폼은 탭이 아니라 오버레이 — 매일 하는 건 복습이고 기록은 가끔이다
   const [recording, setRecording] = useState(false);
@@ -322,9 +330,7 @@ export default function App() {
       </nav>
 
       <div className="paper-sheet">
-        {storageLocked && (
-          <div className="audit-warn">{parseError || writeError}</div>
-        )}
+        {storageBanner}
         {tab === "problems" && (
           <ProblemsView
             notes={notes}
@@ -472,6 +478,7 @@ export default function App() {
             </div>
           </div>
           <div className="sheet-body">
+            {storageBanner}
             <RecordView
               notes={notes}
               onAdd={(payload) => {
