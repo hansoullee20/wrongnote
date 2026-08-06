@@ -19,13 +19,24 @@ Just do it on the cheap model. Run `npm test`. No review.
 5. REVIEW: done by whichever model did NOT write the plan. One call only,
    diff-only input, no build/test inside review. Prompt reviews commit-by-commit
    (step-by-step inside a single call), then checks cross-commit interactions.
-6. VERIFY: run `npm test` locally in plain shell (never inside Codex sandbox —
+6. DEBATE (조건부): 리뷰에서 blocker/high가 나왔거나 verdict가 merge가 아니면,
+   리뷰 결과를 반대 모델에게 공격 프롬프트로 던진다:
+   "각 지적을 코드 근거로 반박 또는 확인하라. CONFIRMED / PARTIAL / REFUTED로
+   분류하고, 리뷰어가 놓친 것을 추가로 찾아라."
+   리뷰어는 결과를 정리한다: REFUTED 폐기, PARTIAL 강등, 신규 지적 채택,
+   그리고 살아남은 지적들이 공통 근본원인(불변식 하나)으로 묶이는지 명시.
+   단 1라운드만 — 정리 후에도 blocker/high에서 의견이 갈리면 루프 금지,
+   양쪽 입장을 정리해 Han에게 에스컬레이션.
+   리뷰가 클린하거나 low/med뿐이면 DEBATE는 스킵.
+7. VERIFY: run `npm test` locally in plain shell (never inside Codex sandbox —
    port binding is blocked there).
 
 **Tier 2 — large / novel / risky** (architecture, security, data, money):
 Both sides write full plans (Claude opus-or-fable + Codex sol high). Compare,
 argue only the divergence points, Han judges. Then execute cheap, review by the
 opposing model, test locally. Fable usage is reserved for this tier only.
+Tier 2에서는 심각도와 무관하게 DEBATE 필수 — 클린해 보이는 리뷰도 적대 검증할
+가치가 있다.
 
 ## Standing rules (all tiers)
 
