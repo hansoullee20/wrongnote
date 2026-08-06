@@ -138,7 +138,7 @@ test.describe("설정 — 저장소 상태를 정직하게 보여준다", () => 
     await expect(box.locator(".storage-row").nth(1)).toContainText("1.3MB");
     await expect(box.locator(".storage-row").nth(1)).toContainText("10.0MB");
     // 영구가 아닌데 "안전"이라고 말하면 안 된다
-    await expect(box.locator(".io-error")).toContainText("통째로 지울 수 있다");
+    await expect(box.locator(".storage-warn")).toContainText("통째로 지울 수 있다");
 
     // 재요청 → 이번엔 승인
     await setStub(page, { __persistResult: true });

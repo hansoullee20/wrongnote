@@ -206,7 +206,7 @@ export default function SettingsView({
             </div>
             {/* 영구가 아니면 절대 "안전하다"고 말하지 않는다 */}
             {health.persisted === false && (
-              <div className="io-error">
+              <div className="storage-warn">
                 기기 저장 공간이 부족하면 브라우저가 이 앱의 데이터를 통째로 지울
                 수 있다. 내보내기를 자주 해라.
               </div>
