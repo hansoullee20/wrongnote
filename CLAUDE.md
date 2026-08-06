@@ -54,3 +54,20 @@ Tier 2에서는 심각도와 무관하게 DEBATE 필수 — 클린해 보이는 
   explicitly asks for a live negotiation session.
 - Han is the final authority: plans need his approval; never merge/push without
   his sign-off.
+
+## Output discipline (token)
+
+- Be terse. No recaps, no restating diffs/plans back in chat.
+- Findings/plans in the fixed format only; no prose padding.
+- Never paste file contents when a path reference suffices.
+- Batch questions to Han into one message.
+
+## Context hygiene (token)
+
+- One task = one session. Do not carry old task history; CLAUDE.md reloads the rules.
+- Before a session ends, write durable conclusions (review results, agreed plans,
+  duel outcomes) to files in the repo (e.g. .reviews/<topic>.md) so the next
+  session reads files, not chat history.
+- Reference artifacts by path ("review is in .reviews/D.md — read and rebut"),
+  never re-paste them.
+- In long sessions, /compact at milestones.
