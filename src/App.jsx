@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   RECHECK_DAYS,
   FAIL_RECHECK_DAYS,
@@ -17,6 +17,7 @@ import {
   savePref,
   WRITE_ERROR_MESSAGE,
 } from "./storage.js";
+import { requestPersistentStorage } from "./storageHealth.js";
 import { migrateCard } from "./migrate.js";
 import { scheduleCard, dueCards } from "./srs.js";
 import { deleteImages, gcImages } from "./imageStore.js";
@@ -83,6 +84,8 @@ export default function App() {
      writeError: 메모리는 온전하다 → 내보내기는 열어둔다 (유일한 구조 수단) */
   const parseError = boot.error;
   const [writeError, setWriteError] = useState(boot.writeError);
+  // 사용자가 실제로 노트를 만들었을 때만 참 — 시드/마이그레이션 쓰기와 구분한다
+  const pendingPersistRequest = useRef(false);
   const storageLocked = Boolean(parseError) || Boolean(writeError);
 
   /* 배너는 탭 화면(.paper-sheet)과 **시트 안쪽 둘 다** 띄운다.
@@ -108,7 +111,19 @@ export default function App() {
 
   useEffect(() => {
     if (storageLocked) return;
-    if (!saveNotes(notes)) setWriteError(WRITE_ERROR_MESSAGE);
+    if (!saveNotes(notes)) {
+      setWriteError(WRITE_ERROR_MESSAGE);
+      return;
+    }
+    /* 영구 저장소는 **실제 노트가 디스크에 안착한 뒤** 한 번만 요청한다.
+       부팅마다 물으면 잔소리가 되고, 시드/마이그레이션 쓰기로 요청하면
+       사용자가 아직 아무것도 안 만든 시점에 프롬프트가 뜬다.
+       크롬은 참여도 휴리스틱으로 조용히 승인하기도 하므로, 진짜 기록이
+       생긴 순간이 승인 확률이 가장 높은 시점이기도 하다. */
+    if (pendingPersistRequest.current) {
+      pendingPersistRequest.current = false;
+      requestPersistentStorage();
+    }
   }, [notes, storageLocked]);
   useEffect(() => {
     if (storageLocked) return;
@@ -133,6 +148,7 @@ export default function App() {
   }
 
   function addNote(rawDraft) {
+    pendingPersistRequest.current = true;
     const draft = applyDerivedTag(rawDraft);
     const ts = Date.now();
     const note = {
