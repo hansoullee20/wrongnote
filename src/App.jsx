@@ -7,6 +7,7 @@ import {
   uid,
   isRecheckDue,
   noteImageIds,
+  shuffle,
   CAUSES,
 } from "./constants.js";
 import { loadAll, saveNotes, saveCards } from "./storage.js";
@@ -340,7 +341,7 @@ export default function App() {
               setTab("solve");
             }}
             onStartRandom={(pool, size) => {
-              const shuffled = [...pool].sort(() => Math.random() - 0.5);
+              const shuffled = shuffle(pool);
               setPendingQueue({
                 ids: shuffled.slice(0, size).map((n) => n.id),
                 label: filter.cause ? `${filter.cause}에서` : "전체에서",

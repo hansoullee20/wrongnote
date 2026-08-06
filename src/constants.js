@@ -130,6 +130,23 @@ export const isRecheckDue = (n, now = Date.now()) =>
   now >= (n.nextRecheckTs ?? n.ts + RECHECK_DAYS * DAY_MS);
 
 /**
+ * 균등 셔플 (Fisher-Yates). 원본은 건드리지 않는다.
+ *
+ * [...pool].sort(() => Math.random() - 0.5) 를 쓰면 안 된다. 비교 함수가
+ * 비일관적이라(같은 쌍을 다시 물어도 답이 달라진다) 정렬 알고리즘의 전제가
+ * 깨지고, 결과가 균등 분포가 아니라 원래 순서 앞쪽에 치우친다.
+ * "랜덤으로 뽑기"가 사실은 앞쪽 문제만 자주 뽑는 상태였다.
+ */
+export const shuffle = (arr) => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+/**
  * 노트가 참조하는 모든 IDB 이미지 id — 문제 사진 + 풀이 사진.
  *
  * 사진 필드가 둘(images, solutionImages)이라 수명주기를 다루는 곳은 반드시

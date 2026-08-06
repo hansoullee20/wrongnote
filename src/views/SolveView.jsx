@@ -5,6 +5,7 @@ import {
   CHOICES,
   MATH_ERROR_TAGS,
   isRecheckDue,
+  shuffle,
 } from "../constants.js";
 import { buildReviewGroups } from "../review.js";
 import { getImage } from "../imageStore.js";
@@ -224,7 +225,7 @@ export default function SolveView({
               const pool = scope.cause
                 ? notes.filter((n) => n.cause === scope.cause)
                 : notes;
-              const shuffled = [...pool].sort(() => Math.random() - 0.5);
+              const shuffled = shuffle(pool);
               start(
                 shuffled.slice(0, randomSize).map((n) => n.id),
                 scope.cause ? `${scope.cause}에서` : "전체에서",
