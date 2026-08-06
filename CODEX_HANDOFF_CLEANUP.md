@@ -570,12 +570,44 @@ Claude·Codex 재논의에서 **"72줄만 try/catch"는 틀린 수리**로 결�
 | 항목 | 내용 |
 |---|---|
 | ~~**`storage.js:72` ⚠️ 1순위**~~ | ✅ **해결됨** — §10.4 참고. 범위가 부팅 경로 하나가 아니라 저장 이펙트·테마 쓰기까지였고, 파싱 실패 시 빈 백업을 내보내는 별개 함정도 같이 나왔다 |
+| **IDB 파괴 순서 ⚠️ 1순위 (Tier 2)** | `5d385af`의 D-min은 **의도적으로 불완전하다.** `storageLocked`가 이미 켜진 뒤에만 파괴를 막으므로, **첫 저장 실패가 감지되기 전의 삭제에는 창이 그대로 남는다** — 그 삭제는 사진을 지우고 노트는 되살아난다. 정책이 호출부 3곳에 복제된 것도 §10.2 재발이다. 근본 수정은 §11.1 |
+| **고아 카드 (`App.jsx:107`)** | `addNote`가 notes·cards를 같은 렌더에서 바꾼다. effect1(notes) 실패 → `setWriteError`를 걸어도 **effect2(cards)는 같은 flush에서 `storageLocked=false`를 캡처한 채 실행**된다. 큰 notes는 실패하고 작은 cards는 성공 → 재시작 후 없는 노트를 가리키는 카드가 남는다. D 수정이 이걸 자동으로 해결하지 못한다 |
+| `RecordView.jsx:239` `putImage` | `submit`이 `async`인데 `try/catch`가 없다. IDB 쿼터 초과면 unhandled rejection → `onAdd`가 안 불려 **노트가 통째로 저장되지 않는데 사용자에겐 아무 메시지도 없다.** 앞선 사진은 이미 IDB에 들어가 고아로 남는다. localStorage가 멀쩡해도 도달한다 |
+| `imageStore.js:123` `importImages` | 개별 사진 복원 실패를 삼킨 뒤 그대로 `onReplaceAll`을 진행한다 → 사진 id는 있는데 blob은 없는 "성공한" 가져오기 |
+| 저장 실패 테스트 공백 | `tests/storage-failure.spec.js`는 대부분 **부팅 시점 전면 quota**만 본다. 사용 중 `saveNotes` 실패, notes만 실패/cards만 성공, IDB 자체 쿼터는 잠그지 못한다 |
 | `tests/helpers.js:8` | `getByRole("button", { name: /^문제/ })`가 문제 카드까지 매칭한다. 모든 테스트가 `freshApp`을 거치므로 **전 테스트 단일 실패점**. 실제로 프로브 작성 중 strict mode 위반을 일으켰다 |
 | `.gitignore` | `test-results`/`playwright-report`가 없다. `test-results/.last-run.json`이 `07b8721`에 커밋돼 있어 로컬 테스트마다 diff가 뜬다 |
 | `fmtSec(null)` | `"null초"`로 렌더된다 (`SolveView.jsx:737`). 가져온 데이터에서만 도달 가능 |
 | `recordAttempt` 무음 실패 | `App.jsx:184`가 잘못된 원인이면 조용히 return하는데, `finalizeFail`은 무조건 `graded`로 넘어간다. 지금은 UI가 잘못된 값을 못 만들어서 살아 있지 않지만, 어긋나면 "기록됨"이라고 보여주고 저장은 안 되는 상태가 된다 |
 | 개념 라이브러리 | v2 스펙 §30. 실사용 2주 뒤 재검토 |
 | `지위 오해` 분류 정리 | 뜻이 소실된 레거시 태그 |
+
+### 11.1 다음 Tier 2 — IDB 파괴 순서 (D-gc)
+
+**불변식 하나로 묶인다:** *되돌릴 수 없는 IndexedDB 파괴가, 대응하는
+localStorage 쓰기의 성공을 기다리지 않는다.* 위 표의 1·2번이 같은 뿌리다.
+
+세 안을 Claude·Codex가 검토해 **D-gc**로 합의했다 (Han 결정: 지금은 D-min만,
+구조 변경은 별도 Tier 2):
+
+- **D-min** (지금 상태) — 잠금 시 파괴 건너뛰기. 창이 남고 정책이 3곳에 복제됨
+- **D-full** — 저장 성공 뒤 파괴. 영속성 모델을 반쯤 재설계해야 하는데 고아 카드는 여전히 안 풀림
+- **D-gc ✅** — 즉시 삭제를 아예 없애고, **영속 성공 뒤 GC가 도달 불가 blob만 수거**한다.
+  삭제가 "사용자 행동의 결과"가 아니라 "영속된 상태의 결과"가 된다.
+  실패 비용이 *복구 불가능한 손실* → *회수 가능한 고아 blob*으로 바뀐다
+
+**기존 테스트는 D-gc를 막지 않는다.** `photos.spec.js`·`solution-images.spec.js`의
+삭제 검증이 전부 `expect.poll(..., {timeout: 5000})`이라 **즉시성이 아니라 최종
+일관성만** 단언한다. 성공 커밋 직후 GC를 예약하면 수정 없이 통과한다.
+
+⚠️ **D-gc를 순진하게 구현하면 커밋 B의 버그가 재현된다.** 저장 성공 이펙트에서
+매번 `gcImages(notes)`를 부르면 **방금 업로드됐지만 아직 노트에 저장되지 않은
+blob을 수거한다** (`RecordView.submit`은 `putImage` → `onAdd` 순서다).
+최소 안전 범위:
+
+1. GC를 **직렬화**한다 (동시 실행 금지)
+2. 참조 집합에 **미저장분까지 포함** — 메모리 노트 + 업로드 대기 + import 대기
+3. "언젠가"가 아니라 **성공 커밋 뒤 반드시 예약** (import 고아 수거 테스트가 요구)
 
 ---
 
