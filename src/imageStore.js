@@ -119,14 +119,28 @@ export async function exportImages(ids) {
   return out;
 }
 
-/** {id: dataUrl} → IDB 복원 — 가져오기용 */
+/**
+ * {id: dataUrl} → IDB 복원 — 가져오기용.
+ *
+ * 실패를 삼키지 않는다. 예전엔 개별 실패를 catch로 먹고 호출부가 그대로
+ * 교체를 진행해서, **사진 id는 있는데 blob은 없는 "성공한" 가져오기**가 됐다.
+ * 이 앱은 사진 id를 가진 노트를 만들면 blob도 반드시 있어야 한다 —
+ * "추측해서 데이터를 만들지 않는다"와 같은 방향이다.
+ *
+ * 이미 복원된 앞선 blob은 여기서 지우지 않는다. 가져오기가 중단되므로
+ * 노트 교체도 GC도 실행되지 않고, 같은 백업을 재시도하면 같은 id로 put하므로
+ * 중복이 생기지 않는다. 남는 고아는 후속 D-gc의 회수 대상이다.
+ *
+ * @returns {Promise<boolean>} 전부 복원됐으면 true
+ */
 export async function importImages(map) {
-  if (!map) return;
+  if (!map) return true;
   for (const [id, dataUrl] of Object.entries(map)) {
     try {
       await putImage(await dataUrlToBlob(dataUrl), id);
     } catch {
-      // 개별 사진 복원 실패는 전체 가져오기를 막지 않는다
+      return false; // 즉시 중단 — 호출부가 교체를 취소한다
     }
   }
+  return true;
 }

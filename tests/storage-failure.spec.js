@@ -401,3 +401,88 @@ test.describe("IDB 저장 실패 — 조용히 삼키지 않는다", () => {
     expect((await readImageIds(page)).length).toBe(2);
   });
 });
+
+test.describe("IDB 복원 실패 — 가져오기를 중단한다", () => {
+  test("두 번째 사진 복원 실패 → 교체 취소, 기존 데이터 보존", async ({
+    page,
+  }) => {
+    await installIdbPutTrap(page);
+    await freshApp(page);
+    const before = await readRaw(page, "wr_notes");
+
+    const backup = {
+      version: 5,
+      notes: [
+        {
+          id: "imp_n1",
+          subject: "수학",
+          problem: "IMPORT-FAIL",
+          topicMain: "",
+          topicSub: "",
+          question: "",
+          mySol: "",
+          optSol: "",
+          cause: "개념 부족",
+          correctAnswer: "",
+          myAnswer: "",
+          examTime: "",
+          derived: null,
+          tags: [],
+          memo: "",
+          images: ["imp_a", "imp_b"],
+          solutionImages: [],
+          attempts: [],
+          ts: Date.now(),
+          date: "2026-08-06",
+          rechecked: false,
+          recheckResult: null,
+          recheckCount: 0,
+          nextRecheckTs: null,
+        },
+      ],
+      cards: [],
+      images: { imp_a: TINY_PNG_URL, imp_b: TINY_PNG_URL },
+    };
+
+    await openSettings(page);
+    await armIdbFailAt(page, 2); // 두 번째 사진 복원에서 실패
+    page.once("dialog", (d) => d.accept());
+    await page
+      .locator('input[type="file"][accept=".json,application/json"]')
+      .setInputFiles({
+        name: "backup.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(backup), "utf8"),
+      });
+
+    await expect(page.locator(".io-error")).toContainText("사진 복원에 실패했다");
+
+    // 교체가 일어나지 않았다 — 기존 데이터 원문 그대로
+    expect(await readRaw(page, "wr_notes")).toBe(before);
+    expect(
+      (await readNotes(page)).some((n) => n.problem === "IMPORT-FAIL")
+    ).toBe(false);
+
+    // 첫 사진만 IDB에 남을 수 있다 — 즉시 삭제하지 않고 D-gc 회수 대상으로 둔다.
+    // 교체가 진행되지 않았다는 증거이기도 하다.
+    expect((await readImageIds(page)).length).toBeLessThanOrEqual(1);
+
+    // 트랩 해제 후 재가져오기 → 노트와 사진 2장이 모두 복원된다
+    await disarmIdb(page);
+    page.once("dialog", (d) => d.accept());
+    await page
+      .locator('input[type="file"][accept=".json,application/json"]')
+      .setInputFiles({
+        name: "backup.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(backup), "utf8"),
+      });
+
+    await expect
+      .poll(async () =>
+        (await readNotes(page)).some((n) => n.problem === "IMPORT-FAIL")
+      )
+      .toBe(true);
+    expect(await readImageIds(page)).toEqual(["imp_a", "imp_b"]);
+  });
+});

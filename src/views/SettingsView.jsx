@@ -56,13 +56,22 @@ export default function SettingsView({
           `가져오면 현재 데이터 전체가 교체된다 (노트 ${migrated.notes.length}건, 카드 ${migrated.cards.length}장). 계속?`
         );
         if (!ok) return;
+        /* 사진을 먼저 복원한다. 하나라도 실패하면 교체를 취소하는데,
+           자동 백업을 그 앞에서 받으면 아무것도 안 바뀌었는데 "가져오기 직전
+           백업" 파일만 손에 쥐게 돼 혼란스럽다. 그래서 사진 복원 성공 뒤로 옮겼다.
+           (이 시점까지 notes/cards는 그대로라 백업 내용은 동일하다) */
+        if (!(await importImages(parsed.images))) {
+          setImportError(
+            "사진 복원에 실패했다. 데이터는 변경하지 않았다. 저장공간을 정리한 뒤 다시 시도해라."
+          );
+          return; // onReplaceAll을 부르지 않는다 → 상태 교체도 GC도 없다
+        }
         // 교체 직전 기존 데이터 자동 백업 다운로드 (사진 포함)
         const curImages = await exportImages(notes.flatMap(noteImageIds));
         downloadJSON("wr_backup_before_import.json", {
           ...exportEnvelope(notes, cards),
           images: curImages,
         });
-        await importImages(parsed.images);
         onReplaceAll(migrated.notes, migrated.cards);
         setImportError("");
       } catch {
