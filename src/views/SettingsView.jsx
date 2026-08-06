@@ -210,11 +210,16 @@ export default function SettingsView({
                   : `${fmtBytes(health.usage)}${health.quota ? ` / ${fmtBytes(health.quota)}` : ""}`}
               </span>
             </div>
-            {/* 영구가 아니면 절대 "안전하다"고 말하지 않는다 */}
-            {health.persisted === false && (
+            {/* 영구가 아니면 절대 "안전하다"고 말하지 않는다.
+                **확인 실패(null)도 안전하지 않은 쪽으로 친다** — persisted()만
+                거부되고 estimate()는 살아 있는 부분 실패가 실제로 가능한데,
+                그때 경고도 재요청 버튼도 없으면 확인이 안 되는 순간에 오히려
+                보호가 얇아진다. 모르면 보장되지 않은 것이다. */}
+            {health.persisted !== true && (
               <div className="storage-warn">
-                기기 저장 공간이 부족하면 브라우저가 이 앱의 데이터를 통째로 지울
-                수 있다. 내보내기를 자주 해라.
+                {health.persisted === null
+                  ? "영구 보관 여부를 확인하지 못했다. 보장된 상태가 아니므로 브라우저가 데이터를 지울 수 있다. 내보내기를 자주 해라."
+                  : "기기 저장 공간이 부족하면 브라우저가 이 앱의 데이터를 통째로 지울 수 있다. 내보내기를 자주 해라."}
               </div>
             )}
             {health.persisted === true && (
@@ -223,7 +228,7 @@ export default function SettingsView({
                 삭제하면 그대로 사라진다 — 내보내기는 여전히 필요하다.
               </div>
             )}
-            {health.persisted === false && health.canRequest && (
+            {health.persisted !== true && health.canRequest && (
               <Button
                 variant="neutral"
                 onClick={() =>

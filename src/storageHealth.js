@@ -47,12 +47,25 @@ export async function requestPersistentStorage({ force = false } = {}) {
   // 자동 경로는 이미 판정이 있으면 건너뛴다. 재시도는 사용자가 설정에서 누를 때만.
   if (!force && readJSON(PERSIST_KEY) !== null) return "skipped";
 
-  let outcome;
+  /* persisted() 실패가 persist()까지 막으면 안 된다. 확인이 안 되는 상태에서
+     설정의 "영구 보관 요청" 버튼이 아무것도 못 하는 장식이 되기 때문이다 —
+     모르면 보장되지 않은 것이고, 그럴수록 요청은 해봐야 한다. */
+  let already = false;
   try {
-    // 이미 영구면 persist()를 부르지 않는다 — 불필요한 프롬프트를 만들 이유가 없다
-    outcome = (await s.persisted()) ? "granted" : (await s.persist()) ? "granted" : "denied";
+    already = await s.persisted();
   } catch {
-    outcome = "unavailable";
+    already = false; // 확인 실패는 "아니오"로 취급하고 요청까지 진행
+  }
+
+  let outcome;
+  if (already) {
+    outcome = "granted"; // 이미 영구면 불필요한 프롬프트를 만들지 않는다
+  } else {
+    try {
+      outcome = (await s.persist()) ? "granted" : "denied";
+    } catch {
+      outcome = "unavailable";
+    }
   }
   savePref(PERSIST_KEY, JSON.stringify({ outcome, checkedAt: Date.now() }));
   return outcome;

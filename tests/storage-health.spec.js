@@ -270,3 +270,88 @@ test("플래그 없이 노트를 쌓아둔 기존 사용자도 경고를 받는�
   await page.click(".settings-open");
   await expect(page.locator(".backup-stale")).toContainText("확인된 백업이 아직 없다");
 });
+
+/**
+ * 부분 실패: persisted()만 거부되고 estimate()는 살아 있는 경우.
+ *
+ * 예전엔 persisted === false만 위험으로 쳤다. 그래서 확인 자체가 안 되는
+ * null 상태에서는 경고도 재요청 버튼도 없이 "알 수 없음"만 떴다 —
+ * 확인이 불가능한 순간에 오히려 보호가 얇아졌다.
+ * 모르면 보장되지 않은 것이다.
+ */
+test.describe("영구 보관 확인 실패 — 모르면 안전하지 않은 쪽으로", () => {
+  const installPartialFailureStub = (page) =>
+    page.addInitScript(() => {
+      Object.defineProperty(navigator, "storage", {
+        configurable: true,
+        get: () => ({
+          // persisted()는 거부되지만 estimate()는 정상 — 실제로 가능한 조합이다
+          persisted: async () => {
+            if (sessionStorage.getItem("__persistedBroken") === "true") {
+              throw new Error("persisted unavailable");
+            }
+            return sessionStorage.getItem("__persisted") === "true";
+          },
+          persist: async () => {
+            const n = Number(sessionStorage.getItem("__persistCalls") || 0) + 1;
+            sessionStorage.setItem("__persistCalls", String(n));
+            if (sessionStorage.getItem("__persistResult") === "true") {
+              sessionStorage.setItem("__persisted", "true");
+              sessionStorage.removeItem("__persistedBroken"); // 승인 뒤엔 확인이 된다
+              return true;
+            }
+            return false;
+          },
+          estimate: async () => ({ usage: 1310720, quota: 10485760 }),
+        }),
+      });
+    });
+
+  test("알 수 없음이면 경고와 재요청 버튼이 모두 나온다", async ({ page }) => {
+    await installPartialFailureStub(page);
+    await freshApp(page);
+    await page.evaluate(() => sessionStorage.setItem("__persistedBroken", "true"));
+    await page.reload();
+    await page.click(".settings-open");
+
+    const box = page.locator(".storage-health");
+    await expect(box.locator(".storage-value").first()).toHaveText("알 수 없음");
+    // estimate()는 살아 있으므로 사용량은 정상 표시된다
+    await expect(box.locator(".storage-row").nth(1)).toContainText("1.3MB");
+
+    // 확인 불가 = 보장 안 됨. 안전하다고 말하지 않고, 축출 가능성을 명시한다
+    await expect(box.locator(".storage-warn")).toContainText("확인하지 못했다");
+    await expect(box.locator(".storage-warn")).toContainText("지울 수 있다");
+    await expect(box.locator(".storage-warn")).toContainText("내보내기를 자주 해라");
+    // 안전하다는 안내(영구=예 전용)는 뜨면 안 된다
+    await expect(box.locator(".hint")).toHaveCount(0);
+
+    // 확인이 안 돼도 요청은 할 수 있어야 한다 — 장식용 버튼이면 안 된다
+    await expect(box.locator('.btn:has-text("영구 보관 요청")')).toBeVisible();
+  });
+
+  test("재요청이 성공하면 예로 바뀐다 — persisted() 거부가 요청을 막지 않는다", async ({
+    page,
+  }) => {
+    await installPartialFailureStub(page);
+    await freshApp(page);
+    await page.evaluate(() => {
+      sessionStorage.setItem("__persistedBroken", "true");
+      sessionStorage.setItem("__persistResult", "true");
+    });
+    await page.reload();
+    await page.click(".settings-open");
+
+    const box = page.locator(".storage-health");
+    await expect(box.locator(".storage-value").first()).toHaveText("알 수 없음");
+
+    await box.locator('.btn:has-text("영구 보관 요청")').click();
+
+    await expect(box.locator(".storage-value.ok").first()).toHaveText("예");
+    await expect(box.locator(".storage-warn")).toHaveCount(0);
+    // persisted()가 거부돼도 persist()까지 도달했다는 증거
+    expect(
+      await page.evaluate(() => Number(sessionStorage.getItem("__persistCalls") || 0))
+    ).toBeGreaterThan(0);
+  });
+});
