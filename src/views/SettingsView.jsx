@@ -1,9 +1,14 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PALETTES } from "../palettes.js";
 import { noteImageIds } from "../constants.js";
 import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
 import { exportImages, importImages } from "../imageStore.js";
 import { Section, Button } from "../components.jsx";
+import {
+  readStorageHealth,
+  requestPersistentStorage,
+  fmtBytes,
+} from "../storageHealth.js";
 
 /**
  * 설정 — 통계(데이터)와 섞이면 안 되는 것들만 모은다.
@@ -22,6 +27,17 @@ export default function SettingsView({
 }) {
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
+  const [health, setHealth] = useState(null);
+
+  /* 캐시된 판정이 아니라 **지금** 값을 읽는다 — 크롬이 나중에 조용히 승인해줬을 수
+     있는데 옛 "denied"를 보여주면 화면이 거짓말을 한다. */
+  const refreshHealth = useCallback(
+    () => readStorageHealth().then(setHealth),
+    []
+  );
+  useEffect(() => {
+    refreshHealth();
+  }, [refreshHealth]);
 
   /* 파싱 실패 상태에서는 notes/cards가 빈 배열이다. 내보내기를 열어두면
      "정상 백업"처럼 보이는 빈 파일을 쥐여주게 된다 — 원본은 localStorage에
@@ -145,6 +161,63 @@ export default function SettingsView({
         <div className="hint">
           맨 위 ☾ 버튼으로도 바로 바꿀 수 있다. 처음엔 기기 설정을 따른다
         </div>
+      </Section>
+
+      <Section title="저장소" className="storage-health">
+        {health === null ? (
+          <div className="hint">확인 중…</div>
+        ) : !health.supported ? (
+          <div className="hint">
+            이 브라우저는 저장소 상태를 알려주지 않는다. 내보내기를 자주 해라.
+          </div>
+        ) : (
+          <>
+            <div className="storage-row">
+              <span className="storage-label">영구 보관</span>
+              <span
+                className={`storage-value${health.persisted ? " ok" : " warn"}`}
+              >
+                {health.persisted === null
+                  ? "알 수 없음"
+                  : health.persisted
+                    ? "예"
+                    : "아니오"}
+              </span>
+            </div>
+            <div className="storage-row">
+              <span className="storage-label">사용량</span>
+              <span className="storage-value">
+                {/* 값이 없으면 0으로 꾸미지 않는다 */}
+                {health.usage === null
+                  ? "알 수 없음"
+                  : `${fmtBytes(health.usage)}${health.quota ? ` / ${fmtBytes(health.quota)}` : ""}`}
+              </span>
+            </div>
+            {/* 영구가 아니면 절대 "안전하다"고 말하지 않는다 */}
+            {health.persisted === false && (
+              <div className="io-error">
+                기기 저장 공간이 부족하면 브라우저가 이 앱의 데이터를 통째로 지울
+                수 있다. 내보내기를 자주 해라.
+              </div>
+            )}
+            {health.persisted === true && (
+              <div className="hint">
+                브라우저가 임의로 지우지 않는다. 다만 사용자가 직접 사이트 데이터를
+                삭제하면 그대로 사라진다 — 내보내기는 여전히 필요하다.
+              </div>
+            )}
+            {health.persisted === false && health.canRequest && (
+              <Button
+                variant="neutral"
+                onClick={() =>
+                  requestPersistentStorage({ force: true }).then(refreshHealth)
+                }
+              >
+                영구 보관 요청
+              </Button>
+            )}
+          </>
+        )}
       </Section>
 
       <Section title="백업">

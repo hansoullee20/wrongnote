@@ -118,3 +118,61 @@ test.describe("영구 저장소 요청", () => {
     expect(errors).toEqual([]);
   });
 });
+
+test.describe("설정 — 저장소 상태를 정직하게 보여준다", () => {
+  const openSettings = (page) => page.click(".settings-open");
+
+  test("영구가 아니면 축출 위험을 말하고 재요청 버튼을 준다", async ({ page }) => {
+    await installStorageStub(page);
+    await freshApp(page);
+    await setStub(page, {
+      __persisted: false,
+      __persistResult: false,
+      __estimate: JSON.stringify({ usage: 1310720, quota: 10485760 }),
+    });
+    await page.reload();
+    await openSettings(page);
+
+    const box = page.locator(".storage-health");
+    await expect(box.locator(".storage-value.warn")).toHaveText("아니오");
+    await expect(box.locator(".storage-row").nth(1)).toContainText("1.3MB");
+    await expect(box.locator(".storage-row").nth(1)).toContainText("10.0MB");
+    // 영구가 아닌데 "안전"이라고 말하면 안 된다
+    await expect(box.locator(".io-error")).toContainText("통째로 지울 수 있다");
+
+    // 재요청 → 이번엔 승인
+    await setStub(page, { __persistResult: true });
+    await box.locator('.btn:has-text("영구 보관 요청")').click();
+    await expect(box.locator(".storage-value.ok")).toHaveText("예");
+  });
+
+  test("영구여도 직접 삭제 위험은 그대로 알린다", async ({ page }) => {
+    await installStorageStub(page);
+    await freshApp(page);
+    await setStub(page, { __persisted: true, __estimate: JSON.stringify({}) });
+    await page.reload();
+    await openSettings(page);
+
+    const box = page.locator(".storage-health");
+    await expect(box.locator(".storage-value.ok")).toHaveText("예");
+    await expect(box).toContainText("직접 사이트 데이터를 삭제하면");
+    // estimate가 비면 0으로 꾸미지 않는다
+    await expect(box.locator(".storage-row").nth(1)).toContainText("알 수 없음");
+  });
+
+  test("API가 없으면 안내만 하고 재요청 버튼은 없다", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "storage", {
+        configurable: true,
+        get: () => undefined,
+      });
+    });
+    await freshApp(page);
+    await openSettings(page);
+
+    await expect(page.locator(".storage-health")).toContainText(
+      "저장소 상태를 알려주지 않는다"
+    );
+    await expect(page.locator('.btn:has-text("영구 보관 요청")')).toHaveCount(0);
+  });
+});

@@ -2447,3 +2447,23 @@ textarea:focus {
   font-family: inherit;
   font-size: var(--fs-sm);
 }
+
+/* ── 저장소 상태 (설정) ─────────────────────────────────────────
+   사실을 나열하는 자리다. 영구가 아닐 때 초록으로 안심시키면 안 된다. */
+.storage-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.storage-row:last-of-type { border-bottom: 0; }
+.storage-label { color: var(--text-secondary); font-size: var(--fs-sm); }
+.storage-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.storage-value.ok { color: var(--success); }
+.storage-value.warn { color: var(--error); }
