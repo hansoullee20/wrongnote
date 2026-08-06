@@ -9,11 +9,30 @@ export async function freshApp(page) {
   await page.waitForTimeout(300); // 시드 로드 안정화
 }
 
-export const readNotes = (page) =>
-  page.evaluate(() => JSON.parse(localStorage.getItem("wr_notes")));
+/* Dual-read shim for the E-2 atomic-state migration.
+   Reads the wr_state envelope when present, else the legacy per-array keys.
+   Landed BEFORE the storage change on purpose: with the app still writing
+   legacy keys, the whole suite must pass unchanged. That makes the existing
+   80 tests a control for the storage commit that follows — if a contract
+   silently weakens, it shows up against this baseline, not after a mass edit. */
+const readState = (page, field) =>
+  page.evaluate((f) => {
+    const raw = localStorage.getItem("wr_state");
+    if (raw !== null) {
+      try {
+        const env = JSON.parse(raw);
+        if (env && Array.isArray(env[f])) return env[f];
+      } catch {
+        return null; // 손상된 envelope는 레거시로 감추지 않는다
+      }
+    }
+    const legacy = localStorage.getItem(f === "notes" ? "wr_notes" : "wr_cards");
+    return legacy === null ? null : JSON.parse(legacy);
+  }, field);
 
-export const readCards = (page) =>
-  page.evaluate(() => JSON.parse(localStorage.getItem("wr_cards")));
+export const readNotes = (page) => readState(page, "notes");
+
+export const readCards = (page) => readState(page, "cards");
 
 /** v1 레거시 스토어 시드 (마이그레이션 테스트용) */
 export async function seedLegacyStore(page) {
