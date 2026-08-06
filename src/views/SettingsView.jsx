@@ -8,8 +8,8 @@ import {
   readStorageHealth,
   requestPersistentStorage,
   fmtBytes,
-  readLastExportedAt,
-  recordExportedAt,
+  readLastExportAttempt,
+  recordExportAttempt,
   isExportStale,
 } from "../storageHealth.js";
 
@@ -31,7 +31,7 @@ export default function SettingsView({
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
   const [health, setHealth] = useState(null);
-  const [lastExport, setLastExport] = useState(() => readLastExportedAt());
+  const [lastExport, setLastExport] = useState(() => readLastExportAttempt());
 
   /* 캐시된 판정이 아니라 **지금** 값을 읽는다 — 크롬이 나중에 조용히 승인해줬을 수
      있는데 옛 "denied"를 보여주면 화면이 거짓말을 한다. */
@@ -60,10 +60,12 @@ export default function SettingsView({
     // 첨부 사진(base64)까지 포함한 완전 백업 — 문제 사진 + 풀이 사진
     const images = await exportImages(notes.flatMap(noteImageIds));
     downloadJSON(name, { ...exportEnvelope(notes, cards), images });
-    /* 파일이 실제로 나간 뒤에만 기록한다 — 중간에 실패했는데 "방금 백업함"으로
-       남으면 알림이 꺼져서 오히려 위험해진다. 기록 실패는 삼킨다(내보내기는 성공). */
+    /* 여기서 기록하는 건 **시도** 시각이다. downloadJSON은 <a>.click()이라
+       브라우저가 완료를 알려주지 않는다 — 차단되거나 저장 취소돼도 여기 온다.
+       그래서 아래에 날짜를 보여준다: 사용자가 "그때 받은 적 없는데"를
+       알아채는 게 조용한 실패를 드러내는 유일한 경로다. */
     const now = Date.now();
-    recordExportedAt(now);
+    recordExportAttempt(now);
     setLastExport(now);
   }
 
@@ -260,6 +262,12 @@ export default function SettingsView({
             {lastExport === null
               ? "아직 한 번도 내보내지 않았다. 이 앱은 이 기기에만 저장된다."
               : "마지막 내보내기가 일주일이 넘었다."}
+          </div>
+        )}
+        {lastExport !== null && (
+          <div className="hint last-export">
+            마지막 내보내기: {new Date(lastExport).toLocaleDateString("ko-KR")}
+            {" — "}받은 기억이 없으면 다시 내보내라
           </div>
         )}
         {importError && <div className="io-error">{importError}</div>}

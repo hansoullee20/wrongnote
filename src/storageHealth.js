@@ -14,7 +14,7 @@ import { DAY_MS } from "./constants.js";
 import { savePref } from "./storage.js";
 
 const PERSIST_KEY = "wr_meta_persistence_v1";
-const LAST_EXPORT_KEY = "wr_meta_last_exported_at";
+const LAST_EXPORT_KEY = "wr_meta_last_export_attempt";
 
 /** 마지막 내보내기가 이보다 오래되면 설정에서 조용히 알린다.
     수능 대비는 매일 쌓이므로 2주는 너무 느슨하다. */
@@ -83,13 +83,20 @@ export async function readStorageHealth() {
   };
 }
 
-export const readLastExportedAt = () => {
+/**
+ * ⚠️ 이건 "내보내기에 **성공**한 시각"이 아니라 "**시도**한 시각"이다.
+ * downloadJSON은 <a>.click()이라 브라우저가 완료를 알려주지 않는다 —
+ * 차단되거나 저장 대화상자를 취소해도 여기까지는 온다.
+ * 그래서 설정에 날짜를 그대로 보여준다. 사용자가 "그때 받은 적 없는데"를
+ * 알아챌 수 있어야 조용한 실패가 드러난다.
+ */
+export const readLastExportAttempt = () => {
   const v = Number(localStorage.getItem(LAST_EXPORT_KEY));
   return Number.isFinite(v) && v > 0 ? v : null;
 };
 
-/** 내보내기가 **끝난 뒤에만** 기록한다. 실패해도 내보내기를 깨뜨리지 않는다. */
-export const recordExportedAt = (now) => savePref(LAST_EXPORT_KEY, String(now));
+/** 다운로드를 띄운 뒤 기록한다. 기록 실패는 삼킨다(내보내기 자체는 성공). */
+export const recordExportAttempt = (now) => savePref(LAST_EXPORT_KEY, String(now));
 
 export const isExportStale = (lastAt, now) =>
   lastAt === null || now - lastAt >= EXPORT_STALE_AFTER_MS;

@@ -180,7 +180,7 @@ test.describe("설정 — 저장소 상태를 정직하게 보여준다", () => 
 test.describe("내보내기 신선도 알림", () => {
   const openSettings = (page) => page.click(".settings-open");
   const setLastExport = (page, ms) =>
-    page.evaluate((v) => localStorage.setItem("wr_meta_last_exported_at", String(v)), ms);
+    page.evaluate((v) => localStorage.setItem("wr_meta_last_export_attempt", String(v)), ms);
 
   test("한 번도 안 했으면 알리고, 내보내면 즉시 사라진다", async ({ page }) => {
     await freshApp(page);
@@ -194,8 +194,12 @@ test.describe("내보내기 신선도 알림", () => {
     // 기록은 파일이 나간 뒤에만 — 그리고 화면에서 바로 없어져야 한다
     await expect(page.locator(".backup-stale")).toHaveCount(0);
     expect(
-      await page.evaluate(() => localStorage.getItem("wr_meta_last_exported_at"))
+      await page.evaluate(() => localStorage.getItem("wr_meta_last_export_attempt"))
     ).not.toBeNull();
+
+    /* 다운로드는 <a>.click()이라 브라우저가 완료를 알려주지 않는다.
+       그래서 날짜를 노출해 조용한 실패를 사용자가 알아챌 수 있게 한다. */
+    await expect(page.locator(".last-export")).toContainText("받은 기억이 없으면");
   });
 
   test("일주일이 넘으면 알리고, 최근이면 조용하다", async ({ page }) => {
