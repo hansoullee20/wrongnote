@@ -258,7 +258,7 @@ export default function SettingsView({
         {/* 알림은 설정 안에서만, 수동적으로. 배너·토스트·배지로 띄우면
             매일 쓰는 앱에서 소음이 되고 결국 무시하게 된다. */}
         {notes.length > 0 && isExportStale(lastExport, Date.now()) && (
-          <div className="io-error backup-stale">
+          <div className="backup-stale">
             {lastExport === null
               ? "아직 한 번도 내보내지 않았다. 이 앱은 이 기기에만 저장된다."
               : "마지막 내보내기가 일주일이 넘었다."}
