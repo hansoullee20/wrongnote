@@ -40,7 +40,11 @@ const readJSON = (key) => {
  */
 export async function requestPersistentStorage({ force = false } = {}) {
   const s = typeof navigator !== "undefined" ? navigator.storage : undefined;
-  if (!s || typeof s.persist !== "function" || typeof s.persisted !== "function") {
+  /* persist()만 있으면 요청은 가능하다. persisted()가 **없다는 이유로**
+     unsupported로 끝내면, readStorageHealth는 canRequest를 persist() 기준으로
+     정하므로 설정에 뜬 "영구 보관 요청" 버튼이 아무것도 못 하는 장식이 된다.
+     확인 수단이 없는 것과 요청 수단이 없는 것은 다르다. */
+  if (!s || typeof s.persist !== "function") {
     savePref(PERSIST_KEY, JSON.stringify({ outcome: "unsupported", checkedAt: Date.now() }));
     return "unsupported";
   }
@@ -51,10 +55,12 @@ export async function requestPersistentStorage({ force = false } = {}) {
      설정의 "영구 보관 요청" 버튼이 아무것도 못 하는 장식이 되기 때문이다 —
      모르면 보장되지 않은 것이고, 그럴수록 요청은 해봐야 한다. */
   let already = false;
-  try {
-    already = await s.persisted();
-  } catch {
-    already = false; // 확인 실패는 "아니오"로 취급하고 요청까지 진행
+  if (typeof s.persisted === "function") {
+    try {
+      already = await s.persisted();
+    } catch {
+      already = false; // 확인 실패는 "아니오"로 취급하고 요청까지 진행
+    }
   }
 
   let outcome;

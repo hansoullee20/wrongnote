@@ -355,3 +355,38 @@ test.describe("영구 보관 확인 실패 — 모르면 안전하지 않은 쪽
     ).toBeGreaterThan(0);
   });
 });
+
+test("persisted()가 아예 없어도 요청 버튼은 실제로 동작한다", async ({ page }) => {
+  /* persist()는 있는데 persisted()만 없는 조합. 예전엔 이때 곧바로
+     unsupported로 끝나 버려서, canRequest(persist 기준)로 뜬 버튼이
+     아무것도 못 하는 장식이었다. 확인 수단이 없는 것과 요청 수단이
+     없는 것은 다르다. */
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "storage", {
+      configurable: true,
+      get: () => ({
+        // persisted 없음
+        persist: async () => {
+          const n = Number(sessionStorage.getItem("__persistCalls") || 0) + 1;
+          sessionStorage.setItem("__persistCalls", String(n));
+          return true;
+        },
+        estimate: async () => ({ usage: 1024, quota: 10240 }),
+      }),
+    });
+  });
+  await freshApp(page);
+  await page.click(".settings-open");
+
+  const box = page.locator(".storage-health");
+  await expect(box.locator(".storage-value").first()).toHaveText("알 수 없음");
+  await expect(box.locator(".storage-warn")).toContainText("확인하지 못했다");
+
+  await box.locator('.btn:has-text("영구 보관 요청")').click();
+  await expect
+    .poll(() => page.evaluate(() => Number(sessionStorage.getItem("__persistCalls") || 0)))
+    .toBeGreaterThan(0);
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem("wr_meta_persistence_v1")).outcome)
+  ).toBe("granted");
+});
