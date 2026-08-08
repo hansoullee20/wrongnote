@@ -164,9 +164,14 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     page,
   }) => {
     await seedLegacyStore(page);
-    await page.evaluate(() =>
-      localStorage.setItem("wr_notes", "{corrupted!!")
-    );
+    /* 아직 wr_state로 전환하지 못한 사용자를 재현한다 — 전환 쓰기가 용량으로
+       실패하면 실제로 이 상태에 머문다. 그 경우에도 레거시 데이터가 손상되면
+       똑같이 잠겨야 한다. wr_state를 지우지 않으면 그쪽이 권위라 레거시
+       손상은 무시되고, 이 테스트는 아무것도 검증하지 않게 된다. */
+    await page.evaluate(() => {
+      localStorage.removeItem("wr_state");
+      localStorage.setItem("wr_notes", "{corrupted!!");
+    });
     await page.reload();
     await page.getByRole("button", { name: /^문제/ }).waitFor();
     await page.waitForTimeout(500);

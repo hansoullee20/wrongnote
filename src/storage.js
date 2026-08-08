@@ -2,6 +2,15 @@ import { seedNotes, seedCards } from "./seed.js";
 import { SCHEMA_VERSION, migrateNote, migrateCard } from "./migrate.js";
 import { USER_DATA_KEY } from "./constants.js";
 
+/* 노트와 카드를 함께 담는 단일 권위 키. 한 번의 setItem이 둘 다 옮기므로
+   "노트는 저장되고 카드는 실패했다"가 **구조적으로 불가능해진다.**
+   따로 쓰던 시절엔 addNote가 한 렌더에서 둘을 바꾸는데 두 이펙트가 같은
+   flush에서 같은 stale storageLocked를 캡처해, 큰 notes만 실패하고 작은
+   cards는 성공 → 없는 노트를 가리키는 고아 카드가 남았다. */
+const STATE_KEY = "wr_state";
+/* 아래 셋은 wr_state 이전의 키다. **읽기 전용으로 영구 보존한다** —
+   지우는 것도 실패할 수 있는 쓰기라, 실패를 견디는 게 목적인 경로에
+   새 실패 지점을 만들 이유가 없다. 전환 뒤에는 전환 직전 상태의 사본으로 남는다. */
 const NOTES_KEY = "wr_notes";
 const CARDS_KEY = "wr_cards";
 const LEGACY_CARDS_KEY = "gap_cards"; // v1 카드 키 — 읽기 전용으로 유지
@@ -49,21 +58,31 @@ export const WRITE_ERROR_MESSAGE =
  */
 export function loadAll() {
   const storedVersion = Number(localStorage.getItem(VERSION_KEY) || 1);
+  const rawState = localStorage.getItem(STATE_KEY);
   const rawNotes = localStorage.getItem(NOTES_KEY);
   const rawCards =
     localStorage.getItem(CARDS_KEY) ?? localStorage.getItem(LEGACY_CARDS_KEY);
+  const hadStoredData = rawState !== null || rawNotes !== null;
 
-  // 마이그레이션 직전, 원본 문자열 그대로 스냅샷 (버전당 1회, 조용히)
+  /* 마이그레이션 직전, 원본 문자열 그대로 스냅샷 (버전당 1회, 조용히).
+     rawState도 담는다 — 안 담으면 wr_state 사용자의 다음 스키마 승격 때
+     notes/cards가 둘 다 null인 **빈 백업**이 찍힌다. 백업처럼 보이는데
+     아무것도 안 들어 있는 게 백업이 없는 것보다 나쁘다. */
   const backupKey = backupKeyFor(storedVersion);
   if (
     storedVersion < SCHEMA_VERSION &&
-    (rawNotes !== null || rawCards !== null) &&
+    (rawState !== null || rawNotes !== null || rawCards !== null) &&
     localStorage.getItem(backupKey) === null
   ) {
     try {
       localStorage.setItem(
         backupKey,
-        JSON.stringify({ savedAt: Date.now(), notes: rawNotes, cards: rawCards })
+        JSON.stringify({
+          savedAt: Date.now(),
+          notes: rawNotes,
+          cards: rawCards,
+          state: rawState,
+        })
       );
     } catch {
       // 백업 실패(용량 등)해도 로드는 계속한다
@@ -79,49 +98,80 @@ export function loadAll() {
      StrictMode가 useState(loadAll) 초기화를 두 번 부르는데, 1회차가 시드를
      저장해버리면 2회차는 "저장된 노트가 있다"를 보고 기존 사용자로 오판한다.
      여기서 먼저 찍어두면 2회차도 같은 결론에 도달한다. */
-  if (rawNotes === null && localStorage.getItem(USER_DATA_KEY) === null) {
+  if (!hadStoredData && localStorage.getItem(USER_DATA_KEY) === null) {
     safeSet(USER_DATA_KEY, "0"); // 시드는 사용자 데이터가 아니다
   }
 
-  try {
-    notes = rawNotes === null ? seedNotes() : parseArray(rawNotes);
-  } catch {
-    error = "노트 데이터 파싱 실패 — 저장이 잠겼다. 원본은 그대로 있다.";
-    notes = [];
-  }
+  if (rawState !== null) {
+    /* wr_state가 있으면 **그것만 본다.** 못 읽어도 레거시로 내려가지 않는다:
+       반쯤 쓰인 봉투를 낡은 레거시 데이터로 덮어 가리는 게 되고, 그건 E-2가
+       없애려는 바로 그 불일치다. 못 쓰겠으면 파싱 실패로 시끄럽게 잠근다.
+       tests/helpers.js의 읽기 규칙과 같은 규칙이다 — 앱과 테스트가 저장소에
+       대해 서로 다른 말을 하면 어느 쪽도 믿을 수 없다. */
+    try {
+      const env = JSON.parse(rawState);
+      if (!env || !Array.isArray(env.notes) || !Array.isArray(env.cards)) {
+        throw new Error("not an envelope");
+      }
+      notes = env.notes;
+      cards = env.cards;
+    } catch {
+      error = "저장 데이터 파싱 실패 — 저장이 잠겼다. 원본은 그대로 있다.";
+      notes = [];
+      cards = [];
+    }
+  } else {
+    try {
+      notes = rawNotes === null ? seedNotes() : parseArray(rawNotes);
+    } catch {
+      error = "노트 데이터 파싱 실패 — 저장이 잠겼다. 원본은 그대로 있다.";
+      notes = [];
+    }
 
-  try {
-    cards = rawCards === null ? seedCards() : parseArray(rawCards);
-  } catch {
-    error = error || "카드 데이터 파싱 실패 — 저장이 잠겼다. 원본은 그대로 있다.";
-    cards = [];
+    try {
+      cards = rawCards === null ? seedCards() : parseArray(rawCards);
+    } catch {
+      error = error || "카드 데이터 파싱 실패 — 저장이 잠겼다. 원본은 그대로 있다.";
+      cards = [];
+    }
   }
 
   const now = Date.now();
   notes = notes.map(migrateNote);
   cards = cards.map((c) => migrateCard(c, now));
 
-  // 정상 로드일 때만 마이그레이션 결과를 영속화하고 버전 승격 (idempotent)
-  // 순서는 notes → cards → 버전. localStorage에 트랜잭션이 없어 부분 성공이
-  // 가능하지만, 버전 승격이 마지막이라 다음 부팅에서 멱등 마이그레이션을 다시 돈다.
+  /* 정상 로드일 때만 마이그레이션 결과를 영속화하고 버전 승격 (idempotent).
+     노트·카드는 이제 한 번의 쓰기다. 버전 승격은 여전히 마지막이라,
+     상태만 쓰이고 버전이 실패해도 다음 부팅에서 멱등 마이그레이션을 다시 돈다.
+
+     레거시 → wr_state 전환은 **버전 승격이 아니다.** 노트·카드의 모양이
+     양쪽에서 같아서 마이그레이션이 아니라 담는 그릇만 바뀌는 것이고,
+     SCHEMA_VERSION을 올리면 아무 변환도 없는 승격이 기록에 남는다.
+     전환 쓰기가 용량으로 실패하면 레거시 경로 그대로 다음 부팅에 재시도한다 —
+     원자성은 아직 못 얻지만 손실은 없고, 쓰기 실패는 배너로 보인다. */
   if (!error) {
     const ok =
-      safeSet(NOTES_KEY, JSON.stringify(notes)) &&
-      safeSet(CARDS_KEY, JSON.stringify(cards)) &&
-      safeSet(VERSION_KEY, String(SCHEMA_VERSION));
+      saveState(notes, cards) && safeSet(VERSION_KEY, String(SCHEMA_VERSION));
     if (!ok) writeError = WRITE_ERROR_MESSAGE;
   }
 
   /* 이미 저장된 노트가 있었다 = 기존 사용자다. 시드 첫 실행과 구분해야
      사용자 데이터 플래그를 뒤늦게 채울 수 있다 (storageHealth를 여기서
      import하면 순환이 되므로 사실만 돌려주고 판단은 App이 한다). */
-  return { notes, cards, error, writeError, hadStoredData: rawNotes !== null };
+  return { notes, cards, error, writeError, hadStoredData };
 }
 
-/** @returns {boolean} 저장 성공 여부. 실패해도 던지지 않는다 */
-export const saveNotes = (notes) => safeSet(NOTES_KEY, JSON.stringify(notes));
-/** @returns {boolean} 저장 성공 여부. 실패해도 던지지 않는다 */
-export const saveCards = (cards) => safeSet(CARDS_KEY, JSON.stringify(cards));
+/**
+ * 노트와 카드를 **한 번의 쓰기로** 영속화한다. 성공/실패가 둘에 함께 적용된다.
+ *
+ * 봉투 모양은 exportEnvelope와 같다 — 저장된 상태와 내보낸 파일이 같은 형식이면
+ * 읽는 쪽이 하나만 알면 된다. version은 그래서 들어간다(자기서술적 형식).
+ * 스키마 버전의 권위는 여전히 wr_schema_version이고 loadAll도 그쪽을 읽는다.
+ *
+ * @returns {boolean} 저장 성공 여부. 실패해도 던지지 않는다
+ */
+export const saveState = (notes, cards) =>
+  safeSet(STATE_KEY, JSON.stringify({ version: SCHEMA_VERSION, notes, cards }));
 /** 설정(테마·팔레트)용 안전 쓰기 — 꽉 찬 저장소에서 토글이 앱을 죽이면 안 된다 */
 export const savePref = (key, value) => safeSet(key, value);
 
