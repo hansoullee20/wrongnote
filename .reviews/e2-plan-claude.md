@@ -182,6 +182,35 @@ mixed with a behaviour change cannot be judged safe in review.
 `npm test` in a plain shell. Local-green is a weak signal here
 (`.reviews/lessons-2026-08-06.md` §2) — CI on the PR is the real gate.
 
+## 7.1 Where this plan was wrong (post-execution, 2026-08-07)
+
+Implemented as `ebaceeb` / `8c9afaf` / `beb3c14`. Two claims above did not survive
+contact. Left in place rather than edited, so the plan can be judged as written.
+
+**§4 "Specs that seed legacy keys directly — all unchanged" was too broad.** Seven
+tests failed. The claim holds only for `seedLegacyStore`, which calls
+`localStorage.clear()` first. Every other one boots the app — which now creates
+`wr_state` — and *then* writes `wr_notes`, so the write lands on a key nothing reads.
+Not a failure of the storage design; a failure to distinguish "seeds legacy into a
+clean origin" from "writes legacy onto a live one". Fixed by routing those seeds
+through a new `writeState` helper in `tests/helpers.js`, the counterpart to the
+`readState` that landed in PR #10.
+
+The same trap hit assertions, not just seeds: `readRaw(page, "wr_notes")` comparisons
+would have gone on passing, because `null === null` after the transition. Those are
+the dangerous ones — a seed that stops working usually fails loudly, an assertion that
+stops meaning anything does not.
+
+**§5 T2 as specified did not reproduce the defect.** Written as "block `wr_state`, add
+a note", armed before boot. That fails the *boot* write, so `storageLocked` is on
+before the user does anything, both effects skip, and no orphan card is ever created —
+**the test passed against the reverted source.** The orphan window needs the first
+failure to land mid-session. Corrected to arm after a successful boot and not reload.
+
+Worth generalising: "revert the fix and watch it fail" caught this, and nothing else
+would have. A test asserting the *absence* of corruption passes trivially whenever the
+setup prevents the corruption from being attempted at all.
+
 ## 8. Open for Han
 
 1. §3.1 — accept "transition is not a version promotion" (no new backup key)?
