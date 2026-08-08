@@ -111,19 +111,28 @@ const seedNoteWithImages = (page, { problem, images }) =>
  *   저장 이펙트에서 던지면 React가 트리를 언마운트한다.
  */
 
+/* 데이터 키 전부. `wr_state`가 여기 없으면 앱이 트랩이 안 막는 키로 써버려서
+   **모든 쿼터 테스트가 아무것도 검증하지 않으면서 통과한다** — 실패가 아니라
+   침묵이라 알아채기 어렵다. 저장 키를 추가하면 반드시 여기도 추가할 것.
+   `wr_meta_*`는 제외한다: 설정 성격이고 savePref로 따로 다룬다. */
+const DATA_KEYS = ["wr_state", "wr_notes", "wr_cards", "wr_schema_version"];
+
 /**
  * setItem을 감싸 특정 키에서만 QuotaExceededError를 던진다.
  * 원본 setItem은 보존한다 — 시드 단계는 정상 저장으로 남겨야
  * "쓰기가 막힌 상태에서 기존 데이터가 그대로인가"를 단언할 수 있다.
  * 플래그가 sessionStorage에 있는 이유: reload를 넘어 살아남아야 한다.
+ *
+ * @param keys 막을 키 목록. 기본은 데이터 키 전부.
+ *   일부만 넘기면 "notes는 실패하고 cards는 성공" 같은 **부분 실패**를 만들 수 있다 —
+ *   원자적 저장이 그 조합을 도달 불가능하게 만들었는지 단언하는 데 쓴다.
  */
-const installQuotaTrap = (page) =>
-  page.addInitScript(() => {
-    const BLOCKED = ["wr_notes", "wr_cards", "wr_schema_version"];
+const installQuotaTrap = (page, keys = DATA_KEYS) =>
+  page.addInitScript((blocked) => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key, value) {
       if (this === localStorage && sessionStorage.getItem("__quota") === "on") {
-        if (BLOCKED.includes(key)) {
+        if (blocked.includes(key)) {
           const err = new Error("quota");
           err.name = "QuotaExceededError";
           throw err;
@@ -131,7 +140,7 @@ const installQuotaTrap = (page) =>
       }
       return original.call(this, key, value);
     };
-  });
+  }, keys);
 
 const armQuota = (page) =>
   page.evaluate(() => sessionStorage.setItem("__quota", "on"));
