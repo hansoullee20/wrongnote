@@ -172,14 +172,6 @@ export function loadAll() {
  */
 export const saveState = (notes, cards) =>
   safeSet(STATE_KEY, JSON.stringify({ version: SCHEMA_VERSION, notes, cards }));
-
-/* 아래 둘은 이 커밋에서 호출부가 사라져 죽는다. 삭제는 다음 커밋에서 따로 한다 —
-   동작 변경과 순수 삭제를 한 커밋에 섞으면 "지워도 안전한가"를 리뷰에서
-   판단할 수 없게 된다 (CLAUDE.md 시맨틱 커밋 규율). */
-/** @deprecated saveState를 쓸 것 @returns {boolean} 저장 성공 여부 */
-export const saveNotes = (notes) => safeSet(NOTES_KEY, JSON.stringify(notes));
-/** @deprecated saveState를 쓸 것 @returns {boolean} 저장 성공 여부 */
-export const saveCards = (cards) => safeSet(CARDS_KEY, JSON.stringify(cards));
 /** 설정(테마·팔레트)용 안전 쓰기 — 꽉 찬 저장소에서 토글이 앱을 죽이면 안 된다 */
 export const savePref = (key, value) => safeSet(key, value);
 
