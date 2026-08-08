@@ -85,7 +85,9 @@ test.describe("시스템 설정을 계속 따라간다", () => {
 
 test.describe("기존 저장값 호환", () => {
   for (const saved of ["light", "dark"]) {
-    test(`옛 "${saved}" 저장값은 고정 선택으로 계속 동작한다`, async ({ page }) => {
+    test(`옛 "${saved}" 저장값은 고정 선택으로 계속 동작한다`, async ({
+      page,
+    }) => {
       await setSystem(page, saved === "light" ? "dark" : "light"); // 기기는 반대로
       await freshApp(page);
       await page.evaluate((v) => localStorage.setItem("wr_theme", v), saved);
@@ -103,7 +105,9 @@ test.describe("팔레트", () => {
     await freshApp(page);
     for (const id of ["graphite", "navy"]) {
       await openSettings(page);
-      await page.click(`.palette-card:has-text("${id === "navy" ? "남색" : "흑연"}")`);
+      await page.click(
+        `.palette-card:has-text("${id === "navy" ? "남색" : "흑연"}")`,
+      );
       await page.reload();
       await page.getByRole("button", { name: /^문제/ }).waitFor();
       expect(await page.getAttribute("html", "data-palette")).toBe(id);
@@ -166,5 +170,125 @@ test.describe("의미 토큰", () => {
       expect(v.primary).not.toBe(v.error);
       expect(v.error).toBe(v.redPen); // 실패는 계속 빨간펜이다
     }
+  });
+});
+
+/**
+ * 페인트 전 스크립트 (index.html).
+ *
+ * 이 스크립트의 계약 전체가 React 마운트 **이전**에 끝난다. 그래서 앱이 뜬
+ * 뒤에 보는 어떤 단언도 이걸 검증하지 못한다 — App의 테마 이펙트가 같은
+ * 속성을 다시 찍어서 스크립트가 통째로 빠져 있어도 초록으로 지나간다.
+ * 여기서는 /src/main.jsx를 막아 React를 아예 실행시키지 않고, 페인트 전
+ * 상태 그대로를 본다. localStorage는 페이지 스크립트보다 먼저 도는
+ * addInitScript로 갈아끼운다.
+ */
+test.describe("첫 페인트 — React 없이", () => {
+  /** 페이지 스크립트보다 먼저 getItem을 갈아끼운다. throws는 던질 키 목록. */
+  const stubStorage = (page, { values = {}, throws = [] }) =>
+    page.addInitScript(
+      ([v, t]) => {
+        const real = Storage.prototype.getItem;
+        Storage.prototype.getItem = function (key) {
+          if (t.includes(key))
+            throw new DOMException("blocked", "SecurityError");
+          if (key in v) return v[key];
+          return real.call(this, key);
+        };
+      },
+      [values, throws],
+    );
+
+  /** React를 막고 페인트 전 상태에서 멈춘다. */
+  const prePaint = async (page) => {
+    await page.route("**/src/main.jsx*", (r) => r.abort());
+    await page.goto("/");
+    // React가 정말 안 돌았는지 먼저 확인한다 — 이게 깨지면 나머지는 무의미하다
+    await expect(page.locator("#root")).toBeEmpty();
+  };
+
+  const attrs = (page) =>
+    page.evaluate(() => ({
+      theme: document.documentElement.getAttribute("data-theme"),
+      palette: document.documentElement.getAttribute("data-palette"),
+    }));
+
+  test("팔레트 읽기가 던져도 주야는 이미 찍혀 있다 — 커밋 B의 계약", async ({
+    page,
+  }) => {
+    await stubStorage(page, {
+      values: { wr_theme: "dark" },
+      throws: ["wr_palette"],
+    });
+    await prePaint(page);
+
+    /* 커밋 B가 팔레트 읽기를 따로 감쌌기 때문에 던진 예외가 안에서 먹히고
+       기본 팔레트까지 정상으로 찍힌다. 안쪽 try가 없으면 예외가 바깥
+       catch로 올라가 data-palette이 통째로 안 찍힌다(null) — 그 차이가
+       이 단언의 전부다. */
+    expect(await attrs(page)).toEqual({ theme: "dark", palette: "warm" });
+  });
+
+  test("주야 읽기가 막히면 기기 설정으로 물러난다", async ({ page }) => {
+    await setSystem(page, "dark");
+    await stubStorage(page, { throws: ["wr_theme"] });
+    await prePaint(page);
+
+    expect(await attrs(page)).toEqual({ theme: "dark", palette: "warm" });
+  });
+
+  test("저장값이 망가져 있으면 그대로 쓰지 않고 기기 설정으로 해석한다", async ({
+    page,
+  }) => {
+    await setSystem(page, "dark");
+    await stubStorage(page, { values: { wr_theme: "banana" } });
+    await prePaint(page);
+
+    // "banana"를 data-theme에 그대로 찍으면 themes.css가 아무것도 못 받는다
+    expect(await attrs(page)).toEqual({ theme: "dark", palette: "warm" });
+  });
+
+  test("system 저장값은 기기 설정으로 해석한다", async ({ page }) => {
+    await setSystem(page, "dark");
+    await stubStorage(page, { values: { wr_theme: "system" } });
+    await prePaint(page);
+
+    expect(await attrs(page)).toEqual({ theme: "dark", palette: "warm" });
+  });
+
+  test("기기 설정 API가 던져도 기본 주야·팔레트를 찍는다", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "matchMedia", {
+        value: () => {
+          throw new DOMException("blocked", "SecurityError");
+        },
+      });
+    });
+    await prePaint(page);
+
+    expect(await attrs(page)).toEqual({ theme: "light", palette: "warm" });
+  });
+
+  test("모르는 팔레트 id가 와도 주야는 정확하다", async ({ page }) => {
+    await setSystem(page, "dark");
+    await stubStorage(page, {
+      values: { wr_theme: "dark", wr_palette: "no-such-palette" },
+    });
+    await prePaint(page);
+
+    /* 모르는 id는 일부러 그대로 통과시킨다 — 번들 전이라 유효 id 목록을
+       모른다. themes.css의 :root[data-theme="dark"] 기본값이 받아준다.
+       중요한 건 그래도 data-theme이 야간이라는 것. */
+    const { theme } = await attrs(page);
+    expect(theme).toBe("dark");
+  });
+
+  test("localStorage가 통째로 막혀도 기기 설정대로 뜬다", async ({ page }) => {
+    await setSystem(page, "dark");
+    await stubStorage(page, { throws: ["wr_theme", "wr_palette"] });
+    await prePaint(page);
+
+    // 두 읽기 모두 각자 감싸여 있으니 둘 다 기본값까지 도달한다
+    expect(await attrs(page)).toEqual({ theme: "dark", palette: "warm" });
   });
 });
