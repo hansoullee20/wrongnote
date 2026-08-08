@@ -32,9 +32,11 @@
   --action-hover: #726255;
   --on-action: #fbf7ef;
 
-  --primary: var(--red-pen);
-  --primary-hover: #a0574a;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #5e6b4a;
   --success-soft: #e9eddc;
   --error: var(--red-pen);
@@ -57,7 +59,7 @@
   --paper: #221e1a;
   --surface: #221e1a;
   --surface-2: #2a251f;
-  --sunken: #29241f;
+  --sunken: #1e1a17;
   --border: #322c25;
   --border-strong: #4a4238;
   --rule: #322c25;
@@ -79,9 +81,11 @@
   --action-hover: #e5b375;
   --on-action: #221e1a;
 
-  --primary: var(--red-pen);
-  --primary-hover: #e0806c;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #95ae84;
   --success-soft: #232b1f;
   --error: var(--red-pen);
@@ -126,9 +130,11 @@
   --action-hover: #726255;
   --on-action: #fbf7ef;
 
-  --primary: var(--red-pen);
-  --primary-hover: #a0574a;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #5e6b4a;
   --success-soft: #e9eddc;
   --error: var(--red-pen);
@@ -151,7 +157,7 @@
   --paper: #221e1a;
   --surface: #221e1a;
   --surface-2: #2a251f;
-  --sunken: #29241f;
+  --sunken: #1e1a17;
   --border: #322c25;
   --border-strong: #4a4238;
   --rule: #322c25;
@@ -173,9 +179,11 @@
   --action-hover: #e5b375;
   --on-action: #221e1a;
 
-  --primary: var(--red-pen);
-  --primary-hover: #e0806c;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #95ae84;
   --success-soft: #232b1f;
   --error: var(--red-pen);
@@ -220,9 +228,11 @@
   --action-hover: #73585a;
   --on-action: #fbf5f3;
 
-  --primary: var(--red-pen);
-  --primary-hover: #8f4b55;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #4f5b47;
   --success-soft: #e9ede3;
   --error: var(--red-pen);
@@ -245,7 +255,7 @@
   --paper: #241e20;
   --surface: #241e20;
   --surface-2: #2c2427;
-  --sunken: #2d2528;
+  --sunken: #1f1a1c;
   --border: #332a2d;
   --border-strong: #4c4044;
   --rule: #332a2d;
@@ -263,13 +273,15 @@
   --highlight: #2f2620;
   --highlight-strong: #584434;
 
-  --action: #d49aa0;
-  --action-hover: #e0adb2;
+  --action: #b9afe2;
+  --action-hover: #ccc3ee;
   --on-action: #241e20;
 
-  --primary: var(--red-pen);
-  --primary-hover: #de8792;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #9cb08a;
   --success-soft: #212a1e;
   --error: var(--red-pen);
@@ -314,9 +326,11 @@
   --action-hover: #674a6b;
   --on-action: #faf5ec;
 
-  --primary: var(--red-pen);
-  --primary-hover: #8e4b58;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #57633f;
   --success-soft: #eaeddc;
   --error: var(--red-pen);
@@ -339,7 +353,7 @@
   --paper: #231c26;
   --surface: #231c26;
   --surface-2: #2b232e;
-  --sunken: #302733;
+  --sunken: #1e1820;
   --border: #332a36;
   --border-strong: #4b4050;
   --rule: #332a36;
@@ -361,9 +375,11 @@
   --action-hover: #e5c9a4;
   --on-action: #231c26;
 
-  --primary: var(--red-pen);
-  --primary-hover: #dd8794;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #a3b487;
   --success-soft: #232b1e;
   --error: var(--red-pen);
@@ -408,9 +424,11 @@
   --action-hover: #345c61;
   --on-action: #fbf7f5;
 
-  --primary: var(--red-pen);
-  --primary-hover: #a2504f;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #2f6154;
   --success-soft: #e1ede8;
   --error: var(--red-pen);
@@ -433,7 +451,7 @@
   --paper: #1c2424;
   --surface: #1c2424;
   --surface-2: #232c2c;
-  --sunken: #222b2b;
+  --sunken: #181e1e;
   --border: #2a3434;
   --border-strong: #3e4a4a;
   --rule: #2a3434;
@@ -451,13 +469,15 @@
   --highlight: #2c2620;
   --highlight-strong: #544437;
 
-  --action: #6fb6a4;
-  --action-hover: #87c6b6;
+  --action: #7daed2;
+  --action-hover: #94c0df;
   --on-action: #1c2424;
 
-  --primary: var(--red-pen);
-  --primary-hover: #e08c86;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #7fbfa9;
   --success-soft: #182722;
   --error: var(--red-pen);
@@ -498,13 +518,15 @@
   --highlight: #f4ebd4;
   --highlight-strong: #d9c89b;
 
-  --action: #434d3c;
-  --action-hover: #57634e;
+  --action: #4b596c;
+  --action-hover: #5e6e84;
   --on-action: #f9f8f2;
 
-  --primary: var(--red-pen);
-  --primary-hover: #96513c;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #456046;
   --success-soft: #e4ede1;
   --error: var(--red-pen);
@@ -527,7 +549,7 @@
   --paper: #1f231c;
   --surface: #1f231c;
   --surface-2: #262b22;
-  --sunken: #262b23;
+  --sunken: #1b1e18;
   --border: #2e342a;
   --border-strong: #434b3d;
   --rule: #2e342a;
@@ -545,13 +567,15 @@
   --highlight: #2c2818;
   --highlight-strong: #55502c;
 
-  --action: #aecb90;
-  --action-hover: #bed6a4;
+  --action: #91b7d2;
+  --action-hover: #a7c7dd;
   --on-action: #1f231c;
 
-  --primary: var(--red-pen);
-  --primary-hover: #de9070;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #8fbf92;
   --success-soft: #1d2a1e;
   --error: var(--red-pen);
@@ -596,9 +620,11 @@
   --action-hover: #4e657a;
   --on-action: #f8f9f8;
 
-  --primary: var(--red-pen);
-  --primary-hover: #9c5149;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #456055;
   --success-soft: #e2ebe6;
   --error: var(--red-pen);
@@ -621,7 +647,7 @@
   --paper: #1c2126;
   --surface: #1c2126;
   --surface-2: #232930;
-  --sunken: #232930;
+  --sunken: #181c20;
   --border: #2a3138;
   --border-strong: #3e4750;
   --rule: #2a3138;
@@ -643,14 +669,212 @@
   --action-hover: #a3c3dc;
   --on-action: #1c2126;
 
-  --primary: var(--red-pen);
-  --primary-hover: #de8b80;
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: #83b79c;
   --success-soft: #1a2823;
   --error: var(--red-pen);
   --error-soft: var(--red-pen-soft);
   --warning: #d5a95f;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* 흑연 — 중립 회색과 푸른 잉크 · 주간 */
+:root[data-palette="graphite"] {
+  color-scheme: light;
+
+  --bg: #e1e2e3;
+  --paper: #fafaf8;
+  --surface: #fafaf8;
+  --surface-2: #f0f1f1;
+  --sunken: #e8e9ea;
+  --border: #d9dbdc;
+  --border-strong: #a4a8ab;
+  --rule: #d9dbdc;
+
+  --text: #25282a;
+  --text-secondary: #4d5357;
+  --text-muted: #62686c;
+  --text-on-accent: #fafaf8;
+
+  --red-pen: #9a4f43;
+  --red-pen-soft: #f6e5e1;
+  --blue-pen: #4e5f70;
+  --blue-pen-soft: #e7ecf0;
+  --pencil: #62686c;
+  --highlight: #f4e9cf;
+  --highlight-strong: #d9c493;
+
+  --action: #334a5e;
+  --action-hover: #415f78;
+  --on-action: #fafaf8;
+
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
+  --success: #48624d;
+  --success-soft: #e5ece5;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #735615;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(40, 32, 26, 0.06);
+  --sh-md: 0 1px 2px rgba(40, 32, 26, 0.06), 0 4px 14px rgba(40, 32, 26, 0.07);
+  --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
+}
+
+/* 흑연 — 중립 회색과 푸른 잉크 · 야간 */
+:root[data-palette="graphite"][data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #121416;
+  --paper: #1a1d20;
+  --surface: #1a1d20;
+  --surface-2: #22262a;
+  --sunken: #16181a;
+  --border: #2b3035;
+  --border-strong: #454c52;
+  --rule: #2b3035;
+
+  --text: #e7e9ea;
+  --text-secondary: #afb5b9;
+  --text-muted: #92999e;
+  --text-on-accent: #1a1d20;
+
+  --red-pen: #e28a7a;
+  --red-pen-soft: #2d211f;
+  --blue-pen: #a7bacb;
+  --blue-pen-soft: #1d252b;
+  --pencil: #92999e;
+  --highlight: #2c271a;
+  --highlight-strong: #594d2b;
+
+  --action: #8cb8d7;
+  --action-hover: #a4c8e0;
+  --on-action: #182027;
+
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
+  --success: #8eb79a;
+  --success-soft: #1d2921;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #d4a85b;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --sh-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* 남색 & 호박 — 남색 잉크와 따뜻한 강조색 · 주간 */
+:root[data-palette="navy"] {
+  color-scheme: light;
+
+  --bg: #dee3e8;
+  --paper: #f9fafb;
+  --surface: #f9fafb;
+  --surface-2: #eef2f5;
+  --sunken: #e6ebef;
+  --border: #d7dee5;
+  --border-strong: #9eaab5;
+  --rule: #d7dee5;
+
+  --text: #202832;
+  --text-secondary: #485562;
+  --text-muted: #5b6875;
+  --text-on-accent: #f9fafb;
+
+  --red-pen: #a14f4a;
+  --red-pen-soft: #f7e5e3;
+  --blue-pen: #4b6075;
+  --blue-pen-soft: #e6edf3;
+  --pencil: #5b6875;
+  --highlight: #f5e8c9;
+  --highlight-strong: #dbc38c;
+
+  --action: #243f5a;
+  --action-hover: #315575;
+  --on-action: #f9fafb;
+
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
+  --success: #3f644f;
+  --success-soft: #e2ece6;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #73550f;
+  --warning-soft: var(--highlight);
+  --info: var(--blue-pen);
+  --info-soft: var(--blue-pen-soft);
+
+  --sh-sm: 0 1px 2px rgba(40, 32, 26, 0.06);
+  --sh-md: 0 1px 2px rgba(40, 32, 26, 0.06), 0 4px 14px rgba(40, 32, 26, 0.07);
+  --sh-lg: 0 2px 4px rgba(40, 32, 26, 0.07), 0 12px 32px rgba(40, 32, 26, 0.12);
+}
+
+/* 남색 & 호박 — 남색 잉크와 따뜻한 강조색 · 야간 */
+:root[data-palette="navy"][data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #10151b;
+  --paper: #18212a;
+  --surface: #18212a;
+  --surface-2: #202b36;
+  --sunken: #141a22;
+  --border: #2a3642;
+  --border-strong: #435263;
+  --rule: #2a3642;
+
+  --text: #e6ebf0;
+  --text-secondary: #aab5c0;
+  --text-muted: #8d99a4;
+  --text-on-accent: #18212a;
+
+  --red-pen: #e4877f;
+  --red-pen-soft: #2d2020;
+  --blue-pen: #a5b9cc;
+  --blue-pen-soft: #1b2732;
+  --pencil: #8d99a4;
+  --highlight: #2d2818;
+  --highlight-strong: #5a4a25;
+
+  --action: #7eb2e1;
+  --action-hover: #98c3e8;
+  --on-action: #16202a;
+
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
+  --success: #83b99c;
+  --success-soft: #192a22;
+  --error: var(--red-pen);
+  --error-soft: var(--red-pen-soft);
+  --warning: #e0b55d;
   --warning-soft: var(--highlight);
   --info: var(--blue-pen);
   --info-soft: var(--blue-pen-soft);

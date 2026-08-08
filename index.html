@@ -18,19 +18,35 @@
     <script>
       (function () {
         try {
-          var theme = localStorage.getItem("wr_theme");
+          /* 저장값은 system|light|dark. system(그리고 미설정·읽기 실패)은
+             기기 설정으로 해석한다. localStorage가 막힌 환경에서도 야간
+             사용자가 흰 화면 번쩍임을 보지 않도록 읽기를 따로 감싼다. */
+          var saved = null;
+          try {
+            saved = localStorage.getItem("wr_theme");
+          } catch (e) {}
+          var theme = saved;
           if (theme !== "light" && theme !== "dark") {
-            theme = window.matchMedia("(prefers-color-scheme: dark)").matches
-              ? "dark"
-              : "light";
+            var isDark = false;
+            try {
+              isDark = window.matchMedia(
+                "(prefers-color-scheme: dark)",
+              ).matches;
+            } catch (e) {}
+            theme = isDark ? "dark" : "light";
           }
           var root = document.documentElement;
           root.setAttribute("data-theme", theme);
+          /* 팔레트 읽기도 따로 감싼다. data-theme은 위에서 이미 찍었으니
+             여기서 던져도 야간 사용자가 흰 화면을 보지는 않지만
+             (themes.css의 :root[data-theme="dark"] 기본값이 받는다),
+             첫 페인트의 정확성을 문장 순서에 기대게 두지 않는다. */
+          var savedPalette = null;
+          try {
+            savedPalette = localStorage.getItem("wr_palette");
+          } catch (e) {}
           // DEFAULT_PALETTE (src/palettes.js)
-          root.setAttribute(
-            "data-palette",
-            localStorage.getItem("wr_palette") || "warm"
-          );
+          root.setAttribute("data-palette", savedPalette || "warm");
         } catch (e) {
           /* localStorage 차단(프라이빗 모드 등) — 기본값 그대로 간다 */
         }

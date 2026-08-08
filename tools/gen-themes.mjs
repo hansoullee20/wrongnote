@@ -35,9 +35,11 @@ function tokens(c, scheme) {
   --action-hover: ${c.actHover};
   --on-action: ${c.on};
 
-  --primary: var(--red-pen);
-  --primary-hover: ${c.fail};
-  --primary-soft: var(--red-pen-soft);
+  /* primary = 눌러야 하는 것(action)이지 틀린 것이 아니다.
+     예전엔 red-pen에 연결돼 있어서 입력 포커스·선택 칩·통계 막대가
+     전부 오답색으로 보였다. 실패는 --error/--red-pen만 쓴다. */
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
   --success: ${c.pass};
   --success-soft: ${c.passBg};
   --error: var(--red-pen);

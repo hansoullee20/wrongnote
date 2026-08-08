@@ -43,14 +43,21 @@ const TABS = [
 const THEME_KEY = "wr_theme";
 const PALETTE_KEY = "wr_palette";
 
-/** 저장된 선택이 없으면 시스템 설정을 따른다 */
-function initialTheme() {
+/* 사용자 **선택**과 실제 **적용값**은 다른 개념이다.
+   예전엔 첫 실행 때 시스템 값을 읽어 "light"/"dark"로 굳혀 저장했기 때문에,
+   그 뒤로는 기기 설정을 바꿔도 앱이 따라가지 않았다. 이제 선택은
+   system|light|dark로 저장하고, 화면에 찍는 값은 거기서 파생시킨다.
+   기존 사용자의 "light"/"dark" 저장값은 그대로 유효한 선택으로 읽힌다. */
+const isThemePreference = (v) =>
+  v === "system" || v === "light" || v === "dark";
+
+function initialThemePreference() {
   const saved = localStorage.getItem(THEME_KEY);
-  if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
+  return isThemePreference(saved) ? saved : "system";
 }
+
+const systemScheme = () =>
+  window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 
 function initialPalette() {
   const saved = localStorage.getItem(PALETTE_KEY);
@@ -60,8 +67,30 @@ function initialPalette() {
 export default function App() {
   // 부팅 시 1회 로드 + 마이그레이션. 파싱 실패면 저장을 잠가 원본을 보호한다.
   const [boot] = useState(loadAll);
-  const [theme, setTheme] = useState(initialTheme);
+  const [themePreference, setThemePreference] = useState(initialThemePreference);
+  const [systemTheme, setSystemTheme] = useState(systemScheme);
   const [palette, setPalette] = useState(initialPalette);
+
+  /* 시스템 설정을 **계속** 따라간다 — 앱이 열려 있는 동안 기기 모드가 바뀌면
+     즉시 반영되어야 한다. addEventListener를 못 쓰는 환경(구형 Safari)에는
+     addListener로 물러난다. */
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mq) return undefined;
+    const onChange = (e) => setSystemTheme(e.matches ? "dark" : "light");
+    /* 최초 읽기와 구독 사이에 기기 설정이 바뀌면 그 변화를 놓친다 —
+       다음 변경이 올 때까지 낡은 값으로 남는다. 구독 직후 한 번 맞춘다. */
+    setSystemTheme(mq.matches ? "dark" : "light");
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else if (mq.addListener) mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else if (mq.removeListener) mq.removeListener(onChange);
+    };
+  }, []);
+
+  // 화면에 실제로 찍는 값. data-theme은 계속 light|dark 둘뿐이다.
+  const theme = themePreference === "system" ? systemTheme : themePreference;
 
   /* 팔레트 × 주간/야간 두 축을 항상 명시한다 — 브라우저가 임의로 색을 뒤집지 않게.
      상태표시줄 색(theme-color)도 골라둔 팔레트의 지면색으로 맞춰야
@@ -73,14 +102,14 @@ export default function App() {
     /* 꽉 찬 저장소에서 ☾ 한 번에 앱이 죽으면 안 된다. 설정은 사용자 데이터가
        아니라 취향이라 저장 실패해도 화면에는 적용하고 조용히 넘어간다 —
        배너는 노트/카드 저장 실패가 띄운다. */
-    savePref(THEME_KEY, theme);
+    savePref(THEME_KEY, themePreference); // 선택을 저장한다 (해석 결과가 아니라)
     savePref(PALETTE_KEY, palette);
 
     const p = PALETTES.find((x) => x.id === palette) ?? PALETTES[0];
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", theme === "dark" ? p.night.paper : p.day.paper);
-  }, [theme, palette]);
+  }, [theme, themePreference, palette]);
   const [notes, setNotes] = useState(boot.notes);
   const [cards, setCards] = useState(boot.cards);
   /* 두 실패는 성격이 다르다 — storage.js의 loadAll 주석 참고.
@@ -343,7 +372,9 @@ export default function App() {
           type="button"
           className="theme-toggle"
           aria-label={theme === "dark" ? "주간 모드로 전환" : "야간 모드로 전환"}
-          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+          /* 한 번 누르면 "지금 이걸로" 라는 명시적 선택이다 — system에서
+             벗어나 고정된다. 다시 자동으로 두려면 설정에서 고른다. */
+          onClick={() => setThemePreference(theme === "dark" ? "light" : "dark")}
         >
           {theme === "dark" ? "☀" : "☾"}
         </button>
@@ -490,7 +521,8 @@ export default function App() {
               palette={palette}
               onSetPalette={setPalette}
               theme={theme}
-              onSetTheme={setTheme}
+              themePreference={themePreference}
+              onSetThemePreference={setThemePreference}
             />
           </div>
         </div>
