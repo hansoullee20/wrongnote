@@ -39,6 +39,38 @@ export const readNotes = (page) => readState(page, "notes");
 
 export const readCards = (page) => readState(page, "cards");
 
+/**
+ * 권위 저장소에 노트/카드를 직접 심는다. readState의 짝이다.
+ *
+ * ⚠️ 레거시 키(`wr_notes`/`wr_cards`)에 직접 쓰지 말 것. 앱이 한 번이라도 부팅한
+ * origin에는 이미 `wr_state`가 있고, 그러면 레거시 쓰기는 **조용히 무시된다** —
+ * 실패가 아니라 침묵이라, 테스트는 통과하면서 아무것도 검증하지 않게 된다.
+ * 레거시 경로 자체를 테스트하려면 `seedLegacyStore`처럼 먼저 clear해야 한다.
+ *
+ * version은 이미 있는 봉투 값을 유지한다. 앱이 저장할 때 어차피 현재
+ * SCHEMA_VERSION으로 덮으므로 여기서 새로 정하지 않는다 — 시드가 버전을
+ * 지어내면 의도치 않은 마이그레이션을 유발할 수 있다.
+ */
+export const writeState = (page, notes, cards) =>
+  page.evaluate(
+    ({ notes, cards }) => {
+      const raw = localStorage.getItem("wr_state");
+      let version = Number(localStorage.getItem("wr_schema_version")) || null;
+      if (raw !== null) {
+        try {
+          version = JSON.parse(raw).version ?? version;
+        } catch {
+          /* 못 읽으면 wr_schema_version 값을 그대로 쓴다 */
+        }
+      }
+      localStorage.setItem(
+        "wr_state",
+        JSON.stringify({ version, notes, cards })
+      );
+    },
+    { notes, cards }
+  );
+
 /** v1 레거시 스토어 시드 (마이그레이션 테스트용) */
 export async function seedLegacyStore(page) {
   await page.goto("/");

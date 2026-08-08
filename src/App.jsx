@@ -13,8 +13,7 @@ import {
 } from "./constants.js";
 import {
   loadAll,
-  saveNotes,
-  saveCards,
+  saveState,
   savePref,
   WRITE_ERROR_MESSAGE,
 } from "./storage.js";
@@ -129,9 +128,15 @@ export default function App() {
   const [problemNavRequest, setProblemNavRequest] = useState(null);
   const [filter, setFilter] = useState({ tag: "", cause: "", topicMain: "" });
 
+  /* 노트와 카드를 **한 이펙트에서 한 번의 쓰기로** 영속화한다.
+     이펙트를 둘로 두면 addNote처럼 같은 렌더에서 둘 다 바꾸는 경우
+     두 이펙트가 같은 flush에서 같은 stale storageLocked를 캡처한다 —
+     앞의 쓰기가 실패해 setWriteError를 걸어도 뒤의 쓰기는 그대로 나가고,
+     큰 notes만 실패하고 작은 cards는 성공해 고아 카드가 남았다.
+     쓰기가 하나면 그 조합 자체가 존재할 수 없다. */
   useEffect(() => {
     if (storageLocked) return;
-    if (!saveNotes(notes)) {
+    if (!saveState(notes, cards)) {
       setWriteError(WRITE_ERROR_MESSAGE);
       return;
     }
@@ -144,11 +149,7 @@ export default function App() {
       pendingPersistRequest.current = false;
       requestPersistentStorage();
     }
-  }, [notes, storageLocked]);
-  useEffect(() => {
-    if (storageLocked) return;
-    if (!saveCards(cards)) setWriteError(WRITE_ERROR_MESSAGE);
-  }, [cards, storageLocked]);
+  }, [notes, cards, storageLocked]);
 
   // 풀기 배지 — 풀기 세션과 동일한 isRecheckDue 기준
   const recheckDueCount = useMemo(

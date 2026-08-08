@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { freshApp, readNotes } from "./helpers.js";
+import { freshApp, readNotes, readCards, writeState } from "./helpers.js";
 
 /** v5: fail은 이번 시도의 원인을 골라야 저장된다 */
 async function classifyFail(page, cause = "개념 부족") {
@@ -104,13 +104,11 @@ test.describe("다시 풀기 세션", () => {
   test("같은 오답 반복 → 세션 요약이 몇 번째인지 짚어준다", async ({ page }) => {
     await seedOneSolvable(page);
     // 이미 ② 로 한 번 틀린 이력을 심는다
-    await page.evaluate(() => {
-      const ns = JSON.parse(localStorage.getItem("wr_notes"));
-      ns[0].attempts = [
-        { ts: Date.now() - 86400000, answer: "②", correct: false, seconds: 390 },
-      ];
-      localStorage.setItem("wr_notes", JSON.stringify(ns));
-    });
+    const ns1 = await readNotes(page);
+    ns1[0].attempts = [
+      { ts: Date.now() - 86400000, answer: "②", correct: false, seconds: 390 },
+    ];
+    await writeState(page, ns1, await readCards(page));
     await page.reload();
     await page.getByRole("button", { name: /^문제/ }).waitFor();
 
@@ -236,16 +234,14 @@ test.describe("풀기 세션 현재 동작 고정", () => {
     page,
   }) => {
     await seedOneSolvable(page);
-    await page.evaluate(() => {
-      const ns = JSON.parse(localStorage.getItem("wr_notes"));
-      ns.push({
-        ...ns[0],
-        id: "solve_n2",
-        problem: "SOLVE-2",
-        correctAnswer: "①",
-      });
-      localStorage.setItem("wr_notes", JSON.stringify(ns));
+    const ns2 = await readNotes(page);
+    ns2.push({
+      ...ns2[0],
+      id: "solve_n2",
+      problem: "SOLVE-2",
+      correctAnswer: "①",
     });
+    await writeState(page, ns2, await readCards(page));
     await page.reload();
     await page.getByRole("button", { name: /^문제/ }).waitFor();
 

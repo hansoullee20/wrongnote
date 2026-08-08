@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { freshApp, openNoteByProblem } from "./helpers.js";
+import { freshApp, openNoteByProblem, writeState } from "./helpers.js";
 
 /**
  * 풀이 사진(solutionImages) 수명주기.
@@ -65,44 +65,39 @@ const seedBlobs = (page, ids) =>
     { ids, url: TINY_PNG_URL }
   );
 
-/** 노트 1건을 localStorage에 심는다 (사진 id는 이미 IDB에 있다고 가정) */
+/** 노트 1건을 권위 저장소에 심는다 (사진 id는 이미 IDB에 있다고 가정) */
 const seedNote = (page, { problem, images, solutionImages }) =>
-  page.evaluate(
-    ({ problem, images, solutionImages }) => {
-      localStorage.setItem(
-        "wr_notes",
-        JSON.stringify([
-          {
-            id: "sol_n1",
-            subject: "수학",
-            problem,
-            topicMain: "",
-            topicSub: "",
-            question: "",
-            mySol: "",
-            optSol: "",
-            cause: "개념 부족",
-            correctAnswer: "",
-            myAnswer: "",
-            examTime: "",
-            derived: null,
-            tags: [],
-            memo: "",
-            images,
-            solutionImages,
-            attempts: [],
-            ts: Date.now(),
-            date: "2026-08-06",
-            rechecked: false,
-            recheckResult: null,
-            recheckCount: 0,
-            nextRecheckTs: null,
-          },
-        ])
-      );
-      localStorage.setItem("wr_cards", "[]");
-    },
-    { problem, images, solutionImages }
+  writeState(
+    page,
+    [
+      {
+        id: "sol_n1",
+        subject: "수학",
+        problem,
+        topicMain: "",
+        topicSub: "",
+        question: "",
+        mySol: "",
+        optSol: "",
+        cause: "개념 부족",
+        correctAnswer: "",
+        myAnswer: "",
+        examTime: "",
+        derived: null,
+        tags: [],
+        memo: "",
+        images,
+        solutionImages,
+        attempts: [],
+        ts: Date.now(),
+        date: "2026-08-06",
+        rechecked: false,
+        recheckResult: null,
+        recheckCount: 0,
+        nextRecheckTs: null,
+      },
+    ],
+    []
   );
 
 test.describe("풀이 사진 수명주기", () => {
