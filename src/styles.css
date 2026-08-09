@@ -1220,6 +1220,18 @@ textarea:focus {
 /* ---- 문제 사진 ---- */
 
 /* 폼 첨부 썸네일 스트립 */
+.photo-paste {
+  margin: 8px 0;
+  padding: 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.photo-paste:focus { outline: 2px solid var(--action); outline-offset: 2px; }
+
 .photo-strip {
   display: flex;
   flex-wrap: wrap;

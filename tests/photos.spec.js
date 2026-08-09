@@ -50,7 +50,7 @@ test.describe("문제 사진 첨부", () => {
   test("사진 첨부 → 저장 → 노트에 사진 id, IDB에 blob", async ({ page }) => {
     await page.fill("#rec-problem", "사진 노트 1");
     await page
-      .locator('input[type="file"][accept="image/*"]')
+      .locator('#rec-problem-photo')
       .setInputFiles({
         name: "problem.png",
         mimeType: "image/png",
@@ -83,7 +83,7 @@ test.describe("문제 사진 첨부", () => {
   test("노트 삭제 → IDB 사진도 정리", async ({ page }) => {
     await page.fill("#rec-problem", "사진 삭제 테스트");
     await page
-      .locator('input[type="file"][accept="image/*"]')
+      .locator('#rec-problem-photo')
       .setInputFiles({
         name: "problem.png",
         mimeType: "image/png",
@@ -105,7 +105,7 @@ test.describe("문제 사진 첨부", () => {
   test("폼에서 ✕로 제거하면 저장 시 사진 없음", async ({ page }) => {
     await page.fill("#rec-problem", "사진 제거 테스트");
     await page
-      .locator('input[type="file"][accept="image/*"]')
+      .locator('#rec-problem-photo')
       .setInputFiles({
         name: "problem.png",
         mimeType: "image/png",
