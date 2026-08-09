@@ -108,6 +108,7 @@ export default function RecordView({
   initialEditId = null,
   onCancelEdit,
   storageLocked = false,
+  locale = "ko",
 }) {
   const [draft, setDraft] = useState(() => emptyDraft());
   const [checks, setChecks] = useState([false, false, false, false]);
@@ -196,8 +197,8 @@ export default function RecordView({
   }
 
   async function handleCopyPrompt() {
-    const ok = await copyText(buildChatGPTRequest(draft));
-    setCopied(ok ? "복사됨 — ChatGPT에 이미지와 함께 붙여넣어라" : "복사 실패");
+    const ok = await copyText(buildChatGPTRequest({ ...draft, locale }));
+    setCopied(ok ? (locale === "en" ? "Copied — paste it with both image groups in ChatGPT" : "복사됨 — ChatGPT에 이미지와 함께 붙여넣어라") : (locale === "en" ? "Copy failed" : "복사 실패"));
     setTimeout(() => setCopied(""), 2500);
   }
 

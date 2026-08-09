@@ -42,6 +42,7 @@ const TABS = [
 
 const THEME_KEY = "wr_theme";
 const PALETTE_KEY = "wr_palette";
+const LOCALE_KEY = "wr_locale";
 
 /* 사용자 **선택**과 실제 **적용값**은 다른 개념이다.
    예전엔 첫 실행 때 시스템 값을 읽어 "light"/"dark"로 굳혀 저장했기 때문에,
@@ -64,12 +65,17 @@ function initialPalette() {
   return isPalette(saved) ? saved : DEFAULT_PALETTE;
 }
 
+function initialLocale() {
+  return localStorage.getItem(LOCALE_KEY) === "en" ? "en" : "ko";
+}
+
 export default function App() {
   // 부팅 시 1회 로드 + 마이그레이션. 파싱 실패면 저장을 잠가 원본을 보호한다.
   const [boot] = useState(loadAll);
   const [themePreference, setThemePreference] = useState(initialThemePreference);
   const [systemTheme, setSystemTheme] = useState(systemScheme);
   const [palette, setPalette] = useState(initialPalette);
+  const [locale, setLocale] = useState(initialLocale);
 
   /* 시스템 설정을 **계속** 따라간다 — 앱이 열려 있는 동안 기기 모드가 바뀌면
      즉시 반영되어야 한다. addEventListener를 못 쓰는 환경(구형 Safari)에는
@@ -104,12 +110,13 @@ export default function App() {
        배너는 노트/카드 저장 실패가 띄운다. */
     savePref(THEME_KEY, themePreference); // 선택을 저장한다 (해석 결과가 아니라)
     savePref(PALETTE_KEY, palette);
+    savePref(LOCALE_KEY, locale);
 
     const p = PALETTES.find((x) => x.id === palette) ?? PALETTES[0];
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", theme === "dark" ? p.night.paper : p.day.paper);
-  }, [theme, themePreference, palette]);
+  }, [theme, themePreference, palette, locale]);
   const [notes, setNotes] = useState(boot.notes);
   const [cards, setCards] = useState(boot.cards);
   /* 두 실패는 성격이 다르다 — storage.js의 loadAll 주석 참고.
@@ -523,6 +530,8 @@ export default function App() {
               theme={theme}
               themePreference={themePreference}
               onSetThemePreference={setThemePreference}
+              locale={locale}
+              onSetLocale={setLocale}
             />
           </div>
         </div>
@@ -578,6 +587,7 @@ export default function App() {
               }}
               initialEditId={editingNoteId}
               onCancelEdit={() => setEditingNoteId(null)}
+              locale={locale}
             />
           </div>
         </div>
