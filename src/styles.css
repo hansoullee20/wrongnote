@@ -2499,3 +2499,11 @@ textarea:focus {
 }
 .storage-value.ok { color: var(--success); }
 .storage-value.warn { color: var(--error); }
+
+/* v2 Today: intentionally quiet; the scheduler carries the pressure, not the screen. */
+.today-summary { display: flex; justify-content: space-between; gap: .75rem; margin: 0 0 1rem; color: var(--text-secondary); font-size: .86rem; }
+.today-card { padding: 1rem 0; border-bottom: 1px solid var(--rule); }
+.today-card p { white-space: pre-wrap; }
+.today-outcomes { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: 1rem 0; }
+.today-one { display: block; margin: .5rem auto 0; border: 0; background: transparent; color: var(--text-secondary); font-size: .78rem; }
+.group-link { display: block; width: 100%; padding: .55rem 0; text-align: left; border: 0; border-bottom: 1px solid var(--rule); background: transparent; color: inherit; }

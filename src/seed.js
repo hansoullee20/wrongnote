@@ -1,9 +1,6 @@
-import { DAY_MS, fmtDate } from "./constants.js";
-
-const daysAgo = (n) => Date.now() - n * DAY_MS;
-
 export function seedNotes() {
-  const raw = [
+  return [];
+  /* const raw = [
     {
       subject: "수학",
       problem: "Q15",
@@ -104,11 +101,12 @@ export function seedNotes() {
     date: fmtDate(n.ts),
     rechecked: false,
     recheckResult: null,
-  }));
+  })); */
 }
 
 export function seedCards() {
-  const raw = [
+  return [];
+  /* const raw = [
     {
       front: "표준 극한값 (인출용)",
       back: "lim sinx/x = 1, lim(1+x)^(1/x) = e, lim(e^x−1)/x = 1, lim ln(1+x)/x = 1 (x→0)",
@@ -132,5 +130,5 @@ export function seedCards() {
     id: `seed_card_${i + 1}`,
     noteId: null,
     subject: "수학",
-  }));
+  })); */
 }

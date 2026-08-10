@@ -2,7 +2,7 @@
 
 import { LEGACY_CAUSE_MAP, CAUSES } from "./constants.js";
 
-export const SCHEMA_VERSION = 6; // v6: personal AI-imported concept analysis
+export const SCHEMA_VERSION = 7; // v7: Today queue lifecycle
 
 /**
  * v2: 카드에 SRS 필드 추가.
@@ -104,5 +104,14 @@ export function migrateNote(note) {
       ? note.concepts.filter((c) => typeof c === "string" && c.trim())
       : [],
     analysisLocale: note.analysisLocale === "en" ? "en" : "ko",
+    // ---- Today queue (v7) ----
+    savedAt: Number.isFinite(note.savedAt) ? note.savedAt : (note.ts ?? Date.now()),
+    firstRetryAt: Number.isFinite(note.firstRetryAt) ? note.firstRetryAt : null,
+    lastRetryAt: Number.isFinite(note.lastRetryAt) ? note.lastRetryAt : null,
+    nextDueAt: Number.isFinite(note.nextDueAt) ? note.nextDueAt : null,
+    consecutiveCorrect: Number.isFinite(note.consecutiveCorrect) ? note.consecutiveCorrect : 0,
+    incorrectCount: Number.isFinite(note.incorrectCount) ? note.incorrectCount : 0,
+    retired: note.retired === true,
+    retryLog: Array.isArray(note.retryLog) ? note.retryLog.filter((x) => x && Number.isFinite(x.timestamp) && ["correct", "incorrect", "lucky_guess"].includes(x.outcome)) : [],
   };
 }
