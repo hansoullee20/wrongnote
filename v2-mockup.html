@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wrongnote v2 mockup</title>
+<style>
+  :root { color:#2d2822; background:#e8ddc7; font-family: Georgia, serif; }
+  * { box-sizing:border-box; } body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px; }
+  main { width:min(720px,100%); min-height:570px; background:#fbf7ef; border-radius:18px; overflow:hidden; box-shadow:0 12px 24px #5b493522; }
+  header { display:flex; align-items:baseline; gap:12px; padding:22px 28px 18px; border-bottom:1px solid #c3b49b; }
+  header small { color:#825e40; letter-spacing:.15em; font:11px Arial,sans-serif; } h1 { margin:0; font-size:25px; }
+  .content { padding:25px 28px; } .summary { display:flex; justify-content:space-between; color:#665d54; font:14px Arial,sans-serif; }
+  .add { width:100%; margin:30px 0 20px; padding:16px; border:0; border-radius:12px; background:#665647; color:white; font:bold 16px Arial,sans-serif; }
+  section { border:1px solid #e0d4c0; border-radius:16px; padding:20px; box-shadow:0 4px 10px #5b493511; } h2 { margin:0 0 12px; font-size:20px; }
+  .card { border-top:1px solid #e0d4c0; border-bottom:1px solid #e0d4c0; padding:16px 0; } .card strong { font-size:18px; } .card p { color:#665d54; line-height:1.45; }
+  .edit { background:none; border:0; color:#665647; padding:0; font:14px Arial,sans-serif; text-decoration:underline; }
+  .outcomes { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-top:16px; } .outcomes button { padding:13px 6px; border:1px solid #bfb09b; border-radius:10px; background:#fffdf8; color:#2d2822; font:14px Arial,sans-serif; }
+  .one { display:block; margin:15px auto 0; border:0; background:none; color:#665d54; font:12px Arial,sans-serif; }
+  .note { margin-top:14px; color:#665d54; font:13px Arial,sans-serif; }
+</style>
+<main>
+  <header><small>STUDY, ONE CARD AT A TIME</small><h1>Wrongnote</h1></header>
+  <div class="content">
+    <div class="summary"><span>2 awaiting analysis</span><span>7-day retry rate: 67%</span></div>
+    <button class="add">Add a card</button>
+    <section>
+      <h2>Today</h2>
+      <div class="card">
+        <strong>Limits — sign check</strong>
+        <p>Photo attached · ready when you are.</p>
+        <button class="edit">Edit details</button>
+      </div>
+      <div class="outcomes"><button>Correct</button><button>Incorrect</button><button>Lucky guess</button></div>
+      <button class="one">Just 1 today</button>
+    </section>
+    <div class="note">The scheduler remembers the gap. The interface does not punish you for it.</div>
+  </div>
+</main>
+</html>
