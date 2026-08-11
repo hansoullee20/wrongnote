@@ -201,7 +201,11 @@ export function TrajectoryDots({ attempts }) {
       aria-label={`재풀이 궤적: ${marks.map((m) => m.label).join(", ")}`}
     >
       {recent.map((a, i) => (
-        <span key={a.id ?? a.ts} className={`traj-dot ${marks[i].kind}`} aria-hidden="true">
+        <span
+          key={a.id ?? a.ts}
+          className={`traj-dot ${marks[i].kind}`}
+          aria-hidden="true"
+        >
           {marks[i].glyph}
           {/* 별표를 따로 빼야 ✓* 가 넓어져도 도트 줄이 들쭉날쭉해지지 않는다 */}
           {marks[i].star && <span className="traj-star">*</span>}
