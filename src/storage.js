@@ -6,10 +6,13 @@ const NOTES_KEY = "wr_notes";
 const CARDS_KEY = "wr_cards";
 const LEGACY_CARDS_KEY = "gap_cards"; // v1 카드 키 — 읽기 전용으로 유지
 const VERSION_KEY = "wr_schema_version";
-/* 스키마를 올리기 직전 원본 스냅샷. 버전마다 따로 남긴다 —
-   키를 하나로 두면 첫 마이그레이션 때 한 번 찍고 그 뒤로는
-   영영 안 찍혀서, 정작 위험한 후속 업그레이드가 무방비가 된다. */
-const backupKeyFor = (version) => `wr_backup_v${version}`;
+/* 스키마를 올리기 직전 원본 스냅샷. **전이(from→to)마다** 따로 남긴다.
+   출발 버전만으로 키를 만들면 안 된다: 구버전 코드가 마커를 5로 되돌린 뒤
+   다시 올라올 때, 옛날에 찍힌 wr_backup_v5가 이미 있다는 이유로 정작
+   필요한 새 스냅샷이 조용히 생략된다 (6→5→7 오염). 전이 키는 그 충돌
+   자체가 불가능하고, 같은 전이를 다시 밟으면 최신 원본으로 덮어쓴다. */
+const backupKeyFor = (fromVersion, toVersion) =>
+  `wr_backup_v${fromVersion}_to_v${toVersion}`;
 
 function parseArray(raw) {
   const parsed = JSON.parse(raw);
@@ -35,6 +38,12 @@ export const WRITE_ERROR_MESSAGE =
   "중단했다. 지금부터의 변경은 저장되지 않는다. 먼저 내보낸 뒤 이 사이트의 " +
   "저장공간을 정리하고 앱을 다시 열어라.";
 
+/* 다운그레이드 잠금 — 용량 문제와는 다른 사건이므로 문구를 섞으면 안 된다.
+   "저장공간을 정리해라"는 지시가 여기서는 틀린 처방이다. */
+export const DOWNGRADE_ERROR_MESSAGE =
+  "저장된 데이터가 지금 열린 앱보다 새 버전이다. 데이터 보호를 위해 저장을 " +
+  "잠갔다 — 보기와 내보내기는 된다. 앱을 새로고침해 최신 버전으로 열어라.";
+
 /**
  * 전체 로드 + 마이그레이션. 앱 부팅 시 1회 호출.
  *
@@ -53,16 +62,18 @@ export function loadAll() {
   const rawCards =
     localStorage.getItem(CARDS_KEY) ?? localStorage.getItem(LEGACY_CARDS_KEY);
 
-  // 마이그레이션 직전, 원본 문자열 그대로 스냅샷 (버전당 1회, 조용히)
-  const backupKey = backupKeyFor(storedVersion);
-  if (
-    storedVersion < SCHEMA_VERSION &&
-    (rawNotes !== null || rawCards !== null) &&
-    localStorage.getItem(backupKey) === null
-  ) {
+  /* 구버전 코드가 새 데이터를 연 상황 (Pages 롤백 등). 마커를 되돌려 쓰면
+     나중에 올라올 때 백업 판정이 오염된다 — 읽기·내보내기만 열고 저장 전체를
+     잠근다. 이 잠금은 이 코드부터의 다운그레이드만 막는다는 것에 주의:
+     이미 배포된 과거 코드는 고칠 수 없다. 과거 코드가 남긴 오염은 아래
+     전이 키가 무력화한다. */
+  const isDowngrade = storedVersion > SCHEMA_VERSION;
+
+  // 마이그레이션 직전 원본 스냅샷 — 같은 전이는 최신 원본으로 덮어쓴다
+  if (storedVersion < SCHEMA_VERSION && (rawNotes !== null || rawCards !== null)) {
     try {
       localStorage.setItem(
-        backupKey,
+        backupKeyFor(storedVersion, SCHEMA_VERSION),
         JSON.stringify({ savedAt: Date.now(), notes: rawNotes, cards: rawCards })
       );
     } catch {
@@ -104,7 +115,10 @@ export function loadAll() {
   // 정상 로드일 때만 마이그레이션 결과를 영속화하고 버전 승격 (idempotent)
   // 순서는 notes → cards → 버전. localStorage에 트랜잭션이 없어 부분 성공이
   // 가능하지만, 버전 승격이 마지막이라 다음 부팅에서 멱등 마이그레이션을 다시 돈다.
-  if (!error) {
+  // 다운그레이드면 아무것도 쓰지 않는다 — 정규화 결과는 메모리에만 둔다.
+  if (isDowngrade) {
+    writeError = DOWNGRADE_ERROR_MESSAGE;
+  } else if (!error) {
     const ok =
       safeSet(NOTES_KEY, JSON.stringify(notes)) &&
       safeSet(CARDS_KEY, JSON.stringify(cards)) &&

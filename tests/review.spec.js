@@ -84,7 +84,7 @@ test.describe("v4 → v5 attempt 마이그레이션", () => {
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
     ).toBe("6");
     const backup = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("wr_backup_v4"))
+      JSON.parse(localStorage.getItem("wr_backup_v4_to_v6"))
     );
     expect(backup.notes).toContain("V4-1");
   });
