@@ -588,6 +588,26 @@ test.describe("도움 사용 여부 (v6)", () => {
   test("도움받은 오답: 원인과 도움 여부가 함께 남는다", async ({ page }) => {
     await seedOneSolvable(page);
 
+    /* 앞선 시도를 하나 심어둔다 — 새 시도를 덧붙이면서 옛 시도를 조용히
+       고쳐 쓰지 않는지 봐야 한다 (attempts는 append-only다). */
+    await page.evaluate(() => {
+      const ns = JSON.parse(localStorage.getItem("wr_notes"));
+      ns[0].attempts = [
+        {
+          id: "sentinel", ts: 1700000100000, answer: "①", correct: false,
+          result: "fail", seconds: 200, cause: "읽기 실패",
+          tags: ["조건 누락"], memo: "앞선 시도", source: "recheck",
+          assisted: false,
+        },
+      ];
+      localStorage.setItem("wr_notes", JSON.stringify(ns));
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(300);
+    const before = (await readNotes(page)).find((n) => n.id === "solve_n1")
+      .attempts[0];
+
     await page.click('.tab:has-text("풀기")');
     await page.click(".mode.primary .mode-go");
     await page.click("#solve-assist-yes");
@@ -596,13 +616,33 @@ test.describe("도움 사용 여부 (v6)", () => {
     await classifyFail(page, "개념 부족");
 
     const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
-    expect(note.attempts.length).toBe(1);
+    expect(note.attempts.length).toBe(2);
+    // 앞선 시도는 바이트 단위로 그대로여야 한다
+    expect(note.attempts[0]).toEqual(before);
     // 분류를 거치는 동안(pendingFailure) 도움 여부가 살아남아야 한다
-    expect(note.attempts[0].assisted).toBe(true);
-    expect(note.attempts[0].cause).toBe("개념 부족");
-    expect(note.attempts[0].result).toBe("fail");
+    expect(note.attempts[1].assisted).toBe(true);
+    expect(note.attempts[1].cause).toBe("개념 부족");
+    expect(note.attempts[1].result).toBe("fail");
     // 이번 시도가 노트의 주원인을 멋대로 바꾸지 않는다
     expect(note.cause).toBe("실행 실수");
+  });
+
+  test("자기 채점 흐름에도 같은 선택이 있다 (정답 미기록 노트)", async ({
+    page,
+  }) => {
+    // 정답이 없으면 '맞았다 / 또 틀렸다' 자기 채점으로 갈린다 — 여기도 물어야 한다
+    await seedOneSolvable(page, { correctAnswer: "" });
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await expect(page.locator(".help-choice")).toBeVisible();
+    await page.click("#solve-assist-yes");
+    await page.click('.grade-btn:has-text("맞았다")');
+
+    await expect(page.locator(".verdict-stamp")).toHaveText("맞음");
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts[0].assisted).toBe(true);
+    expect(note.attempts[0].result).toBe("pass");
   });
 
   test("풀이 보기: 예를 골랐으면 그대로 흐르고, 안 골랐으면 켜지지 않는다", async ({

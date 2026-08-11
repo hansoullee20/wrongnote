@@ -178,10 +178,14 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
 });
 
 test.describe("v5 → v6 도움 여부 마이그레이션", () => {
-  /** 완전한 v5 노트 하나를 심는다 — attempt는 이미 superset 형태다 */
+  /**
+   * 완전한 v5 노트 하나를 심는다 — attempt는 이미 superset 형태다.
+   * 백업이 **원본 그대로**인지 바이트로 비교하려면 심은 문자열을 돌려받아야 한다.
+   * @returns {Promise<{rawNotes: string, rawCards: string}>}
+   */
   async function seedV5Store(page) {
     await page.goto("/");
-    await page.evaluate(() => {
+    const raw = await page.evaluate(() => {
       localStorage.clear();
       localStorage.setItem("wr_schema_version", "5");
       localStorage.setItem(
@@ -260,27 +264,33 @@ test.describe("v5 → v6 도움 여부 마이그레이션", () => {
           },
         ])
       );
+      return {
+        rawNotes: localStorage.getItem("wr_notes"),
+        rawCards: localStorage.getItem("wr_cards"),
+      };
     });
     await page.reload();
     await page.getByRole("button", { name: /^문제/ }).waitFor();
     await page.waitForTimeout(300);
+    return raw;
   }
 
   test("모든 과거 시도는 assisted:false, 그 밖의 필드는 무손상", async ({
     page,
   }) => {
-    await seedV5Store(page);
+    const raw = await seedV5Store(page);
 
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
     ).toBe("6");
 
-    // v5 직전 원본이 새 키로 보존된다
+    /* v5 직전 원본이 새 키로 **글자 그대로** 보존된다. 부분 문자열만 보면
+       잘리거나 정규화된 스냅샷도 통과해 버려서, 백업을 믿을 근거가 못 된다. */
     const backup = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v5"))
     );
-    expect(backup.notes).toContain("V5-1");
-    expect(backup.cards).toContain("v5 카드");
+    expect(backup.notes).toBe(raw.rawNotes);
+    expect(backup.cards).toBe(raw.rawCards);
 
     const note = (await readNotes(page))[0];
     const [a0, a1] = note.attempts;
