@@ -477,11 +477,19 @@ test.describe("도움받은 통과 표시 (v6)", () => {
     // 순서 보존 — 오래된 것 → 최신
     await expect(card.locator(".traj")).toHaveText("✕✕✓*✓");
 
-    // 색이 아니라 라벨이 구분을 짊어진다
-    const labels = await card
+    /* 색이 아니라 라벨이 구분을 짊어진다.
+       도트마다 붙은 aria-label을 세는 건 의미가 없다 — role="img"가 하위를
+       평탄화하므로 보조기기는 그걸 절대 못 듣는다. 실제로 전달되는
+       **접근성 이름**을 본다. */
+    await expect(card.locator(".traj")).toHaveAttribute(
+      "aria-label",
+      "재풀이 궤적: 개념 부족, 읽기 실패, 도움받음, 통과"
+    );
+    // 도트 자체는 장식이어야 한다 (이름이 두 번 읽히면 안 된다)
+    const hidden = await card
       .locator(".traj-dot")
-      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
-    expect(labels).toEqual(["개념 부족", "읽기 실패", "도움받음", "통과"]);
+      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-hidden")));
+    expect(hidden).toEqual(["true", "true", "true", "true"]);
   });
 
   test("이력 로그: 같은 네 시도가 같은 표기로 나온다", async ({ page }) => {
@@ -497,9 +505,14 @@ test.describe("도움받은 통과 표시 (v6)", () => {
     await expect(lines.locator(".grade-mark.assisted")).toHaveCount(1);
     await expect(lines.locator(".grade-mark.pass")).toHaveCount(1);
 
+    // 이력은 본문이 글로 말하므로 마크는 장식이다
     await expect(lines.nth(0)).toContainText("개념 부족");
     await expect(lines.nth(1)).toContainText("읽기 실패");
     await expect(lines.nth(2)).toContainText("도움받음");
     await expect(lines.nth(3)).toContainText("통과");
+    await expect(lines.nth(2).locator(".grade-mark")).toHaveAttribute(
+      "aria-hidden",
+      "true"
+    );
   });
 });
