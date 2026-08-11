@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PALETTES } from "../palettes.js";
 import { noteImageIds } from "../constants.js";
 import { downloadJSON, exportEnvelope, importEnvelope } from "../storage.js";
+import { SCHEMA_VERSION } from "../migrate.js";
 import { exportImages, importImages } from "../imageStore.js";
 import { Section, Button } from "../components.jsx";
 import {
@@ -25,6 +26,10 @@ export default function SettingsView({
   cards,
   parseError = "",
   writeError = "",
+  /* 내보내는 데이터가 실제로 따르는 스키마. 평소엔 현재 버전이지만
+     다운그레이드 잠금 중에는 저장된 쪽이 더 새롭다 — 그때 현재 버전을
+     찍으면 구조용 백업이 제 내용을 속이게 된다. */
+  dataVersion = SCHEMA_VERSION,
   onReplaceAll,
   palette,
   onSetPalette,
@@ -66,7 +71,7 @@ export default function SettingsView({
     const name = `wr_backup_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
     // 첨부 사진(base64)까지 포함한 완전 백업 — 문제 사진 + 풀이 사진
     const images = await exportImages(notes.flatMap(noteImageIds));
-    downloadJSON(name, { ...exportEnvelope(notes, cards), images });
+    downloadJSON(name, { ...exportEnvelope(notes, cards, dataVersion), images });
     /* 여기서 기록하는 건 **시도** 시각이다. downloadJSON은 <a>.click()이라
        브라우저가 완료를 알려주지 않는다 — 차단되거나 저장 취소돼도 여기 온다.
        그래서 아래에 날짜를 보여준다: 사용자가 "그때 받은 적 없는데"를
@@ -110,7 +115,7 @@ export default function SettingsView({
         try {
           const curImages = await exportImages(notes.flatMap(noteImageIds));
           downloadJSON("wr_backup_before_import.json", {
-            ...exportEnvelope(notes, cards),
+            ...exportEnvelope(notes, cards, dataVersion),
             images: curImages,
           });
         } catch {

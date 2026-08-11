@@ -10,7 +10,7 @@ const VERSION_KEY = "wr_schema_version";
    출발 버전만으로 키를 만들면 안 된다: 구버전 코드가 마커를 5로 되돌린 뒤
    다시 올라올 때, 옛날에 찍힌 wr_backup_v5가 이미 있다는 이유로 정작
    필요한 새 스냅샷이 조용히 생략된다 (6→5→7 오염). 전이 키는 그 충돌
-   자체가 불가능하고, 같은 전이를 다시 밟으면 최신 원본으로 덮어쓴다. */
+   자체가 불가능하다. 같은 전이 안에서는 **처음 찍은 것**을 지킨다. */
 const backupKeyFor = (fromVersion, toVersion) =>
   `wr_backup_v${fromVersion}_to_v${toVersion}`;
 
@@ -24,7 +24,12 @@ function readStoredVersion() {
   if (raw === null) return 1;
   if (!/^[1-9]\d*$/.test(raw)) return 1;
   const n = Number(raw);
-  return Number.isSafeInteger(n) ? n : 1;
+  if (Number.isSafeInteger(n)) return n;
+  /* 자릿수가 안전 정수를 넘는 숫자 문자열. 1로 후퇴하면 "미래 버전"을
+     "아주 오래된 버전"으로 뒤집어 읽고 마이그레이션해버린다 — 정확히
+     막으려던 방향이다. 판별은 못 해도 **크다는 사실**은 확실하므로
+     다운그레이드로 분류해 잠근다. */
+  return Number.MAX_SAFE_INTEGER;
 }
 
 function parseArray(raw) {
@@ -97,7 +102,12 @@ export function loadAll() {
      StrictMode가 useState(loadAll) 초기화를 두 번 부르는데, 1회차가 시드를
      저장해버리면 2회차는 "저장된 노트가 있다"를 보고 기존 사용자로 오판한다.
      여기서 먼저 찍어두면 2회차도 같은 결론에 도달한다. */
-  if (rawNotes === null && localStorage.getItem(USER_DATA_KEY) === null) {
+  // 다운그레이드 잠금 중에는 이 각인도 쓰기다 — 잠갔으면 하나도 쓰지 않는다
+  if (
+    !isDowngrade &&
+    rawNotes === null &&
+    localStorage.getItem(USER_DATA_KEY) === null
+  ) {
     safeSet(USER_DATA_KEY, "0"); // 시드는 사용자 데이터가 아니다
   }
 
@@ -179,7 +189,18 @@ export function loadAll() {
   /* 이미 저장된 노트가 있었다 = 기존 사용자다. 시드 첫 실행과 구분해야
      사용자 데이터 플래그를 뒤늦게 채울 수 있다 (storageHealth를 여기서
      import하면 순환이 되므로 사실만 돌려주고 판단은 App이 한다). */
-  return { notes, cards, error, writeError, hadStoredData: rawNotes !== null };
+  /* dataVersion = 지금 메모리에 있는 데이터가 실제로 따르는 스키마.
+     보통은 현재 버전이지만, 다운그레이드 잠금 중이면 저장된 쪽이 더 새롭다 —
+     그때 내보내기가 현재 버전을 찍으면 v7 데이터가 v6이라고 주장하는 파일이
+     나온다. 구조 수단이 거짓말을 하면 안 된다. */
+  return {
+    notes,
+    cards,
+    error,
+    writeError,
+    hadStoredData: rawNotes !== null,
+    dataVersion: isDowngrade ? storedVersion : SCHEMA_VERSION,
+  };
 }
 
 /** @returns {boolean} 저장 성공 여부. 실패해도 던지지 않는다 */
@@ -190,8 +211,8 @@ export const saveCards = (cards) => safeSet(CARDS_KEY, JSON.stringify(cards));
 export const savePref = (key, value) => safeSet(key, value);
 
 /** 백업 내보내기용 버전 포함 봉투 */
-export function exportEnvelope(notes, cards) {
-  return { version: SCHEMA_VERSION, notes, cards };
+export function exportEnvelope(notes, cards, version = SCHEMA_VERSION) {
+  return { version, notes, cards };
 }
 
 /**

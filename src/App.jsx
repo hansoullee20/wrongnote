@@ -521,6 +521,7 @@ export default function App() {
               cards={cards}
               parseError={parseError}
               writeError={writeError}
+              dataVersion={boot.dataVersion}
               onReplaceAll={replaceAll}
               palette={palette}
               onSetPalette={setPalette}

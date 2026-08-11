@@ -235,3 +235,42 @@ test.describe("가져오기 버전 검증 (A5)", () => {
     });
   }
 });
+
+/* H3 — 다운그레이드 잠금 중 내보내기는 유일한 구조 수단이다. 그 파일이
+   "현재 버전"이라고 주장하면, 실제로는 더 새로운 데이터를 담고도 구버전인
+   척하게 된다. 구조 수단은 제 내용을 속이면 안 된다. */
+test.describe("다운그레이드 중 내보내기 버전 (H3)", () => {
+  test("저장된(더 새로운) 버전을 그대로 찍는다", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "9"); // 미래 빌드가 남긴 상태
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학", problem: "FUTURE-1", topicMain: "", topicSub: "",
+            question: "", mySol: "", optSol: "", tags: [], derived: null,
+            memo: "", ts: 1700000000000, id: "f1", date: "2026-06-01",
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(300);
+
+    await page.click(".settings-open");
+    const downloadPromise = page.waitForEvent("download");
+    await page.click('.btn:has-text("내보내기 (JSON)")');
+    const download = await downloadPromise;
+    const chunks = [];
+    for await (const c of await download.createReadStream()) chunks.push(c);
+    const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+
+    // 데이터가 따르는 실제 스키마를 찍는다 — 현재 코드 버전이 아니라
+    expect(parsed.version).toBe(9);
+    expect(parsed.notes[0].problem).toBe("FUTURE-1");
+  });
+});
