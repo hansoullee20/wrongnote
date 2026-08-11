@@ -116,6 +116,8 @@ export default function RecordView({
   const [photo, setPhoto] = useState({ busy: false, label: "", error: "" });
   const [copied, setCopied] = useState("");
   const photoInputRef = useRef(null);
+  // 압축 동시 실행을 막는 동기 뮤텍스 (photo.busy는 렌더용, 이건 판정용)
+  const photoBusyRef = useRef(false);
   const aiFileInputRef = useRef(null);
   const [aiImportError, setAiImportError] = useState("");
 
@@ -220,17 +222,34 @@ export default function RecordView({
   async function addPhotoFiles(files, kind = "question") {
     if (!files.length) return;
 
+    /* 압축은 한 번에 하나만. setState는 비동기라 같은 렌더 구간에 들어온
+       두 번째 붙여넣기를 photo.busy로는 못 막는다 — 동기 ref가 필요하다.
+       거부할 때 busy를 건드리면 안 된다. 진행 중인 압축이 아직 살아 있는데
+       busy를 내리면 바로 그 동시성 창이 다시 열린다. */
+    if (photoBusyRef.current || submitting) {
+      setPhoto((p) => ({ ...p, error: "사진 처리 중이다 — 끝난 뒤에 추가해라" }));
+      return;
+    }
+    photoBusyRef.current = true;
+
     // 사진 첨부 — 각 파일을 압축해서 그대로 붙인다. 글자 추출은 하지 않는다.
     setPhoto({ busy: true, label: "사진 처리 중…", error: "" });
     try {
       for (const file of files) {
         const blob = await compressImage(file);
-        const add = (ps) => [...ps, { blob, url: URL.createObjectURL(blob) }];
+        /* url은 여기서 만든다 — updater 클로저 안에서 만들면 React가 렌더
+           단계에 호출하므로 이 try 밖이다. 거기서 던지면 "첨부 실패"가
+           아니라 트리 언마운트(백지)가 된다. */
+        const url = URL.createObjectURL(blob);
+        const add = (ps) => [...ps, { blob, url }];
         kind === "solution" ? setSolutionPhotos(add) : setPhotos(add);
       }
       setPhoto({ busy: false, label: "", error: "" });
     } catch {
       setPhoto({ busy: false, label: "", error: "사진 첨부 실패" });
+    } finally {
+      // 조건 없이 푼다 — 여기서 새면 폼이 영구히 잠긴다 (저장까지 막으므로)
+      photoBusyRef.current = false;
     }
   }
 
@@ -252,8 +271,14 @@ export default function RecordView({
   const isMath = draft.subject === "수학";
   const gateActive = isMath && draft.cause === CAUSE_EXECUTION;
   const gatePassed = !gateActive || checks.every(Boolean);
+  // 압축 중에는 첨부·이동·저장을 모두 잠근다 — 저장이 pending 사진을 빠뜨리면
+  // 사용자는 붙여넣은 사진이 사라진 걸 나중에야 안다
+  const attachmentsLocked = photo.busy || submitting;
   const canSave =
-    draft.problem.trim().length > 0 && draft.cause !== "" && gatePassed;
+    draft.problem.trim().length > 0 &&
+    draft.cause !== "" &&
+    gatePassed &&
+    !photo.busy;
 
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -275,7 +300,7 @@ export default function RecordView({
   };
 
   const submit = async () => {
-    if (!canSave || submitting) return;
+    if (!canSave || submitting || photoBusyRef.current) return;
     setSubmitting(true);
     setPhoto((p) => ({ ...p, error: "" }));
 
@@ -409,6 +434,7 @@ export default function RecordView({
             </div>
             <div
               className="photo-paste"
+              aria-disabled={attachmentsLocked}
               tabIndex={0}
               onPaste={(e) => {
                 const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith("image/"));
@@ -443,7 +469,7 @@ export default function RecordView({
                     <button
                       type="button"
                       className="photo-remove"
-                      disabled={submitting}
+                      disabled={attachmentsLocked}
                       onClick={() => removePhoto(i)}
                       aria-label="사진 제거"
                     >
@@ -454,10 +480,11 @@ export default function RecordView({
               </div>
             )}
             <Field label="내 풀이 사진 (선택)" hint="사진을 붙여넣거나 파일을 골라라. AI 요청에는 문제 사진과 함께 이 사진도 첨부한다.">
-              <input id="rec-solution-photo" type="file" accept="image/*" multiple onChange={(e) => handlePhotoFiles(e, "solution")} />
+              <input id="rec-solution-photo" type="file" accept="image/*" multiple disabled={attachmentsLocked} onChange={(e) => handlePhotoFiles(e, "solution")} />
             </Field>
             <div
               className="photo-paste"
+              aria-disabled={attachmentsLocked}
               tabIndex={0}
               onPaste={(e) => {
                 const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith("image/"));
@@ -471,7 +498,7 @@ export default function RecordView({
                 {solutionPhotos.map((p, i) => (
                   <div key={p.id || p.url} className="photo-strip-item">
                     <PhotoThumb photo={p} />
-                    <button type="button" className="photo-remove" disabled={submitting} onClick={() => removePhoto(i, "solution")} aria-label="내 풀이 사진 제거">✕</button>
+                    <button type="button" className="photo-remove" disabled={attachmentsLocked} onClick={() => removePhoto(i, "solution")} aria-label="내 풀이 사진 제거">✕</button>
                   </div>
                 ))}
               </div>
@@ -547,8 +574,12 @@ export default function RecordView({
                 variant="primary"
                 size="lg"
                 block
-                disabled={!draft.problem.trim()}
-                onClick={() => setStep(2)}
+                disabled={!draft.problem.trim() || attachmentsLocked}
+                onClick={() => {
+                  // 압축 중 이동하면 pending 사진이 저장에서 빠진다
+                  if (photoBusyRef.current) return;
+                  setStep(2);
+                }}
               >
                 다음 — 왜 틀렸나
               </Button>
