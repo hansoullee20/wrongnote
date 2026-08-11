@@ -478,13 +478,13 @@ test.describe("도움받은 통과 표시 (v6)", () => {
     await expect(card.locator(".traj")).toHaveText("✕✕✓*✓");
 
     /* 색이 아니라 라벨이 구분을 짊어진다.
-       도트마다 붙은 aria-label을 세는 건 의미가 없다 — role="img"가 하위를
-       평탄화하므로 보조기기는 그걸 절대 못 듣는다. 실제로 전달되는
-       **접근성 이름**을 본다. */
-    await expect(card.locator(".traj")).toHaveAttribute(
-      "aria-label",
-      "재풀이 궤적: 개념 부족, 읽기 실패, 도움받음, 통과"
-    );
+       속성을 직접 읽으면 role="img"가 사라져 이름이 노출되지 않게 돼도
+       그대로 통과한다 — 접근성 트리에서 **역할과 이름으로** 찾는다. */
+    await expect(
+      card.getByRole("img", {
+        name: "재풀이 궤적: 개념 부족, 읽기 실패, 도움받음, 통과",
+      })
+    ).toBeVisible();
     // 도트 자체는 장식이어야 한다 (이름이 두 번 읽히면 안 된다)
     const hidden = await card
       .locator(".traj-dot")
@@ -514,5 +514,86 @@ test.describe("도움받은 통과 표시 (v6)", () => {
       "aria-hidden",
       "true"
     );
+  });
+});
+
+/* verify-contrast.mjs는 팔레트 토큰만 계산한다 — CSS opacity나 합성 결과는
+   보지 못한다. 실제로 opacity: 0.75가 이 마크를 3.21:1까지 떨어뜨린 적이
+   있는데도 게이트는 초록이었다. 그래서 **그려진 픽셀 기준**으로 다시 잰다. */
+test.describe("도움 표시 대비 — 렌더링 기준 (v6)", () => {
+  const PALETTE_IDS = ["warm", "mauve", "plum", "teal", "sage", "sky", "graphite", "navy"];
+
+  test("모든 팔레트·주야에서 ✓* 가 4.5:1 이상이다", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학", problem: "CONTRAST-1", topicMain: "", topicSub: "",
+            question: "", mySol: "", optSol: "", cause: "", tags: [],
+            derived: null, memo: "", correctAnswer: "③", myAnswer: "",
+            examTime: "", images: [], solutionImages: [],
+            attempts: [{
+              id: "c1", ts: 1700000100000, answer: "③", correct: true,
+              result: "pass", seconds: 30, cause: "", tags: [], memo: "",
+              source: "scheduled", assisted: true,
+            }],
+            ts: 1700000000000, id: "contrast1", date: "2026-06-01",
+            rechecked: true, recheckResult: "pass", recheckCount: 1,
+            nextRecheckTs: null,
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+    });
+
+    const worst = { ratio: 99, where: "" };
+    for (const id of PALETTE_IDS) {
+      for (const mode of ["light", "dark"]) {
+        await page.evaluate(
+          ([p, m]) => {
+            localStorage.setItem("wr_palette", p);
+            localStorage.setItem("wr_theme", m);
+          },
+          [id, mode]
+        );
+        await page.reload();
+        await page.locator(".traj-dot.assisted").first().waitFor();
+
+        const ratio = await page.evaluate(() => {
+          const el = document.querySelector(".traj-dot.assisted");
+          const parse = (s) => s.match(/[\d.]+/g).slice(0, 3).map(Number);
+          // 배경은 투명일 수 있으니 실제로 칠해진 조상까지 거슬러 올라간다
+          let bgEl = el, bg = null;
+          while (bgEl) {
+            const c = getComputedStyle(bgEl).backgroundColor;
+            const v = parse(c);
+            const alpha = c.startsWith("rgba") ? Number(c.match(/[\d.]+/g)[3]) : 1;
+            if (alpha > 0) { bg = v; break; }
+            bgEl = bgEl.parentElement;
+          }
+          const cs = getComputedStyle(el);
+          const fg = parse(cs.color);
+          // 조상까지 누적된 opacity를 전부 곱해 실제 합성 결과를 만든다
+          let a = 1, n = el;
+          while (n && n !== document.documentElement) {
+            a *= Number(getComputedStyle(n).opacity);
+            n = n.parentElement;
+          }
+          const eff = fg.map((v, i) => v * a + bg[i] * (1 - a));
+          const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+          const L = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+          const [hi, lo] = [L(eff), L(bg)].sort((x, y) => y - x);
+          return (hi + 0.05) / (lo + 0.05);
+        });
+
+        if (ratio < worst.ratio) { worst.ratio = ratio; worst.where = `${id}/${mode}`; }
+        expect(ratio, `${id}/${mode} 대비 ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    // 최악값이 실제로 계산됐는지 — 전부 건너뛰고 통과하는 일이 없게
+    expect(worst.ratio).toBeLessThan(99);
   });
 });

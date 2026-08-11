@@ -577,8 +577,17 @@ export default function SolveView({
               도움받은 pass는 졸업 연속 기록을 끊는다 — 다시 볼 때까지의
               간격은 그대로다. */}
           <div className="help-choice">
-            <span className="help-choice-label">도움을 사용했나?</span>
-            <div className="mode-switch">
+            <span className="help-choice-label" id="solve-assist-label">
+              도움을 사용했나?
+            </span>
+            {/* 그룹으로 묶어 질문을 버튼에 **프로그램적으로** 잇는다 —
+                안 그러면 보조기기에서 "예" 한 마디만 들리고 무엇에 대한
+                예인지 알 방법이 없다 */}
+            <div
+              className="mode-switch"
+              role="group"
+              aria-labelledby="solve-assist-label"
+            >
               {[
                 { id: "solve-assist-no", label: "아니오", value: false },
                 { id: "solve-assist-yes", label: "예", value: true },

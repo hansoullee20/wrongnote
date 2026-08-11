@@ -498,6 +498,24 @@ test.describe("도움 사용 여부 (v6)", () => {
     expect(note.attempts[0].assisted).toBe(false);
   });
 
+  test("질문이 선택지에 프로그램적으로 묶여 있다", async ({ page }) => {
+    await seedOneSolvable(page);
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+
+    /* "예"만 덜렁 읽히면 무엇에 대한 예인지 알 수 없다 —
+       그룹 이름으로 질문이 함께 전달돼야 한다 */
+    await expect(
+      page.getByRole("group", { name: "도움을 사용했나?" })
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("group", { name: "도움을 사용했나?" })
+        .getByRole("button", { name: "예" })
+    ).toBeVisible();
+  });
+
   test("도움받은 정답: pass로 기록되고 다음 복습은 그대로 밀린다", async ({
     page,
   }) => {
