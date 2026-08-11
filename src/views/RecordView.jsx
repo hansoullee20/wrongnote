@@ -662,7 +662,9 @@ export default function RecordView({
                     })
                   }
                 />
-                {draft.topicMain && (
+                {/* 이미 저장된 노트에도 분류체계 밖 대단원이 있을 수 있다
+                    (검증 없던 시절 AI import). truthy만 보면 여기서 터진다. */}
+                {Object.hasOwn(MATH_TOPICS, draft.topicMain) && (
                   <>
                     <div className="label">소단원</div>
                     <ChipRow
