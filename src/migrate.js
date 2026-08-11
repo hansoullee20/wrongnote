@@ -2,7 +2,7 @@
 
 import { LEGACY_CAUSE_MAP, CAUSES } from "./constants.js";
 
-export const SCHEMA_VERSION = 5; // v5: 시도별 실패 원인 (attempt superset)
+export const SCHEMA_VERSION = 6; // v6: attempt-level assistance
 
 /**
  * v2: 카드에 SRS 필드 추가.
@@ -45,6 +45,7 @@ export function deriveCause(tags) {
  * v5: 기존 {ts, answer, correct, seconds} attempt를 superset으로 정규화.
  * 과거 fail의 원인은 알 수 없으므로 절대 추측하지 않는다 (cause="").
  * id는 reload마다 바뀌면 안 되므로 결정적으로 만든다.
+ * v6: assisted(도움 사용 여부). 과거 시도는 알 수 없으므로 전부 false.
  * @param {string} noteId
  * @param {object} attempt 저장된 시도
  * @param {number} index attempts 배열 내 위치
@@ -57,6 +58,9 @@ export function migrateAttempt(noteId, attempt, index) {
     ts: attempt.ts,
     answer: attempt.answer ?? "",
     correct,
+    // === true는 의도적 — 없거나 이상한 값은 false로 떨어지고 몇 번 돌려도 같다.
+    // ??를 쓰면 저장된 "yes" 같은 truthy 쓰레기가 그대로 살아남는다.
+    assisted: attempt.assisted === true,
     result: correct ? "pass" : "fail",
     seconds: Number.isFinite(attempt.seconds) ? attempt.seconds : null,
     cause: attempt.cause ?? "",
@@ -68,6 +72,7 @@ export function migrateAttempt(noteId, attempt, index) {
 
 /**
  * v2: 반복 재검증 필드. v3: 사진. v4: 주원인/답/시도 이력. v5: attempt 정규화.
+ * v6: attempt에 assisted 추가 — note 자체의 필드는 그대로다.
  * @param {object} note 저장된 노트
  */
 export function migrateNote(note) {

@@ -68,10 +68,13 @@ test.describe("v4 → v5 attempt 마이그레이션", () => {
     expect(a0.tags).toEqual([]);
     expect(a0.memo).toBe("");
     expect(a0.source).toBe("legacy");
+    // v6: 과거 시도의 도움 여부는 알 수 없다 — 추측하지 않고 false
+    expect(a0.assisted).toBe(false);
     // 결정적 id
     expect(a0.id).toBe("legacy:v4n1:0:1700000100000");
 
     expect(a1.result).toBe("pass");
+    expect(a1.assisted).toBe(false);
     expect(a1.id).toBe("legacy:v4n1:1:1700000200000");
     // 모르는 필드도 spread로 보존
     expect(a1.extra).toBe("keep");
@@ -79,7 +82,7 @@ test.describe("v4 → v5 attempt 마이그레이션", () => {
     // 버전 승격 + v4 원본 스냅샷
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("5");
+    ).toBe("6");
     const backup = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v4"))
     );

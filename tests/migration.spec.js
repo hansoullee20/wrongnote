@@ -10,7 +10,7 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     const version = await page.evaluate(() =>
       localStorage.getItem("wr_schema_version")
     );
-    expect(version).toBe("5"); // v5: 시도별 실패 원인
+    expect(version).toBe("6"); // v6: 시도별 도움 사용 여부
 
     // v1 원본 스냅샷 존재
     const backup = await page.evaluate(() =>
@@ -177,6 +177,213 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
   });
 });
 
+test.describe("v5 → v6 도움 여부 마이그레이션", () => {
+  /** 완전한 v5 노트 하나를 심는다 — attempt는 이미 superset 형태다 */
+  async function seedV5Store(page) {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "5");
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학",
+            problem: "V5-1",
+            topicMain: "수II·미분",
+            topicSub: "접선",
+            question: "",
+            mySol: "",
+            optSol: "",
+            cause: "실행 실수",
+            tags: ["부호 실수"],
+            derived: null,
+            memo: "노트 메모",
+            correctAnswer: "③",
+            myAnswer: "②",
+            examTime: "",
+            images: [],
+            solutionImages: [],
+            attempts: [
+              {
+                id: "a-fail",
+                ts: 1700000100000,
+                answer: "②",
+                correct: false,
+                result: "fail",
+                seconds: 390,
+                cause: "실행 실수",
+                tags: ["부호 실수"],
+                memo: "부호를 놓쳤다",
+                source: "recheck",
+                extra: "keep",
+              },
+              {
+                id: "a-pass",
+                ts: 1700000200000,
+                answer: "③",
+                correct: true,
+                result: "pass",
+                seconds: 120,
+                cause: "",
+                tags: [],
+                memo: "",
+                source: "solution_reveal",
+              },
+            ],
+            ts: 1700000000000,
+            id: "v5n1",
+            date: "2026-06-01",
+            rechecked: true,
+            recheckResult: "pass",
+            recheckCount: 1,
+            nextRecheckTs: 1700500000000,
+          },
+        ])
+      );
+      localStorage.setItem(
+        "wr_cards",
+        JSON.stringify([
+          {
+            front: "v5 카드",
+            back: "뒤",
+            id: "c1",
+            noteId: "v5n1",
+            subject: "수학",
+            interval: 3,
+            ease: 2.3,
+            due: 1700400000000,
+            reps: 2,
+            lapses: 1,
+            state: "review",
+            lastReviewed: 1700300000000,
+          },
+        ])
+      );
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    await page.waitForTimeout(300);
+  }
+
+  test("모든 과거 시도는 assisted:false, 그 밖의 필드는 무손상", async ({
+    page,
+  }) => {
+    await seedV5Store(page);
+
+    expect(
+      await page.evaluate(() => localStorage.getItem("wr_schema_version"))
+    ).toBe("6");
+
+    // v5 직전 원본이 새 키로 보존된다
+    const backup = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("wr_backup_v5"))
+    );
+    expect(backup.notes).toContain("V5-1");
+    expect(backup.cards).toContain("v5 카드");
+
+    const note = (await readNotes(page))[0];
+    const [a0, a1] = note.attempts;
+
+    // 과거는 도움 여부를 알 수 없다 — 추측하지 않고 전부 false
+    expect(a0.assisted).toBe(false);
+    expect(a1.assisted).toBe(false);
+
+    // attempt 필드 무손상 (id는 이미 있으므로 legacy: 로 덮이지 않는다)
+    expect(a0.id).toBe("a-fail");
+    expect(a0.ts).toBe(1700000100000);
+    expect(a0.result).toBe("fail");
+    expect(a0.cause).toBe("실행 실수");
+    expect(a0.tags).toEqual(["부호 실수"]);
+    expect(a0.memo).toBe("부호를 놓쳤다");
+    expect(a0.source).toBe("recheck");
+    expect(a0.extra).toBe("keep"); // 모르는 필드도 보존
+    expect(a1.id).toBe("a-pass");
+    expect(a1.correct).toBe(true);
+    expect(a1.source).toBe("solution_reveal");
+
+    // 노트 필드 무손상
+    expect(note.cause).toBe("실행 실수");
+    expect(note.memo).toBe("노트 메모");
+    expect(note.recheckCount).toBe(1);
+    expect(note.nextRecheckTs).toBe(1700500000000);
+
+    // 카드 필드 무손상 — v6는 카드를 건드리지 않는다
+    const card = (await readCards(page))[0];
+    expect(card.interval).toBe(3);
+    expect(card.ease).toBe(2.3);
+    expect(card.state).toBe("review");
+    expect(card.lastReviewed).toBe(1700300000000);
+  });
+
+  test("v5→v6도 멱등 — 재로드해도 바이트 동일", async ({ page }) => {
+    await seedV5Store(page);
+    const snap1 = JSON.stringify([
+      await readNotes(page),
+      await readCards(page),
+    ]);
+
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    await page.waitForTimeout(300);
+
+    expect(
+      JSON.stringify([await readNotes(page), await readCards(page)])
+    ).toBe(snap1);
+  });
+
+  test("저장된 assisted가 true가 아니면 전부 false로 떨어진다", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "5");
+      const mkAttempt = (id, assisted) => ({
+        id,
+        ts: 1700000100000,
+        answer: "",
+        correct: false,
+        result: "fail",
+        seconds: null,
+        cause: "",
+        tags: [],
+        memo: "",
+        source: "recheck",
+        assisted,
+      });
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학", problem: "V5-2", topicMain: "", topicSub: "",
+            question: "", mySol: "", optSol: "", cause: "", tags: [],
+            derived: null, memo: "", correctAnswer: "", myAnswer: "",
+            examTime: "", images: [], solutionImages: [],
+            attempts: [
+              mkAttempt("a-true", true),
+              mkAttempt("a-string", "yes"),
+              mkAttempt("a-one", 1),
+              mkAttempt("a-missing", undefined),
+            ],
+            ts: 1700000000000, id: "v5n2", date: "2026-06-01",
+            rechecked: false, recheckResult: null, recheckCount: 0,
+            nextRecheckTs: null,
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    await page.waitForTimeout(300);
+
+    const flags = (await readNotes(page))[0].attempts.map((a) => a.assisted);
+    // truthy 쓰레기를 살려두면 도움 안 받은 pass가 도움받은 걸로 굳는다
+    expect(flags).toEqual([true, false, false, false]);
+  });
+});
+
 test.describe("업그레이드 직전 스냅샷", () => {
   test("버전마다 따로 남는다 — 첫 스냅샷이 있어도 건너뛰지 않는다", async ({
     page,
@@ -216,6 +423,6 @@ test.describe("업그레이드 직전 스냅샷", () => {
     // 마이그레이션 자체는 정상 수행
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("5");
+    ).toBe("6");
   });
 });
