@@ -85,7 +85,7 @@ export default function SolveView({
 }) {
   const [queue, setQueue] = useState([]); // 노트 id 배열
   const [index, setIndex] = useState(0);
-  const [results, setResults] = useState([]); // {id, correct, seconds, answer}
+  const [results, setResults] = useState([]); // {id, correct, seconds, answer, assisted}
   // idle | solving | classifying_fail | graded | summary
   const [phase, setPhase] = useState("idle");
   const [picked, setPicked] = useState("");
@@ -414,7 +414,13 @@ export default function SolveView({
         assisted,
         source: scope.source,
       });
-      setResults((rs) => [...rs, { id: current.id, correct: true, seconds, answer }]);
+      /* assisted를 결과 스냅샷에 같이 넣는다 — 채점 화면이 컴포넌트 state를
+         읽으면 next()가 리셋하는 "다음 입력"의 수명에 매달리게 된다.
+         results는 일어난 일의 기록이고, 그 수명이 곧 이 화면의 수명이다. */
+      setResults((rs) => [
+        ...rs,
+        { id: current.id, correct: true, seconds, answer, assisted },
+      ]);
       setPhase("graded");
       return;
     }
@@ -467,6 +473,8 @@ export default function SolveView({
         correct: false,
         seconds: pendingFailure.seconds,
         answer: pendingFailure.answer,
+        // 분류 전에 찍힌 값을 그대로 — 모든 결과 스냅샷이 같은 모양이어야 한다
+        assisted: pendingFailure.assisted,
       },
     ]);
     setPendingFailure(null);
@@ -758,6 +766,15 @@ export default function SolveView({
               {current.recheckCount}번째 시도 · 재검증{" "}
               {justResult.correct ? "통과" : "실패"}로 기록됨
               <br />
+              {/* 도움받은 pass는 통과로 기록되지만 졸업 연속 기록은 끊긴다.
+                  여기서 말하지 않으면 나중에 "왜 졸업이 안 되지"라는 원인 모를
+                  현상으로만 드러난다 — 정직한 자기 보고를 그렇게 갚으면 안 된다. */}
+              {justResult.correct && justResult.assisted && (
+                <>
+                  도움받은 통과 — 졸업까지 연속 통과는 다시 0회
+                  <br />
+                </>
+              )}
               {justResult.correct
                 ? "다음 복습은 2주 뒤로 밀린다"
                 : "다음 복습은 내일로 당겨진다"}

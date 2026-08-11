@@ -494,6 +494,11 @@ test.describe("도움 사용 여부 (v6)", () => {
     await page.click('.ans-opt:has-text("③")');
     await page.click('.grade-btn:has-text("채점하기")');
 
+    // 도움 안 받은 통과에까지 뜨면 안 된다
+    await expect(page.locator(".verdict-text")).not.toContainText(
+      "도움받은 통과"
+    );
+
     const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
     expect(note.attempts[0].assisted).toBe(false);
   });
@@ -532,6 +537,18 @@ test.describe("도움 사용 여부 (v6)", () => {
     await page.click('.grade-btn:has-text("채점하기")');
 
     await expect(page.locator(".verdict-stamp")).toHaveText("맞음");
+
+    /* 세 줄이 이 순서로 나와야 한다. 순서까지 고정해야 "통과로 기록됨" 뒤,
+       일정 안내 앞이라는 위치가 지켜지는지 잡힌다. */
+    const lines = (await page.locator(".verdict-text").innerText())
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    expect(lines).toEqual([
+      "1번째 시도 · 재검증 통과로 기록됨",
+      "도움받은 통과 — 졸업까지 연속 통과는 다시 0회",
+      "다음 복습은 2주 뒤로 밀린다",
+    ]);
 
     const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
     expect(note.attempts[0].assisted).toBe(true);
@@ -632,6 +649,12 @@ test.describe("도움 사용 여부 (v6)", () => {
     await page.click('.ans-opt:has-text("②")');
     await page.click('.grade-btn:has-text("채점하기")');
     await classifyFail(page, "개념 부족");
+
+    /* 도움받은 **오답**에는 뜨면 안 된다 — assisted만 보고 correct를 빼먹으면
+       틀린 시도에도 "통과" 문구가 붙는다 */
+    await expect(page.locator(".verdict-text")).not.toContainText(
+      "도움받은 통과"
+    );
 
     const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
     expect(note.attempts.length).toBe(2);
