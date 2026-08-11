@@ -167,8 +167,22 @@ export function ExecutionGate({ checks, onToggle }) {
 }
 
 /**
- * 재풀이 궤적 도트 — 오래된 것 → 최신. 색이 아니라 모양(●/○)으로
- * 갈라 보이게 하고, 스크린리더용 라벨을 단다.
+ * 시도 하나를 세 상태로 읽는다: 실패 / 도움받은 통과 / 독립 통과.
+ * 궤적과 이력이 **같은 함수**를 써야 한 화면 안에서 다른 말을 하지 않는다.
+ * 구분은 색이 아니라 글자(✕ ✓* ✓)와 라벨이 짊어진다 — 색맹·흑백에서도 읽힌다.
+ * @param {object} a attempt
+ */
+function readAttemptMark(a) {
+  if (!a.correct) {
+    return { kind: "fail", glyph: "✕", label: a.cause || "원인 미기록" };
+  }
+  return a.assisted
+    ? { kind: "assisted", glyph: "✓", star: true, label: "도움받음" }
+    : { kind: "pass", glyph: "✓", label: "통과" };
+}
+
+/**
+ * 재풀이 궤적 — 오래된 것 → 최신. 도움받은 통과는 ✓* 로 따로 보인다.
  * @param {{ attempts: object[] }} props
  */
 export function TrajectoryDots({ attempts }) {
@@ -178,15 +192,20 @@ export function TrajectoryDots({ attempts }) {
   }
   return (
     <span className="traj" role="img" aria-label="재풀이 궤적">
-      {recent.map((a) => (
-        <span
-          key={a.id ?? a.ts}
-          className={`traj-dot ${a.correct ? "pass" : "fail"}`}
-          aria-label={a.correct ? "통과" : "실패"}
-        >
-          {a.correct ? "○" : "●"}
-        </span>
-      ))}
+      {recent.map((a) => {
+        const m = readAttemptMark(a);
+        return (
+          <span
+            key={a.id ?? a.ts}
+            className={`traj-dot ${m.kind}`}
+            aria-label={m.label}
+          >
+            {m.glyph}
+            {/* 별표를 따로 빼야 ✓* 가 넓어져도 도트 줄이 들쭉날쭉해지지 않는다 */}
+            {m.star && <span className="traj-star">*</span>}
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -217,21 +236,25 @@ export function AttemptHistory({ attempts }) {
         {all.length > 0 && <TrajectoryDots attempts={all} />}
       </div>
       {all.length === 0 && <div className="hint">아직 다시 푼 적 없음</div>}
-      {all.map((a) => (
-        <div key={a.id ?? a.ts} className="attempt-line">
-          <span className="attempt-date">{fmtShortDate(a.ts)}</span>
-          <span className={`grade-mark ${a.correct ? "pass" : "fail"}`}>
-            {a.correct ? "○" : "✗"}
-          </span>
-          <span className="attempt-body">
-            {a.correct ? "통과" : a.cause || "원인 미기록"}
-            {!a.correct && a.tags?.length > 0 && ` · ${a.tags.join(" · ")}`}
-            {a.answer && ` — ${a.answer}`}
-            {a.seconds != null && ` — ${fmtSecShort(a.seconds)}`}
-          </span>
-          {a.memo && <span className="attempt-memo">{a.memo}</span>}
-        </div>
-      ))}
+      {all.map((a) => {
+        const m = readAttemptMark(a);
+        return (
+          <div key={a.id ?? a.ts} className="attempt-line">
+            <span className="attempt-date">{fmtShortDate(a.ts)}</span>
+            <span className={`grade-mark ${m.kind}`} aria-label={m.label}>
+              {m.glyph}
+              {m.star && <span className="traj-star">*</span>}
+            </span>
+            <span className="attempt-body">
+              {m.label}
+              {!a.correct && a.tags?.length > 0 && ` · ${a.tags.join(" · ")}`}
+              {a.answer && ` — ${a.answer}`}
+              {a.seconds != null && ` — ${fmtSecShort(a.seconds)}`}
+            </span>
+            {a.memo && <span className="attempt-memo">{a.memo}</span>}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -403,3 +403,103 @@ test.describe("안정성 그룹 UI", () => {
     await expect(page.locator('.end-btn:has-text("결과 보기")')).toBeVisible();
   });
 });
+
+test.describe("도움받은 통과 표시 (v6)", () => {
+  /** 실패 2(원인 다름) · 도움받은 통과 · 독립 통과 순서로 심는다 */
+  async function seedMarks(page) {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학",
+            problem: "MARK-1",
+            topicMain: "수II·미분",
+            topicSub: "",
+            question: "MARK-1 원문",
+            mySol: "",
+            optSol: "최적 풀이",
+            cause: "개념 부족",
+            tags: [],
+            derived: null,
+            memo: "",
+            correctAnswer: "③",
+            myAnswer: "②",
+            attempts: [
+              {
+                id: "m1", ts: 1700000100000, answer: "②", correct: false,
+                result: "fail", seconds: 60, cause: "개념 부족", tags: [],
+                memo: "", source: "scheduled", assisted: false,
+              },
+              {
+                id: "m2", ts: 1700000200000, answer: "①", correct: false,
+                result: "fail", seconds: 70, cause: "읽기 실패", tags: [],
+                memo: "", source: "scheduled", assisted: false,
+              },
+              {
+                id: "m3", ts: 1700000300000, answer: "③", correct: true,
+                result: "pass", seconds: 50, cause: "", tags: [],
+                memo: "", source: "scheduled", assisted: true,
+              },
+              {
+                id: "m4", ts: 1700000400000, answer: "③", correct: true,
+                result: "pass", seconds: 40, cause: "", tags: [],
+                memo: "", source: "scheduled", assisted: false,
+              },
+            ],
+            ts: 1700000000000,
+            id: "mark1",
+            date: "2026-06-01",
+            rechecked: true,
+            recheckResult: "pass",
+            recheckCount: 4,
+            nextRecheckTs: null,
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    await page.waitForTimeout(300);
+  }
+
+  test("궤적: ✕ ✕ ✓* ✓ — 도움받은 통과가 따로 보인다", async ({ page }) => {
+    await seedMarks(page);
+
+    const card = page.locator('.prob-card:has-text("MARK-1")');
+    await expect(card.locator(".traj-dot")).toHaveCount(4);
+    await expect(card.locator(".traj-dot.fail")).toHaveCount(2);
+    await expect(card.locator(".traj-dot.assisted")).toHaveCount(1);
+    await expect(card.locator(".traj-dot.pass")).toHaveCount(1);
+    // 순서 보존 — 오래된 것 → 최신
+    await expect(card.locator(".traj")).toHaveText("✕✕✓*✓");
+
+    // 색이 아니라 라벨이 구분을 짊어진다
+    const labels = await card
+      .locator(".traj-dot")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+    expect(labels).toEqual(["개념 부족", "읽기 실패", "도움받음", "통과"]);
+  });
+
+  test("이력 로그: 같은 네 시도가 같은 표기로 나온다", async ({ page }) => {
+    await seedMarks(page);
+
+    await page.click('.prob-card:has-text("MARK-1") .prob-card-edit');
+    await page.click('.btn--primary:has-text("다음 — 왜 틀렸나")');
+    await expect(page.locator(".attempt-history")).toBeVisible();
+
+    const lines = page.locator(".attempt-line");
+    await expect(lines).toHaveCount(4);
+    await expect(lines.locator(".grade-mark.fail")).toHaveCount(2);
+    await expect(lines.locator(".grade-mark.assisted")).toHaveCount(1);
+    await expect(lines.locator(".grade-mark.pass")).toHaveCount(1);
+
+    await expect(lines.nth(0)).toContainText("개념 부족");
+    await expect(lines.nth(1)).toContainText("읽기 실패");
+    await expect(lines.nth(2)).toContainText("도움받음");
+    await expect(lines.nth(3)).toContainText("통과");
+  });
+});
