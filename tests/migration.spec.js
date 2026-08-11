@@ -496,13 +496,25 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     page,
   }) => {
     await page.goto("/");
+    // 이 기기가 돌린 건 v1 브랜치다 — 데이터에 있는 6은 AI 개념 분석이지
+    // assisted가 아니다. amend01 필드는 아예 없는 상태로 심어야 진짜 재현이다.
+    const V1_NOTE = {
+      ...V6_NOTE,
+      id: "r5n1",
+      problem: "R5-V1",
+      concepts: ["접선의 기울기", "미분계수"],
+      analysisLocale: "en",
+      attempts: [{ ...V6_NOTE.attempts[0], id: "r5a1" }],
+    };
+    delete V1_NOTE.attempts[0].assisted;
+
     const raw = await page.evaluate((note) => {
       localStorage.clear();
       localStorage.setItem("wr_schema_version", "6");
       localStorage.setItem("wr_notes", JSON.stringify([note]));
       localStorage.setItem("wr_cards", JSON.stringify([]));
       return localStorage.getItem("wr_notes");
-    }, V6_NOTE);
+    }, V1_NOTE);
     await page.reload();
     await page.locator(".tab.on").first().waitFor();
     await page.waitForTimeout(300);
@@ -512,8 +524,13 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
       JSON.parse(localStorage.getItem("wr_backup_v6_to_v7"))
     );
     expect(transition.notes).toEqual(JSON.parse(raw));
-    // 6에서만 존재하던 정보가 살아남는다
-    expect((await readNotes(page))[0].attempts[0].assisted).toBe(true);
+
+    const note = (await readNotes(page))[0];
+    // v1이 만든 6의 실제 내용 — 개념과 분석 언어가 그대로 살아남는다
+    expect(note.concepts).toEqual(["접선의 기울기", "미분계수"]);
+    expect(note.analysisLocale).toBe("en");
+    // 반대편(amend01) 필드는 없던 자리라 추측하지 않고 false로 채워진다
+    expect(note.attempts[0].assisted).toBe(false);
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
     ).toBe("7");
