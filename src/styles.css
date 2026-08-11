@@ -1902,6 +1902,25 @@ textarea:focus {
   font-size: var(--fs-base);
 }
 
+/* 채점 직전에 묻는 도움 여부 — 설정의 mode-switch를 그대로 재사용한다 */
+.help-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-top: var(--sp-4);
+}
+
+.help-choice-label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.help-choice .mode-switch {
+  flex: 1;
+  min-width: 160px;
+}
+
 .grade-row {
   display: flex;
   gap: var(--sp-3);
