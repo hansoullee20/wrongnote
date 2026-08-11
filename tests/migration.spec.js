@@ -540,14 +540,10 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
       localStorage.setItem("wr_schema_version", "5");
       localStorage.setItem("wr_notes", JSON.stringify([note]));
       localStorage.setItem("wr_cards", JSON.stringify([]));
-      // 옛 시절에 찍힌 스냅샷들 — 이게 새 스냅샷을 가리면 안 된다
+      // 옛 시절 출발버전 키 — 이게 새 전이 스냅샷을 가리면 안 된다
       localStorage.setItem(
         "wr_backup_v5",
         JSON.stringify({ savedAt: 1, notes: "ancient", cards: "ancient" })
-      );
-      localStorage.setItem(
-        "wr_backup_v5_to_v6",
-        JSON.stringify({ savedAt: 2, notes: "stale", cards: "stale" })
       );
       return localStorage.getItem("wr_notes");
     }, V6_NOTE);
@@ -555,7 +551,7 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     await page.locator(".tab.on").first().waitFor();
     await page.waitForTimeout(300);
 
-    // 전이 키는 최신 원본으로 덮어써졌다
+    // 옛 wr_backup_v5가 있어도 전이 스냅샷은 제대로 찍힌다
     const transition = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v5_to_v6"))
     );
@@ -683,5 +679,57 @@ test.describe("카드 미지 필드 보존 (A4a)", () => {
     expect(card.state).toBe("new");
     expect(typeof card.due).toBe("number");
     expect(card.futureTag).toBe("still-here");
+  });
+});
+
+/* H1 — 같은 전이의 첫 스냅샷이 가장 원본에 가깝다. 부분 쓰기 뒤 같은 전이를
+   다시 밟을 때 덮어쓰면, 반쯤 마이그레이션된 상태가 유일한 백업이 된다. */
+test.describe("전이 스냅샷은 처음 것을 지킨다 (H1)", () => {
+  test("같은 전이를 다시 밟아도 먼저 찍힌 스냅샷을 덮지 않는다", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "5");
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학", problem: "PRISTINE", topicMain: "", topicSub: "",
+            question: "", mySol: "", optSol: "", tags: [], derived: null,
+            memo: "", ts: 1700000000000, id: "p1", date: "2026-06-01",
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(300);
+
+    const first = await page.evaluate(() =>
+      localStorage.getItem("wr_backup_v5_to_v6")
+    );
+    expect(JSON.parse(first).notes[0].problem).toBe("PRISTINE");
+
+    /* 부분 쓰기 재현: 데이터는 이미 바뀌었는데 마커만 5로 되돌아간 상태.
+       다음 부팅은 같은 5→6 전이를 다시 밟는다. */
+    await page.evaluate(() => {
+      const ns = JSON.parse(localStorage.getItem("wr_notes"));
+      ns[0].problem = "DAMAGED";
+      localStorage.setItem("wr_notes", JSON.stringify(ns));
+      localStorage.setItem("wr_schema_version", "5");
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(300);
+
+    // 먼저 찍힌 원본이 그대로여야 한다 — 손상된 상태로 덮이면 복구 불가
+    const after = await page.evaluate(() =>
+      localStorage.getItem("wr_backup_v5_to_v6")
+    );
+    expect(JSON.parse(after).notes[0].problem).toBe("PRISTINE");
+    expect(after).toBe(first);
   });
 });

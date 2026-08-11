@@ -117,14 +117,23 @@ export function loadAll() {
      파싱 실패면 아예 찍지 않는다: 빈 배열을 "백업"이라 부르면 원본이 멀쩡한데도
      정상 백업처럼 보이는 파일을 쥐여주게 된다. 시드는 사용자 데이터가 아니므로
      없는 키는 [] 로 남긴다. */
+  const snapshotKey = backupKeyFor(storedVersion, SCHEMA_VERSION);
+  let snapshotFailed = false;
   if (
     !error &&
     storedVersion < SCHEMA_VERSION &&
-    (rawNotes !== null || rawCards !== null)
+    (rawNotes !== null || rawCards !== null) &&
+    /* 같은 전이의 스냅샷이 이미 있으면 **덮지 않는다**. 처음 것이 가장
+       원본에 가깝다: 부분 쓰기(노트 성공·카드 실패로 마커 미승격) 뒤 다시
+       부팅하면 같은 전이를 또 밟는데, 그때 덮으면 반쯤 마이그레이션된 상태가
+       유일한 백업이 된다 — 하필 마이그레이션이 데이터를 망친 경우에 그렇다.
+       전이 키를 쓰는 이상 옛 스냅샷이 새 전이를 가리는 문제는 없으므로,
+       "덮어쓰기"는 애초에 필요 없는 과잉 교정이었다. */
+    localStorage.getItem(snapshotKey) === null
   ) {
     try {
       localStorage.setItem(
-        backupKeyFor(storedVersion, SCHEMA_VERSION),
+        snapshotKey,
         JSON.stringify({
           version: storedVersion,
           savedAt: Date.now(),
@@ -133,7 +142,7 @@ export function loadAll() {
         })
       );
     } catch {
-      // 백업 실패(용량 등)해도 로드는 계속한다
+      snapshotFailed = true;
     }
   }
 
