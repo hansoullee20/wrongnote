@@ -6,11 +6,15 @@ export const SCHEMA_VERSION = 6; // v6: attempt-level assistance
 
 /**
  * v2: 카드에 SRS 필드 추가.
+ * migrateNote/migrateAttempt와 달리 예전엔 필드를 하나씩 다시 세워서,
+ * 모르는 카드 필드는 로드·가져오기마다 조용히 사라졌다. 이제 spread를 먼저
+ * 깔고 아는 필드로 덮는다 — 보존은 하되 정규화 규칙은 그대로다.
  * @param {object} card 저장된 카드 (v1: {front, back, id, noteId, subject})
  * @param {number} now 마이그레이션 기준 시각 (ms)
  */
 export function migrateCard(card, now = Date.now()) {
   return {
+    ...card, // 모르는 필드도 보존 — note·attempt와 같은 계약
     front: card.front ?? "",
     back: card.back ?? "",
     id: card.id,

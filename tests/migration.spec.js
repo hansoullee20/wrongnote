@@ -616,3 +616,72 @@ test.describe("스키마 마커 검증 (A2)", () => {
     });
   }
 });
+
+/* A4a — 카드도 note·attempt와 같은 보존 계약을 따라야 한다. 예전 migrateCard는
+   필드를 하나씩 다시 세워서, 모르는 필드가 로드마다 조용히 증발했다. */
+test.describe("카드 미지 필드 보존 (A4a)", () => {
+  test("모르는 필드는 살아남고, 망가진 아는 필드는 정규화된다", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "5");
+      localStorage.setItem("wr_notes", JSON.stringify([]));
+      localStorage.setItem(
+        "wr_cards",
+        JSON.stringify([
+          {
+            front: "카드 앞", back: "카드 뒤", id: "kc1", noteId: null,
+            subject: "수학",
+            interval: 3, ease: 2.3, due: 1700400000000, reps: 2, lapses: 1,
+            state: "review", lastReviewed: 1700300000000,
+            // 미래 버전이 붙였을 법한 필드 (중첩 포함)
+            futureTag: "keep-me",
+            futureMeta: { nested: [1, 2, 3], deep: { ok: true } },
+          },
+        ])
+      );
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(300);
+
+    const card = (await readCards(page))[0];
+    // 모르는 필드는 중첩까지 그대로
+    expect(card.futureTag).toBe("keep-me");
+    expect(card.futureMeta).toEqual({ nested: [1, 2, 3], deep: { ok: true } });
+    // 아는 필드의 정규화 규칙은 그대로 유지된다
+    expect(card.ease).toBe(2.3);
+    expect(card.state).toBe("review");
+  });
+
+  test("spread가 아는 필드의 기본값을 덮어쓰지 않는다", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "5");
+      localStorage.setItem("wr_notes", JSON.stringify([]));
+      localStorage.setItem(
+        "wr_cards",
+        JSON.stringify([
+          // 아는 필드가 비었거나 없는 카드 — 기본값이 채워져야 한다
+          { id: "kc2", noteId: null, futureTag: "still-here" },
+        ])
+      );
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(300);
+
+    const card = (await readCards(page))[0];
+    expect(card.front).toBe("");
+    expect(card.back).toBe("");
+    expect(card.subject).toBe("수학");
+    expect(card.ease).toBe(2.5);
+    expect(card.interval).toBe(0);
+    expect(card.state).toBe("new");
+    expect(typeof card.due).toBe("number");
+    expect(card.futureTag).toBe("still-here");
+  });
+});
