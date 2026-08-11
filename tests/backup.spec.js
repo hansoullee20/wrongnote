@@ -15,7 +15,7 @@ test.describe("백업 내보내기/가져오기", () => {
     for await (const c of stream) chunks.push(c);
     const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
 
-    expect(parsed.version).toBe(6); // v6: 시도별 도움 사용 여부
+    expect(parsed.version).toBe(7); // v7: 도움 사용 여부 + AI 개념 분석
     expect(Array.isArray(parsed.notes)).toBe(true);
     expect(Array.isArray(parsed.cards)).toBe(true);
     expect(typeof parsed.images).toBe("object"); // 사진 base64 맵 포함
@@ -88,7 +88,7 @@ test.describe("백업 내보내기/가져오기", () => {
    불가능했다 (DevTools로 꺼내도 모양이 안 맞는다). */
 test.describe("자동 스냅샷 복원 가능성 (A3)", () => {
   test("전이 스냅샷을 그대로 가져오기에 넣으면 복원된다", async ({ page }) => {
-    // v5 스토어를 심어 v5→v6 전이 스냅샷을 만들게 한다
+    // v5 스토어를 심어 v5→v7 전이 스냅샷을 만들게 한다
     await page.goto("/");
     await page.evaluate(() => {
       localStorage.clear();
@@ -119,7 +119,7 @@ test.describe("자동 스냅샷 복원 가능성 (A3)", () => {
     await page.waitForTimeout(300);
 
     const snapshot = await page.evaluate(() =>
-      localStorage.getItem("wr_backup_v5_to_v6")
+      localStorage.getItem("wr_backup_v5_to_v7")
     );
     expect(snapshot).not.toBeNull();
 
@@ -139,7 +139,7 @@ test.describe("자동 스냅샷 복원 가능성 (A3)", () => {
     await page
       .locator('input[type="file"][accept*="json"]')
       .setInputFiles({
-        name: "wr_backup_v5_to_v6.json",
+        name: "wr_backup_v5_to_v7.json",
         mimeType: "application/json",
         buffer: Buffer.from(snapshot, "utf8"),
       });
@@ -164,7 +164,7 @@ test.describe("자동 스냅샷 복원 가능성 (A3)", () => {
     await page.waitForTimeout(400);
 
     expect(
-      await page.evaluate(() => localStorage.getItem("wr_backup_v5_to_v6"))
+      await page.evaluate(() => localStorage.getItem("wr_backup_v5_to_v7"))
     ).toBeNull();
     // 원본은 그대로 남는다
     expect(await page.evaluate(() => localStorage.getItem("wr_notes"))).toBe(
@@ -202,7 +202,7 @@ test.describe("가져오기 버전 검증 (A5)", () => {
   }
 
   test("현재 버전 봉투는 들어온다", async ({ page }) => {
-    await attemptImport(page, { version: 6, notes: [NOTE], cards: [] });
+    await attemptImport(page, { version: 7, notes: [NOTE], cards: [] });
     await expect.poll(async () => (await readNotes(page)).length).toBe(1);
     expect((await readNotes(page))[0].problem).toBe("VER-1");
   });

@@ -2,7 +2,7 @@
 
 import { LEGACY_CAUSE_MAP, CAUSES } from "./constants.js";
 
-export const SCHEMA_VERSION = 6; // 다음 커밋에서 7로 승격 — 배포되는 6은 없다
+export const SCHEMA_VERSION = 7; // v7: 도움 사용 여부 + AI 개념 분석 (6은 배포된 적 없다)
 
 /**
  * v2: 카드에 SRS 필드 추가.

@@ -10,11 +10,11 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     const version = await page.evaluate(() =>
       localStorage.getItem("wr_schema_version")
     );
-    expect(version).toBe("6"); // v6: 시도별 도움 사용 여부
+    expect(version).toBe("7"); // v7: 도움 사용 여부 + AI 개념 분석
 
     // v1 원본 스냅샷 존재
     const backup = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("wr_backup_v1_to_v6"))
+      JSON.parse(localStorage.getItem("wr_backup_v1_to_v7"))
     );
     expect(backup.notes.map((n) => n.problem)).toContain("LEGACY-1");
     expect(backup.cards.map((c) => c.front)).toContain("레거시 카드");
@@ -177,7 +177,7 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
   });
 });
 
-test.describe("v5 → v6 도움 여부 마이그레이션", () => {
+test.describe("v5 → v7 도움 여부 마이그레이션", () => {
   /**
    * 완전한 v5 노트 하나를 심는다 — attempt는 이미 superset 형태다.
    * 백업이 **원본 그대로**인지 바이트로 비교하려면 심은 문자열을 돌려받아야 한다.
@@ -282,12 +282,12 @@ test.describe("v5 → v6 도움 여부 마이그레이션", () => {
 
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("6");
+    ).toBe("7");
 
     /* v5 직전 원본이 새 키로 **글자 그대로** 보존된다. 부분 문자열만 보면
        잘리거나 정규화된 스냅샷도 통과해 버려서, 백업을 믿을 근거가 못 된다. */
     const backup = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("wr_backup_v5_to_v6"))
+      JSON.parse(localStorage.getItem("wr_backup_v5_to_v7"))
     );
     // 마이그레이션 이전 배열 그대로 — 파싱만 하고 정규화는 하지 않은 상태
     expect(backup.notes).toEqual(JSON.parse(raw.rawNotes));
@@ -329,7 +329,7 @@ test.describe("v5 → v6 도움 여부 마이그레이션", () => {
     expect(card.lastReviewed).toBe(1700300000000);
   });
 
-  test("v5→v6도 멱등 — 재로드해도 바이트 동일", async ({ page }) => {
+  test("v5→v7도 멱등 — 재로드해도 바이트 동일", async ({ page }) => {
     await seedV5Store(page);
     const snap1 = JSON.stringify([
       await readNotes(page),
@@ -425,7 +425,7 @@ test.describe("업그레이드 직전 스냅샷", () => {
 
     // v3 직전 상태가 새 키로 보존돼야 한다
     const snap = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("wr_backup_v3_to_v6"))
+      JSON.parse(localStorage.getItem("wr_backup_v3_to_v7"))
     );
     expect(snap.notes.map((n) => n.problem)).toContain("PRE-V4");
     // 옛 스냅샷은 건드리지 않는다
@@ -436,7 +436,7 @@ test.describe("업그레이드 직전 스냅샷", () => {
     // 마이그레이션 자체는 정상 수행
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("6");
+    ).toBe("7");
   });
 });
 
@@ -463,7 +463,7 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     await page.goto("/");
     await page.evaluate((note) => {
       localStorage.clear();
-      localStorage.setItem("wr_schema_version", "6");
+      localStorage.setItem("wr_schema_version", "7");
       // 정규화 필드 일부가 빠진 노트 — 같은 버전이라도 채워져야 한다
       const bare = { ...note };
       delete bare.images;
@@ -480,13 +480,43 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     expect(note.solutionImages).toEqual([]);
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("6");
+    ).toBe("7");
     // 같은 버전 사이에는 전이가 없다 — 스냅샷 키도 없어야 한다
     expect(
       await page.evaluate(() =>
-        Object.keys(localStorage).filter((k) => k.startsWith("wr_backup_v6"))
+        Object.keys(localStorage).filter((k) => k.startsWith("wr_backup_v7"))
       )
     ).toEqual([]);
+  });
+
+  /* R5 — 스키마 충돌이 만든 유일한 집단. v1 브랜치를 돌린 기기(Han 본인 포함)는
+     마커가 6에 멈춰 있다. 6을 배포하지 않기로 한 이유가 바로 이것 —
+     6 < 7 이므로 이 기기들도 승격 전에 정상적으로 스냅샷을 찍어야 한다. */
+  test("v1 브랜치가 남긴 6 마커도 승격 전에 스냅샷을 찍는다", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const raw = await page.evaluate((note) => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "6");
+      localStorage.setItem("wr_notes", JSON.stringify([note]));
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+      return localStorage.getItem("wr_notes");
+    }, V6_NOTE);
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(300);
+
+    // 6→7 전이 스냅샷이 승격 전 원본 그대로 남는다
+    const transition = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("wr_backup_v6_to_v7"))
+    );
+    expect(transition.notes).toEqual(JSON.parse(raw));
+    // 6에서만 존재하던 정보가 살아남는다
+    expect((await readNotes(page))[0].attempts[0].assisted).toBe(true);
+    expect(
+      await page.evaluate(() => localStorage.getItem("wr_schema_version"))
+    ).toBe("7");
   });
 
   test("미래 버전 로드(다운그레이드): 아무것도 쓰지 않고 잠근다", async ({
@@ -495,7 +525,7 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     await page.goto("/");
     const raw = await page.evaluate((note) => {
       localStorage.clear();
-      localStorage.setItem("wr_schema_version", "7");
+      localStorage.setItem("wr_schema_version", "8");
       localStorage.setItem("wr_notes", JSON.stringify([note]));
       localStorage.setItem("wr_cards", JSON.stringify([]));
       return {
@@ -515,7 +545,7 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     }));
     expect(after.notes).toBe(raw.notes);
     expect(after.cards).toBe(raw.cards);
-    expect(after.version).toBe("7");
+    expect(after.version).toBe("8");
 
     // 데이터는 보인다 + 경고 배너
     await expect(page.locator(".audit-warn").first()).toBeVisible();
@@ -530,7 +560,7 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     ).toBeDisabled();
   });
 
-  test("6→5→6 오염 시뮬레이션: 낡은 키가 새 스냅샷을 가리지 못한다", async ({
+  test("6→5→7 오염 시뮬레이션: 낡은 키가 새 스냅샷을 가리지 못한다", async ({
     page,
   }) => {
     await page.goto("/");
@@ -553,7 +583,7 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
 
     // 옛 wr_backup_v5가 있어도 전이 스냅샷은 제대로 찍힌다
     const transition = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("wr_backup_v5_to_v6"))
+      JSON.parse(localStorage.getItem("wr_backup_v5_to_v7"))
     );
     expect(transition.notes).toEqual(JSON.parse(raw));
     // 레거시 키는 손대지 않는다
@@ -565,7 +595,7 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     expect((await readNotes(page))[0].attempts[0].assisted).toBe(true);
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("6");
+    ).toBe("7");
   });
 });
 
@@ -601,14 +631,14 @@ test.describe("스키마 마커 검증 (A2)", () => {
 
       // 판별 불가 → 1로 후퇴 → v1→현재 전이 스냅샷이 반드시 찍힌다
       const backup = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("wr_backup_v1_to_v6"))
+        JSON.parse(localStorage.getItem("wr_backup_v1_to_v7"))
       );
       expect(backup.notes).toEqual(JSON.parse(raw));
       // 데이터는 보존되고 마커는 현재 버전으로 승격된다
       expect((await readNotes(page))[0].problem).toBe(`BAD-${bad}`);
       expect(
         await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-      ).toBe("6");
+      ).toBe("7");
     });
   }
 });
@@ -709,7 +739,7 @@ test.describe("전이 스냅샷은 처음 것을 지킨다 (H1)", () => {
     await page.waitForTimeout(300);
 
     const first = await page.evaluate(() =>
-      localStorage.getItem("wr_backup_v5_to_v6")
+      localStorage.getItem("wr_backup_v5_to_v7")
     );
     expect(JSON.parse(first).notes[0].problem).toBe("PRISTINE");
 
@@ -727,7 +757,7 @@ test.describe("전이 스냅샷은 처음 것을 지킨다 (H1)", () => {
 
     // 먼저 찍힌 원본이 그대로여야 한다 — 손상된 상태로 덮이면 복구 불가
     const after = await page.evaluate(() =>
-      localStorage.getItem("wr_backup_v5_to_v6")
+      localStorage.getItem("wr_backup_v5_to_v7")
     );
     expect(JSON.parse(after).notes[0].problem).toBe("PRISTINE");
     expect(after).toBe(first);
