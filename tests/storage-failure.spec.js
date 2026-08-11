@@ -549,3 +549,61 @@ test.describe("저장 실패 시 제거된 사진은 살아남는다", () => {
     expect(await readImageIds(page)).toContain("keep_q2");
   });
 });
+
+/* 노트 삭제도 수정과 같은 순서를 따라야 한다: 삭제가 디스크에 안착한 뒤에만
+   blob을 수거한다. storageLocked 검사만으로는 *첫* 저장 실패가 감지되기 전의
+   삭제를 막지 못한다 — 그 순간 앱은 아직 잠기지 않았다. */
+test.describe("노트 삭제도 영속 성공 뒤에만 사진을 수거한다", () => {
+  test("첫 저장 실패: 아직 잠기지 않은 삭제여도 사진이 살아남는다", async ({
+    page,
+  }) => {
+    await freshApp(page);
+    await seedBlobs(page, ["firstfail_img"]);
+    await seedNoteWithImages(page, {
+      problem: "FIRST-FAIL-DEL",
+      images: ["firstfail_img"],
+    });
+
+    await installQuotaTrap(page);
+    await page.goto("/");
+    // 트랩은 걸어두되 아직 무장하지 않는다 — 정상 부팅이라 storageLocked=false
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    await expect(page.locator(".audit-warn")).toHaveCount(0);
+
+    const noteBefore = await readRaw(page, "wr_notes");
+
+    // 삭제 **직전에** 무장한다. 삭제 시점의 앱은 아직 잠겨 있지 않다.
+    await armQuota(page);
+    await openNoteByProblem(page, "FIRST-FAIL-DEL");
+    page.once("dialog", (d) => d.accept());
+    await page.click(".sheet-delete");
+
+    // 저장이 실패했으므로 배너가 뜨고 디스크의 노트는 그대로다
+    await expect(page.locator(".audit-warn").first()).toBeVisible();
+    expect(await readRaw(page, "wr_notes")).toBe(noteBefore);
+    // 노트가 부활하는데 사진만 없으면 안 된다
+    expect(await readImageIds(page)).toContain("firstfail_img");
+  });
+
+  test("삭제가 저장되면 그때 수거된다", async ({ page }) => {
+    await freshApp(page);
+    await seedBlobs(page, ["ok_del_img"]);
+    await seedNoteWithImages(page, {
+      problem: "OK-DEL",
+      images: ["ok_del_img"],
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+
+    await openNoteByProblem(page, "OK-DEL");
+    page.once("dialog", (d) => d.accept());
+    await page.click(".sheet-delete");
+
+    await expect
+      .poll(async () => (await readNotes(page)).some((n) => n.problem === "OK-DEL"))
+      .toBe(false);
+    // 지연이 누수로 굳으면 안 된다
+    await expect.poll(async () => await readImageIds(page)).not.toContain("ok_del_img");
+  });
+});

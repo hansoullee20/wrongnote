@@ -285,12 +285,13 @@ export default function App() {
     // 노트의 첨부 사진도 IDB에서 정리 (문제 사진 + 풀이 사진)
     const target = notes.find((n) => n.id === id);
     const ids = noteImageIds(target);
-    /* 저장이 잠긴 상태에서는 사진을 지우지 않는다. IDB는 localStorage와 다른
-       저장소라 잠금이 안 걸리는데, 노트 삭제는 디스크에 안 남는다. 그대로 두면
+    /* 여기서 바로 지우면 안 된다. IDB는 localStorage와 다른 저장소라 잠금이
+       걸리지 않는데, 노트 삭제는 디스크에 안 남을 수 있다. 그대로 두면
        새로고침 때 노트는 되살아나고 사진만 영구히 사라진다.
-       ⚠️ 이건 최소 완화책이다 — 첫 저장 실패가 감지되기 *전*의 삭제에는
-       여전히 창이 남는다. 근본 수정(영속 성공 뒤에만 수거)은 별도 Tier 2. */
-    if (ids.length && !storageLocked) deleteImages(ids);
+       storageLocked 검사만으로는 부족했다 — *첫* 저장 실패가 감지되기 전의
+       삭제에는 여전히 창이 남았다. 수정 경로와 같은 큐를 태워서, 삭제가
+       실제로 디스크에 안착한 뒤에만 수거한다. */
+    if (ids.length) pendingImageDeletes.current.push(...ids);
     setNotes((ns) => ns.filter((n) => n.id !== id));
     // 이 노트에서 자동 생성된 카드도 정리 (수동 카드는 noteId=null이라 생존)
     setCards((cs) => cs.filter((c) => c.noteId !== id));
