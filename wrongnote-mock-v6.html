@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>오답노트 — 전체 화면 목업 (schema v6/v7)</title>
+<!--
+  이 목업은 **현재 코드에서 뽑아온 값**으로 만들었다. 색은 src/palettes.js의
+  warm 팔레트 실제 토큰, 문구는 src/views/*.jsx의 실제 문자열이다.
+  Amendment 01(도움 사용 여부)까지 반영돼 있다 — wrongnote-app-mock.html(8/9)은
+  그 이전 상태라 지금과 다르다.
+  목업이지 앱이 아니다: 데이터는 고정값이고 저장·마이그레이션은 없다.
+-->
+<style>
+  :root {
+    --bg:#e7ddcb; --paper:#fbf7ef; --s2:#f4ede0; --sunken:#eee6d8;
+    --bd:#e3d9c8; --bds:#c3b5a0; --ink:#33291f; --sec:#63564a; --mut:#736555;
+    --act:#5f5145; --actHover:#726255; --on:#fbf7ef;
+    --fail:#a0574a; --failBg:#faeeea; --pass:#5e6b4a; --passBg:#e9eddc;
+    --info:#6e6247; --infoBg:#efe8d6; --hi:#f7eacb; --warn:#7e5f16;
+  }
+  [data-theme="dark"] {
+    --bg:#1a1714; --paper:#221e1a; --s2:#2a251f; --sunken:#1e1a17;
+    --bd:#322c25; --bds:#4a4238; --ink:#e8e1d5; --sec:#b4a897; --mut:#978b7a;
+    --act:#d9a05b; --actHover:#e5b375; --on:#221e1a;
+    --fail:#e0806c; --failBg:#2e211d; --pass:#95ae84; --passBg:#232b1f;
+    --info:#c4b48e; --infoBg:#262117; --hi:#302816; --warn:#d9a05b;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background:var(--bg); color:var(--ink);
+    font-family:"Pretendard Variable",Pretendard,-apple-system,"Noto Sans KR",sans-serif;
+    font-size:16px; line-height:1.6; padding:0 16px 72px;
+  }
+  .wrap { max-width:860px; margin:0 auto; }
+  .masthead {
+    background:var(--paper); border:1px solid var(--bd);
+    border-bottom:2px solid var(--bds); border-radius:16px 16px 0 0;
+    padding:16px 20px 12px; display:flex; align-items:center; gap:12px;
+    margin-top:16px;
+  }
+  .masthead-sub { font-size:11px; letter-spacing:.16em; color:var(--mut); text-transform:uppercase; }
+  .masthead-title { font-family:"Nanum Myeongjo",serif; font-weight:800; font-size:22px; letter-spacing:.12em; flex:1; }
+  .stamp { font-size:12px; font-weight:700; color:var(--fail); border:1px solid var(--fail); border-radius:8px; padding:3px 9px; }
+  .tgl { min-width:40px; min-height:40px; border:1px solid var(--bds); border-radius:8px; background:var(--paper); color:var(--sec); cursor:pointer; }
+  .sheet { background:var(--paper); border:1px solid var(--bd); border-top:none; border-radius:0 0 16px 16px; padding:20px 16px 24px; }
+  .tabs { display:flex; border-bottom:1px solid var(--bd); background:var(--paper); }
+  .tab { flex:1; padding:14px 0; border:none; background:none; color:var(--mut); font:inherit; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; }
+  .tab.on { color:var(--ink); border-bottom-color:var(--fail); }
+  h2.sec { font-size:13px; letter-spacing:.08em; color:var(--mut); text-transform:uppercase; margin:24px 0 10px; }
+  h2.sec:first-child { margin-top:0; }
+
+  .mode { display:flex; align-items:center; gap:12px; border:1px solid var(--bd); border-radius:12px; padding:14px; margin-bottom:12px; background:var(--s2); }
+  .mode.primary { border-color:var(--act); background:var(--paper); }
+  .mode-num { font-family:"Nanum Myeongjo",serif; font-size:27px; font-weight:800; min-width:40px; text-align:center; }
+  .mode-title { font-weight:600; }
+  .mode-desc { font-size:13px; color:var(--mut); }
+  .mode-go { min-height:44px; padding:0 18px; border:1px solid var(--act); border-radius:12px; background:var(--act); color:var(--on); font:inherit; font-weight:600; cursor:pointer; }
+  .mode-go.ghost { background:var(--paper); color:var(--act); }
+
+  .review-group { margin-bottom:18px; }
+  .group-label { font-size:13px; font-weight:700; color:var(--sec); margin-bottom:8px; }
+  .prob-card { display:flex; gap:12px; align-items:flex-start; width:100%; text-align:left; border:1px solid var(--bd); border-radius:12px; padding:12px; background:var(--paper); margin-bottom:8px; }
+  .prob-card-main { flex:1; border:none; background:none; text-align:left; font:inherit; color:inherit; cursor:pointer; }
+  .prob-name { font-weight:600; }
+  .prob-meta { font-size:13px; color:var(--mut); }
+  .traj { display:inline-flex; gap:3px; letter-spacing:0; }
+  .traj-dot { font-size:13px; line-height:1; }
+  .traj-dot.pass, .traj-dot.assisted { color:var(--pass); }
+  .traj-dot.fail { color:var(--fail); }
+  .traj-star { font-size:.8em; vertical-align:super; line-height:0; }
+  .traj-none { font-size:11px; color:var(--mut); }
+  .cause-pill { display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px; background:var(--failBg); color:var(--fail); }
+  .group-toggle { width:100%; border:1px dashed var(--bds); border-radius:12px; background:none; color:var(--mut); font:inherit; padding:10px; cursor:pointer; }
+
+  .solve-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .solve-kind { font-weight:700; }
+  .solve-scope { font-size:13px; color:var(--mut); flex:1; }
+  .solve-prog { font-size:13px; color:var(--mut); }
+  .timer { border:1px solid var(--bd); border-radius:999px; padding:4px 12px; font-family:"Nanum Myeongjo",serif; }
+  .timer-cap { font-size:11px; color:var(--mut); margin-left:6px; }
+  .solve-shot { border:1px solid var(--bd); border-radius:12px; padding:18px; background:var(--s2); margin-bottom:12px; }
+  .veil { border:1px solid var(--bd); border-radius:12px; background:var(--sunken); color:var(--mut); font-size:13px; padding:12px; margin-bottom:12px; }
+  .veil-mark { border:1px solid var(--bds); border-radius:6px; padding:1px 6px; margin-right:8px; font-size:11px; }
+  .ans-block { border:1px solid var(--bd); border-radius:12px; padding:14px; margin-bottom:8px; }
+  .ans-label { font-size:13px; font-weight:600; margin-bottom:10px; }
+  .ans-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .ans-opt { width:44px; height:44px; border:1px solid var(--bds); border-radius:999px; background:var(--paper); font:inherit; cursor:pointer; }
+  .ans-opt.picked { background:var(--act); color:var(--on); border-color:var(--act); }
+  .ans-or { font-size:13px; color:var(--mut); }
+  .ans-input { flex:1; min-width:120px; padding:13px 12px; border:1px solid var(--bds); border-radius:8px; background:var(--paper); font:inherit; color:inherit; }
+
+  /* Amendment 01 — 채점 전에 묻는다 */
+  .help-choice { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:16px; }
+  .help-choice-label { font-size:13px; color:var(--mut); }
+  .mode-switch { display:flex; gap:8px; flex:1; min-width:160px; }
+  .mode-switch-btn { flex:1 1 96px; min-height:44px; border:1px solid var(--bd); border-radius:12px; background:var(--paper); color:var(--sec); font:inherit; font-weight:600; cursor:pointer; }
+  .mode-switch-btn.on { background:var(--act); border-color:var(--act); color:var(--on); }
+
+  .grade-row { display:flex; gap:12px; margin-top:20px; }
+  .grade-btn { flex:1; min-height:52px; padding:18px; border:1px solid var(--fail); border-radius:12px; background:var(--failBg); color:var(--fail); font:inherit; font-weight:700; cursor:pointer; }
+  .grade-btn.ok { border-color:var(--pass); background:var(--passBg); color:var(--pass); }
+  .reveal-give-up { display:block; margin:8px auto 0; min-height:44px; background:none; border:none; font:inherit; font-size:13px; color:var(--mut); text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+
+  .verdict { display:flex; align-items:flex-start; gap:12px; margin-bottom:14px; }
+  .verdict-stamp { font-family:"Nanum Myeongjo",serif; font-weight:800; font-size:22px; color:var(--fail); border:2px solid var(--fail); border-radius:8px; padding:4px 12px; }
+  .verdict-stamp.ok { color:var(--pass); border-color:var(--pass); }
+  .verdict-text { font-size:13px; color:var(--sec); }
+  .this-cause { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .this-cause-label { font-size:12px; color:var(--mut); }
+  .reveal { border:1px solid var(--bd); border-radius:12px; padding:14px; margin-bottom:10px; background:var(--s2); }
+  .reveal-title { font-size:13px; font-weight:700; color:var(--mut); margin-bottom:6px; }
+  .end-row { display:flex; gap:12px; margin-top:16px; }
+  .end-btn { flex:1; min-height:52px; border:1px solid var(--act); border-radius:12px; background:var(--act); color:var(--on); font:inherit; font-weight:600; cursor:pointer; }
+  .end-btn.ghost { background:var(--paper); color:var(--act); }
+
+  .fail-classifier .label { font-size:13px; font-weight:600; margin:14px 0 8px; }
+  .chip-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { min-height:40px; padding:0 14px; border:1px solid var(--bds); border-radius:999px; background:var(--paper); color:var(--sec); font:inherit; font-size:13px; cursor:pointer; }
+  .chip.on { background:var(--act); border-color:var(--act); color:var(--on); }
+  .fail-memo { width:100%; margin-top:12px; padding:12px; border:1px solid var(--bds); border-radius:8px; background:var(--paper); font:inherit; color:inherit; }
+  .fail-save { width:100%; margin-top:12px; min-height:52px; border:1px solid var(--act); border-radius:12px; background:var(--act); color:var(--on); font:inherit; font-weight:700; cursor:pointer; }
+
+  .attempt-history { border-top:1px solid var(--bd); margin-top:16px; padding-top:12px; }
+  .attempt-history-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .attempt-history-head .label { font-size:13px; font-weight:600; }
+  .attempt-line { display:flex; gap:10px; align-items:baseline; font-size:13px; padding:6px 0; border-bottom:1px solid var(--bd); }
+  .attempt-date { color:var(--mut); min-width:38px; }
+  .grade-mark { font-size:18px; line-height:1; flex-shrink:0; }
+  .grade-mark.pass, .grade-mark.assisted { color:var(--pass); }
+  .grade-mark.fail { color:var(--fail); }
+  .attempt-memo { color:var(--mut); }
+
+  .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .metric { border:1px solid var(--bd); border-radius:12px; padding:12px; text-align:center; background:var(--s2); }
+  .metric b { display:block; font-family:"Nanum Myeongjo",serif; font-size:27px; }
+  .metric small { font-size:12px; color:var(--mut); }
+  .audit-warn { border:1px solid var(--warn); background:var(--hi); color:var(--ink); border-radius:12px; padding:12px; font-size:13px; margin-bottom:14px; }
+  .io-error { border:1px solid var(--fail); background:var(--failBg); color:var(--fail); border-radius:12px; padding:12px; font-size:13px; margin-top:10px; }
+  .hint { font-size:13px; color:var(--mut); margin-top:8px; }
+  .btn { min-height:44px; padding:10px 18px; border:1px solid var(--bd); border-radius:12px; background:var(--s2); color:var(--ink); font:inherit; font-weight:600; cursor:pointer; }
+  .btn[disabled] { opacity:.45; cursor:not-allowed; }
+  .io-row { display:flex; gap:8px; }
+  .palette-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .palette-card { border:1px solid var(--bd); border-radius:12px; padding:8px; background:var(--paper); font:inherit; color:inherit; cursor:pointer; text-align:center; }
+  .palette-card.on { border-color:var(--act); border-width:2px; }
+  .palette-swatch { display:flex; height:26px; border-radius:6px; overflow:hidden; margin-bottom:6px; }
+  .palette-swatch i { flex:1; }
+  .palette-name { font-size:12px; font-weight:600; display:block; }
+
+  .screen { margin-bottom:34px; }
+  .screen-cap { font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--mut); margin:0 0 6px 4px; }
+  .note { font-size:12px; color:var(--mut); border-left:2px solid var(--bds); padding-left:10px; margin:8px 0 0 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div style="display:flex;gap:8px;align-items:center;margin:16px 0 4px">
+    <strong style="flex:1">오답노트 — 전체 화면 목업</strong>
+    <button class="btn" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme==='dark'?'light':'dark'">☾ 주간 / 야간</button>
+  </div>
+  <p class="note">색은 src/palettes.js의 warm 팔레트 실제 토큰, 문구는 src/views의 실제 문자열. Amendment 01 반영본.</p>
+
+  <!-- 1. 문제 탭 -->
+  <section class="screen">
+    <p class="screen-cap">1 · 문제 — 안정성 그룹</p>
+    <div class="masthead">
+      <span class="masthead-sub">수능 대비</span>
+      <span class="masthead-title">오답노트</span>
+      <span class="stamp">12문제</span>
+      <button class="tgl">☾</button>
+      <button class="tgl">⚙</button>
+    </div>
+    <div class="tabs">
+      <button class="tab on">문제</button><button class="tab">풀기 <b>3</b></button>
+      <button class="tab">카드</button><button class="tab">통계</button>
+    </div>
+    <div class="sheet">
+      <div class="review-group">
+        <div class="group-label">불안정 2</div>
+        <div class="prob-card"><div class="prob-card-main">
+          <div class="prob-name">6월 모평 14</div>
+          <div class="prob-meta">수II·미분 · 접선 &nbsp;<span class="cause-pill">개념 부족</span></div>
+          <div class="prob-meta"><span class="traj-none">미재풀이</span></div>
+        </div><button class="tgl">✎</button></div>
+        <div class="prob-card"><div class="prob-card-main">
+          <div class="prob-name">9월 모평 21</div>
+          <div class="prob-meta">수I·수열 · 점화식 &nbsp;<span class="cause-pill">실행 실수</span></div>
+          <div class="prob-meta">
+            <span class="traj" role="img" aria-label="재풀이 궤적: 실행 실수, 개념 부족">
+              <span class="traj-dot fail" aria-hidden="true">✕</span><span class="traj-dot fail" aria-hidden="true">✕</span>
+            </span> · 3일 전
+          </div>
+        </div><button class="tgl">✎</button></div>
+      </div>
+
+      <div class="review-group">
+        <div class="group-label">진행 중 1</div>
+        <div class="prob-card"><div class="prob-card-main">
+          <div class="prob-name">기출 2024 · 12</div>
+          <div class="prob-meta">수II·적분 · 정적분의 넓이</div>
+          <div class="prob-meta">
+            <!-- 도움받은 통과(✓*)가 연속 기록을 끊어 '졸업'이 아니라 '진행 중' -->
+            <span class="traj" role="img" aria-label="재풀이 궤적: 개념 부족, 도움받음, 통과">
+              <span class="traj-dot fail" aria-hidden="true">✕</span>
+              <span class="traj-dot assisted" aria-hidden="true">✓<span class="traj-star">*</span></span>
+              <span class="traj-dot pass" aria-hidden="true">✓</span>
+            </span> · 어제
+          </div>
+        </div><button class="tgl">✎</button></div>
+      </div>
+
+      <button class="group-toggle">졸업 4 — 펼치기</button>
+      <p class="note">졸업은 기본 접힘. 매일 볼 것은 불안정이지 졸업이 아니다.</p>
+    </div>
+  </section>
+
+  <!-- 2. 풀기 idle -->
+  <section class="screen">
+    <p class="screen-cap">2 · 풀기 — 시작</p>
+    <div class="sheet" style="border-radius:16px;border-top:1px solid var(--bd)">
+      <div class="mode primary">
+        <span class="mode-num">3</span>
+        <div style="flex:1"><div class="mode-title">오늘 볼 것</div>
+        <div class="mode-desc">복습 주기가 돌아온 문제들. 이것부터 하는 게 맞다.</div></div>
+        <button class="mode-go">시작</button>
+      </div>
+      <div class="mode">
+        <span class="mode-num">∞</span>
+        <div style="flex:1"><div class="mode-title">랜덤으로 뽑기</div>
+        <div class="mode-desc">일정과 상관없이 실전처럼. 약점만 골라서 뽑을 수도 있다.</div>
+        <div class="chip-row" style="margin-top:8px">
+          <button class="chip on">5문제</button><button class="chip">10문제</button>
+          <button class="chip on">전체에서</button><button class="chip">개념</button><button class="chip">실행</button>
+        </div></div>
+        <button class="mode-go ghost">시작</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 풀이 중 — 도움 여부 -->
+  <section class="screen">
+    <p class="screen-cap">3 · 풀이 중 — 채점 전에 도움 여부를 묻는다 (Amendment 01)</p>
+    <div class="sheet" style="border-radius:16px;border-top:1px solid var(--bd)">
+      <div class="solve-head">
+        <span class="solve-kind">오늘 볼 것</span><span class="solve-scope">수II·미분</span>
+        <span class="solve-prog">1 / 3</span>
+        <span class="timer">00:47<span class="timer-cap">재는 중</span></span>
+      </div>
+      <div class="solve-shot">f(x)=x³−3x²+2 에서 최댓값을 갖게 하는 x 의 값은?</div>
+      <div class="veil"><span class="veil-mark">가림</span>최적 풀이 · 처음 틀린 이유 · 내가 썼던 풀이 — 채점하면 공개된다</div>
+      <div class="ans-block">
+        <div class="ans-label">다시 풀고 답을 고르면 자동으로 채점된다</div>
+        <div class="ans-row">
+          <button class="ans-opt">①</button><button class="ans-opt">②</button>
+          <button class="ans-opt picked">③</button><button class="ans-opt">④</button><button class="ans-opt">⑤</button>
+          <span class="ans-or">또는</span><input class="ans-input" placeholder="주관식 답" />
+        </div>
+      </div>
+      <div class="help-choice">
+        <span class="help-choice-label" id="q">도움을 사용했나?</span>
+        <div class="mode-switch" role="group" aria-labelledby="q">
+          <button class="mode-switch-btn on" aria-pressed="true">아니오</button>
+          <button class="mode-switch-btn" aria-pressed="false">예</button>
+        </div>
+      </div>
+      <div class="grade-row"><button class="grade-btn">채점하기</button></div>
+      <button class="reveal-give-up">풀이 보기 (이번 시도는 실패로 기록)</button>
+      <p class="note">채점 즉시 pass가 저장되므로 <b>채점 전</b>에 물어야 한다. 기본값은 아니오이고, 문제마다·세션마다 초기화된다.</p>
+    </div>
+  </section>
+
+  <!-- 4. 채점 결과 — 도움받은 통과 -->
+  <section class="screen">
+    <p class="screen-cap">4 · 채점 결과 — 도움받은 통과</p>
+    <div class="sheet" style="border-radius:16px;border-top:1px solid var(--bd)">
+      <div class="verdict">
+        <span class="verdict-stamp ok">맞음</span>
+        <span class="verdict-text">
+          2번째 시도 · 재검증 통과로 기록됨<br />
+          도움받은 통과 — 졸업까지 연속 통과는 다시 0회<br />
+          다음 복습은 2주 뒤로 밀린다
+        </span>
+      </div>
+      <div class="reveal"><div class="reveal-title">최적 풀이</div>도함수의 부호가 바뀌는 지점만 찾으면 된다. f′(x)=3x²−6x=3x(x−2).</div>
+      <div class="reveal"><div class="reveal-title">처음 틀렸을 때</div>
+        <span class="cause-pill">개념 부족</span>
+        <div class="hint">극값 판정을 증가·감소와 연결하지 못했다</div>
+      </div>
+      <div class="end-row"><button class="end-btn">다음 문제</button></div>
+      <p class="note">통과·일정은 그대로다(D4). 달라지는 건 졸업 연속 기록뿐이고, 그 사실을 여기서 말한다.</p>
+    </div>
+  </section>
+
+  <!-- 5. 실패 분류 -->
+  <section class="screen">
+    <p class="screen-cap">5 · 실패 분류 — 원인을 골라야 저장된다</p>
+    <div class="sheet fail-classifier" style="border-radius:16px;border-top:1px solid var(--bd)">
+      <div class="reveal"><div class="reveal-title">최적 풀이</div>부호표를 먼저 그린다.</div>
+      <div class="chip-row"><button class="chip">처음과 같은 원인 · 실행 실수</button></div>
+      <div class="label">주원인 — 하나만</div>
+      <div class="chip-row">
+        <button class="chip on">개념 부족</button><button class="chip">읽기 실패</button>
+        <button class="chip">전략 실패</button><button class="chip">실행 실수</button><button class="chip">시간 부족</button>
+      </div>
+      <div class="label">세부 — 여러 개 가능 (선택)</div>
+      <div class="chip-row">
+        <button class="chip">부호 실수</button><button class="chip on">조건 누락</button><button class="chip">계산 실수</button>
+      </div>
+      <input class="fail-memo" placeholder="짧은 메모 (선택)" />
+      <button class="fail-save">실패 기록</button>
+      <p class="note">분류를 마치지 않고 이탈하면 이 시도는 저장되지 않는다.</p>
+    </div>
+  </section>
+
+  <!-- 6. 시도 이력 -->
+  <section class="screen">
+    <p class="screen-cap">6 · 시도 이력 — 궤적과 같은 표기(✕ / ✓* / ✓)</p>
+    <div class="sheet" style="border-radius:16px;border-top:1px solid var(--bd)">
+      <div class="attempt-history">
+        <div class="attempt-history-head">
+          <span class="label">재풀이 이력</span>
+          <span class="traj" role="img" aria-label="재풀이 궤적: 개념 부족, 읽기 실패, 도움받음, 통과">
+            <span class="traj-dot fail" aria-hidden="true">✕</span><span class="traj-dot fail" aria-hidden="true">✕</span>
+            <span class="traj-dot assisted" aria-hidden="true">✓<span class="traj-star">*</span></span>
+            <span class="traj-dot pass" aria-hidden="true">✓</span>
+          </span>
+        </div>
+        <div class="attempt-line"><span class="attempt-date">6/1</span><span class="grade-mark fail" aria-hidden="true">✕</span><span>개념 부족 · 조건 누락 — ② — 6분 30초</span></div>
+        <div class="attempt-line"><span class="attempt-date">6/8</span><span class="grade-mark fail" aria-hidden="true">✕</span><span>읽기 실패 — ① — 4분 10초</span><span class="attempt-memo">조건 (가)를 안 읽음</span></div>
+        <div class="attempt-line"><span class="attempt-date">6/22</span><span class="grade-mark assisted" aria-hidden="true">✓<span class="traj-star">*</span></span><span>도움받음 — ③ — 50초</span></div>
+        <div class="attempt-line"><span class="attempt-date">7/6</span><span class="grade-mark pass" aria-hidden="true">✓</span><span>통과 — ③ — 40초</span></div>
+      </div>
+      <p class="note">구분은 색이 아니라 글자와 접근성 이름이 짊어진다. 도움받은 통과도 통과라 같은 색을 쓴다.</p>
+    </div>
+  </section>
+
+  <!-- 7. 통계 -->
+  <section class="screen">
+    <p class="screen-cap">7 · 통계</p>
+    <div class="sheet" style="border-radius:16px;border-top:1px solid var(--bd)">
+      <h2 class="sec">안정성</h2>
+      <div class="stats-grid">
+        <div class="metric"><b style="color:var(--fail)">2</b><small>불안정</small></div>
+        <div class="metric"><b>1</b><small>진행 중</small></div>
+        <div class="metric"><b style="color:var(--pass)">4</b><small>졸업</small></div>
+        <div class="metric"><b>5</b><small>미재풀이</small></div>
+      </div>
+      <p class="note">미재풀이는 불안정의 부분집합 — 네 숫자를 합산하면 안 된다.</p>
+      <h2 class="sec">개선율</h2>
+      <div class="metric" style="text-align:left"><b>67%</b><small>fail 경험이 있는 노트 중 최신 시도가 pass인 비율. 도움받은 통과도 개선으로 센다.</small></div>
+    </div>
+  </section>
+
+  <!-- 8. 설정 -->
+  <section class="screen">
+    <p class="screen-cap">8 · 설정 — 백업 · 저장소 상태</p>
+    <div class="sheet" style="border-radius:16px;border-top:1px solid var(--bd)">
+      <h2 class="sec">화면 색</h2>
+      <!-- 실제 앱과 같이 지금 보고 있는 모드 기준으로 미리보기가 바뀐다 -->
+      <div class="palette-grid" id="palettes"
+           data-day='{"warm":["#e7ddcb","#fbf7ef","#5f5145","#a0574a"],"mauve":["#e8dcda","#fbf5f3","#5f4547","#8f4b55"],"teal":["#e6dedc","#fbf7f5","#25464a","#a2504f"],"navy":["#dee3e8","#f9fafb","#243f5a","#a14f4a"]}'
+           data-night='{"warm":["#1a1714","#221e1a","#d9a05b","#e0806c"],"mauve":["#1b1618","#241e20","#b9afe2","#de8792"],"teal":["#141a1a","#1c2424","#7daed2","#e08c86"],"navy":["#10151b","#18212a","#7eb2e1","#e4877f"]}'>
+        <div class="palette-card on" data-p="warm"><span class="palette-swatch"><i></i><i></i><i></i><i></i></span><span class="palette-name">✓ 미색</span></div>
+        <div class="palette-card" data-p="mauve"><span class="palette-swatch"><i></i><i></i><i></i><i></i></span><span class="palette-name">모브</span></div>
+        <div class="palette-card" data-p="teal"><span class="palette-swatch"><i></i><i></i><i></i><i></i></span><span class="palette-name">로즈 &amp; 딥틸</span></div>
+        <div class="palette-card" data-p="navy"><span class="palette-swatch"><i></i><i></i><i></i><i></i></span><span class="palette-name">남색 &amp; 호박</span></div>
+      </div>
+      <h2 class="sec">백업</h2>
+      <div class="io-row"><button class="btn">내보내기 (JSON)</button><button class="btn">가져오기 (전체 교체)</button></div>
+      <div class="hint">가져오기 직전 기존 데이터는 wr_backup_before_import.json으로 자동 저장된다</div>
+      <div class="io-error">가져오기 실패 — 데이터 변경 없음. JSON 형식이 맞는지, 이 앱보다 새 버전에서 만든 백업은 아닌지 확인해라.</div>
+      <p class="note">스키마 하드닝 반영: 봉투 버전이 1..현재 범위를 벗어나면 노트·카드를 건드리기 전에 거부한다.</p>
+    </div>
+  </section>
+
+  <!-- 9. 저장 잠금 상태 -->
+  <section class="screen">
+    <p class="screen-cap">9 · 저장 잠금 — 세 가지 원인은 서로 다른 문구를 쓴다</p>
+    <div class="sheet" style="border-radius:16px;border-top:1px solid var(--bd)">
+      <div class="audit-warn">저장 공간이 부족하거나 브라우저 저장소에 쓸 수 없다. 원본 보호를 위해 저장을 중단했다. 지금부터의 변경은 저장되지 않는다. 먼저 내보낸 뒤 이 사이트의 저장공간을 정리하고 앱을 다시 열어라.</div>
+      <div class="audit-warn">업그레이드 직전 백업을 만들지 못해 저장을 보류했다. 데이터는 그대로이고 화면에도 정상으로 보인다. 먼저 내보낸 뒤 저장공간을 정리하고 앱을 다시 열어라.</div>
+      <div class="audit-warn">저장된 데이터가 지금 열린 앱보다 새 버전이다. 데이터 보호를 위해 저장을 잠갔다 — 보기와 내보내기는 된다. 앱을 새로고침해 최신 버전으로 열어라.</div>
+      <div class="io-row"><button class="btn">내보내기 (JSON)</button><button class="btn" disabled>가져오기 (전체 교체)</button></div>
+      <p class="note">어느 경우든 내보내기는 유일한 구조 수단이라 열어둔다. 가져오기는 막는다 — 저장할 수 없는 상태에서 전체 교체는 되돌릴 방법이 없다.</p>
+    </div>
+  </section>
+
+</div>
+<script>
+  /* 팔레트 미리보기는 지금 모드 기준으로 그린다 — 실제 앱과 같은 규칙
+     (theme === "dark" ? p.night : p.day). 목업이라 데이터만 인라인이다. */
+  const grid = document.getElementById("palettes");
+  const sets = { light: JSON.parse(grid.dataset.day), dark: JSON.parse(grid.dataset.night) };
+  function paintSwatches() {
+    const set = sets[document.documentElement.dataset.theme] || sets.light;
+    for (const card of grid.querySelectorAll(".palette-card")) {
+      const colors = set[card.dataset.p];
+      card.querySelectorAll(".palette-swatch i").forEach((i, n) => {
+        i.style.background = colors[n];
+      });
+    }
+  }
+  paintSwatches();
+  new MutationObserver(paintSwatches).observe(document.documentElement, {
+    attributes: true, attributeFilter: ["data-theme"],
+  });
+</script>
+</body>
+</html>
