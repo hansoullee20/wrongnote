@@ -189,6 +189,18 @@ test.describe("첨부 압축 직렬화", () => {
     // 두 번째 압축은 시작되지 않았다
     expect(await page.evaluate(() => window.__bitmapCalls)).toBe(1);
 
+    /* 거부는 busy를 건드리면 안 된다 — 첫 압축이 아직 돌고 있는데 잠금이
+       풀리면 바로 그 동시성 창이 다시 열린다. 이 재확인이 없으면 이 테스트는
+       거부 경로가 busy를 지워도 통과한다. */
+    await expect(page.locator("#rec-solution-photo")).toBeDisabled();
+    await expect(page.locator(".photo-paste").first()).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
+    await expect(
+      page.locator('.btn--primary:has-text("다음 — 왜 틀렸나")')
+    ).toBeDisabled();
+
     await page.evaluate(() => window.__release && window.__release());
     await expect(page.locator("#rec-solution-photo")).toBeEnabled();
   });
