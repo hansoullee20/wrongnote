@@ -290,6 +290,10 @@ export default function App() {
       correct,
       result: correct ? "pass" : "fail",
       seconds: Number.isFinite(draft.seconds) ? draft.seconds : null,
+      // 아래 pass 폐기 삼항 **바깥**이어야 한다. pass일 때 버리면 졸업 게이트가
+      // 읽을 값이 영영 없어지고(항상 false), fail 경로 테스트는 다 통과해서
+      // 죽은 게이트인 걸 아무도 모른다.
+      assisted: draft.assisted === true,
       // pass에 딸려온 원인은 버린다 — pass에는 실패 원인이 없다
       cause: correct ? "" : draft.cause,
       tags: correct ? [] : [...(draft.tags || [])],

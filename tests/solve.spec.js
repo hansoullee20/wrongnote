@@ -78,6 +78,8 @@ test.describe("다시 풀기 세션", () => {
     expect(note.attempts[0].cause).toBe("개념 부족");
     expect(note.attempts[0].result).toBe("fail");
     expect(note.attempts[0].source).toBe("scheduled");
+    // v6: 아무도 도움을 주장하지 않으면 false
+    expect(note.attempts[0].assisted).toBe(false);
     expect(note.recheckResult).toBe("fail");
     // 틀리면 내일로 당겨진다
     expect(note.nextRecheckTs - Date.now()).toBeLessThan(2 * 86400000);
@@ -280,6 +282,9 @@ test.describe("풀기 세션 현재 동작 고정", () => {
     expect(note.attempts[0].result).toBe("pass");
     expect(note.attempts[0].cause).toBe("");
     expect(note.attempts[0].source).toBe("scheduled");
+    // pass 폐기 삼항에 휩쓸리지 않았는지 — 여기가 false가 아니라 undefined면
+    // 졸업 게이트는 영영 죽은 코드다
+    expect(note.attempts[0].assisted).toBe(false);
   });
 
   test("reload 후에도 attempt가 남는다", async ({ page }) => {
@@ -410,6 +415,8 @@ test.describe("재풀이 fail 분류 (v5)", () => {
     note = (await readNotes(page)).find((n) => n.id === "solve_n1");
     expect(note.attempts[0].source).toBe("solution_reveal");
     expect(note.attempts[0].result).toBe("fail");
+    // 풀이를 봤다는 사실은 source가 기록한다 — assisted를 대신 켜지 않는다
+    expect(note.attempts[0].assisted).toBe(false);
   });
 
   test("분류를 마치지 않고 이탈하면 시도가 저장되지 않는다", async ({
