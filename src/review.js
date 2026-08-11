@@ -17,12 +17,15 @@ export const getLastAttempt = (note) => {
   return a.length ? a[a.length - 1] : null;
 };
 
-/** 최신에서 거슬러 올라가며 연속 pass 수 */
+/** 최신에서 거슬러 올라가며 연속 **독립** pass 수 (도움받은 pass는 끊는다) */
 export function getConsecutivePasses(note) {
   const attempts = getAttempts(note);
   let count = 0;
   for (let i = attempts.length - 1; i >= 0; i -= 1) {
-    if (!attempts[i].correct) break;
+    // 거꾸로 훑는 중이므로 break가 곧 "연속 기록 리셋"이다. continue를 쓰면
+    // 도움받은 pass를 건너뛰고 그 이전 pass들을 이어 세어 졸업이 새어나간다.
+    // assisted가 없는 레거시 시도는 falsy — 독립 pass로 센다.
+    if (!attempts[i].correct || attempts[i].assisted) break;
     count += 1;
   }
   return count;

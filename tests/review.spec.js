@@ -152,6 +152,67 @@ test.describe("review 셀렉터", () => {
     expect(results.fUnattempted).toBe(false);
   });
 
+  test("도움받은 pass는 연속 기록을 끊는다 (졸업 게이트)", async ({ page }) => {
+    const results = await evalReview(page, (r) => {
+      // "p" 독립 pass · "a" 도움받은 pass · "f" 실패
+      const mk = (pattern) => ({
+        id: "x",
+        ts: 0,
+        attempts: pattern.map((p, i) => ({
+          correct: p !== "f",
+          assisted: p === "a",
+          ts: i + 1,
+        })),
+      });
+      const probe = (pattern) => ({
+        streak: r.getConsecutivePasses(mk(pattern)),
+        state: r.classifyReviewState(mk(pattern)),
+      });
+      return {
+        pp: probe(["p", "p"]),
+        pap: probe(["p", "a", "p"]),
+        papp: probe(["p", "a", "p", "p"]),
+        pa: probe(["p", "a"]),
+        fa: probe(["f", "a"]),
+        aa: probe(["a", "a"]),
+      };
+    });
+
+    // 기준선: 도움 없는 연속 2회는 졸업이다
+    expect(results.pp).toEqual({ streak: 2, state: "graduated" });
+    // 도움받은 pass가 끼면 그 이전 pass는 이어지지 않는다
+    expect(results.pap).toEqual({ streak: 1, state: "progress" });
+    // 리셋 후 다시 2회 독립 pass하면 졸업한다
+    expect(results.papp).toEqual({ streak: 2, state: "graduated" });
+    // 마지막이 도움받은 pass면 streak 0 — 그래도 correct라 unstable은 아니다
+    expect(results.pa).toEqual({ streak: 0, state: "progress" });
+    expect(results.fa).toEqual({ streak: 0, state: "progress" });
+    // 도움받은 pass만 쌓아서는 절대 졸업할 수 없다
+    expect(results.aa).toEqual({ streak: 0, state: "progress" });
+  });
+
+  test("assisted 필드가 없는 레거시 시도는 독립 pass로 센다", async ({
+    page,
+  }) => {
+    const results = await evalReview(page, (r) => {
+      const legacy = {
+        id: "L",
+        ts: 0,
+        attempts: [
+          { correct: false, ts: 1 },
+          { correct: true, ts: 2 },
+          { correct: true, ts: 3 },
+        ],
+      };
+      return {
+        streak: r.getConsecutivePasses(legacy),
+        state: r.classifyReviewState(legacy),
+      };
+    });
+    // 필드 없음 = falsy — v5에서 졸업했던 노트가 조용히 강등되면 안 된다
+    expect(results).toEqual({ streak: 2, state: "graduated" });
+  });
+
   test("궤적은 최근 N개, 그룹 정렬은 결정적", async ({ page }) => {
     const results = await evalReview(page, (r) => {
       const many = {
@@ -194,15 +255,25 @@ test.describe("review 셀렉터", () => {
       });
       return r.calculateImprovement([
         mk("improved", ["f", "p"]), // eligible + improved
+        // 도움받은 pass도 개선으로 센다 — 졸업 게이트와 달리 의도적 비변경.
+        // 개선율은 "틀리던 걸 이제 맞힌다"이지 "혼자 맞힌다"가 아니다.
+        {
+          id: "assisted",
+          ts: 0,
+          attempts: [
+            { correct: false, ts: 0 },
+            { correct: true, assisted: true, ts: 1 },
+          ],
+        },
         mk("still", ["f", "f"]), // eligible
         mk("passonly", ["p", "p"]), // 제외
         mk("never", []), // 제외
       ]);
     });
 
-    expect(results.eligible).toBe(2);
-    expect(results.improved).toBe(1);
-    expect(results.rate).toBe(0.5);
+    expect(results.eligible).toBe(3);
+    expect(results.improved).toBe(2); // improved + assisted
+    expect(results.rate).toBeCloseTo(2 / 3);
   });
 });
 
