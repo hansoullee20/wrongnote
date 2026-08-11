@@ -16,8 +16,8 @@ test.describe("스토리지 마이그레이션 (v1→v2)", () => {
     const backup = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v1_to_v6"))
     );
-    expect(backup.notes).toContain("LEGACY-1");
-    expect(backup.cards).toContain("레거시 카드");
+    expect(backup.notes.map((n) => n.problem)).toContain("LEGACY-1");
+    expect(backup.cards.map((c) => c.front)).toContain("레거시 카드");
 
     // 카드: SRS 기본값, 내용 보존
     const card = (await readCards(page))[0];
@@ -289,8 +289,11 @@ test.describe("v5 → v6 도움 여부 마이그레이션", () => {
     const backup = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v5_to_v6"))
     );
-    expect(backup.notes).toBe(raw.rawNotes);
-    expect(backup.cards).toBe(raw.rawCards);
+    // 마이그레이션 이전 배열 그대로 — 파싱만 하고 정규화는 하지 않은 상태
+    expect(backup.notes).toEqual(JSON.parse(raw.rawNotes));
+    expect(backup.cards).toEqual(JSON.parse(raw.rawCards));
+    expect(backup.version).toBe(5);
+    expect(typeof backup.savedAt).toBe("number");
 
     const note = (await readNotes(page))[0];
     const [a0, a1] = note.attempts;
@@ -424,7 +427,7 @@ test.describe("업그레이드 직전 스냅샷", () => {
     const snap = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v3_to_v6"))
     );
-    expect(snap.notes).toContain("PRE-V4");
+    expect(snap.notes.map((n) => n.problem)).toContain("PRE-V4");
     // 옛 스냅샷은 건드리지 않는다
     const old = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v1"))
@@ -556,7 +559,7 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     const transition = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v5_to_v6"))
     );
-    expect(transition.notes).toBe(raw);
+    expect(transition.notes).toEqual(JSON.parse(raw));
     // 레거시 키는 손대지 않는다
     const legacy = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v5"))
@@ -604,7 +607,7 @@ test.describe("스키마 마커 검증 (A2)", () => {
       const backup = await page.evaluate(() =>
         JSON.parse(localStorage.getItem("wr_backup_v1_to_v6"))
       );
-      expect(backup.notes).toBe(raw);
+      expect(backup.notes).toEqual(JSON.parse(raw));
       // 데이터는 보존되고 마커는 현재 버전으로 승격된다
       expect((await readNotes(page))[0].problem).toBe(`BAD-${bad}`);
       expect(

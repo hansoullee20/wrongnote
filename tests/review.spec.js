@@ -86,7 +86,7 @@ test.describe("v4 → v5 attempt 마이그레이션", () => {
     const backup = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v4_to_v6"))
     );
-    expect(backup.notes).toContain("V4-1");
+    expect(backup.notes.map((n) => n.problem)).toContain("V4-1");
   });
 
   test("seconds가 숫자가 아니면 null, 마이그레이션은 멱등", async ({ page }) => {

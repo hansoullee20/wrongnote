@@ -82,18 +82,6 @@ export function loadAll() {
      전이 키가 무력화한다. */
   const isDowngrade = storedVersion > SCHEMA_VERSION;
 
-  // 마이그레이션 직전 원본 스냅샷 — 같은 전이는 최신 원본으로 덮어쓴다
-  if (storedVersion < SCHEMA_VERSION && (rawNotes !== null || rawCards !== null)) {
-    try {
-      localStorage.setItem(
-        backupKeyFor(storedVersion, SCHEMA_VERSION),
-        JSON.stringify({ savedAt: Date.now(), notes: rawNotes, cards: rawCards })
-      );
-    } catch {
-      // 백업 실패(용량 등)해도 로드는 계속한다
-    }
-  }
-
   let error = "";
   let writeError = "";
   let notes;
@@ -119,6 +107,34 @@ export function loadAll() {
   } catch {
     error = error || "카드 데이터 파싱 실패 — 저장이 잠겼다. 원본은 그대로 있다.";
     cards = [];
+  }
+
+  /* 마이그레이션 **직전** 스냅샷. 파싱에 성공한 뒤에만 찍고, 원본 문자열이
+     아니라 배열로 남긴다 — importEnvelope가 요구하는 모양이 배열이라,
+     문자열로 남기면 이 백업은 가져오기로 되돌릴 수 없는 반쪽짜리가 된다.
+     (복원 UI는 이번 범위 밖이다. 다만 이 키의 값을 그대로 .json으로 저장해
+     기존 '가져오기'에 넣으면 노트·카드는 되돌아온다.)
+     파싱 실패면 아예 찍지 않는다: 빈 배열을 "백업"이라 부르면 원본이 멀쩡한데도
+     정상 백업처럼 보이는 파일을 쥐여주게 된다. 시드는 사용자 데이터가 아니므로
+     없는 키는 [] 로 남긴다. */
+  if (
+    !error &&
+    storedVersion < SCHEMA_VERSION &&
+    (rawNotes !== null || rawCards !== null)
+  ) {
+    try {
+      localStorage.setItem(
+        backupKeyFor(storedVersion, SCHEMA_VERSION),
+        JSON.stringify({
+          version: storedVersion,
+          savedAt: Date.now(),
+          notes: rawNotes === null ? [] : notes,
+          cards: rawCards === null ? [] : cards,
+        })
+      );
+    } catch {
+      // 백업 실패(용량 등)해도 로드는 계속한다
+    }
   }
 
   const now = Date.now();
