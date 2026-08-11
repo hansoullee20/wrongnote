@@ -125,7 +125,11 @@ export default function SettingsView({
         onReplaceAll(migrated.notes, migrated.cards);
         setImportError("");
       } catch {
-        setImportError("파싱 실패 — 데이터 변경 없음. JSON 파일을 확인해라.");
+        /* 모양이 틀렸거나, 이 앱보다 새 버전의 백업이거나 — 어느 쪽이든
+           읽기 전에 멈췄으므로 기존 데이터는 손대지 않았다 */
+        setImportError(
+          "가져오기 실패 — 데이터 변경 없음. JSON 형식이 맞는지, 이 앱보다 새 버전에서 만든 백업은 아닌지 확인해라."
+        );
       }
     };
     reader.readAsText(file);

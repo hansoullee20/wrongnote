@@ -172,3 +172,66 @@ test.describe("자동 스냅샷 복원 가능성 (A3)", () => {
     );
   });
 });
+
+/* A5 — 봉투 버전은 지금까지 적기만 하고 읽지 않았다. 미래 스키마 파일을
+   구버전 코드가 받아들이면, 그 뜻을 모른 채 현재 스키마로 다시 써서
+   되돌릴 수 없게 만든다. */
+test.describe("가져오기 버전 검증 (A5)", () => {
+  const mkFile = (obj) => ({
+    name: "b.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(obj), "utf8"),
+  });
+  const NOTE = {
+    subject: "수학", problem: "VER-1", topicMain: "", topicSub: "",
+    question: "", mySol: "", optSol: "", tags: [], derived: null, memo: "",
+    ts: 1700000000000, id: "ver1", date: "2026-06-01",
+  };
+
+  async function attemptImport(page, payload) {
+    await freshApp(page);
+    const before = JSON.stringify(await readNotes(page));
+    await page.click(".settings-open");
+    page.on("dialog", (d) => d.accept());
+    page.on("download", () => {});
+    await page
+      .locator('input[type="file"][accept*="json"]')
+      .setInputFiles(mkFile(payload));
+    await page.waitForTimeout(500);
+    return before;
+  }
+
+  test("현재 버전 봉투는 들어온다", async ({ page }) => {
+    await attemptImport(page, { version: 6, notes: [NOTE], cards: [] });
+    await expect.poll(async () => (await readNotes(page)).length).toBe(1);
+    expect((await readNotes(page))[0].problem).toBe("VER-1");
+  });
+
+  test("버전 없는 레거시 백업은 계속 들어온다", async ({ page }) => {
+    await attemptImport(page, { notes: [NOTE], cards: [] });
+    await expect.poll(async () => (await readNotes(page)).length).toBe(1);
+  });
+
+  for (const [label, version] of [
+    ["미래 버전", 99],
+    ["0", 0],
+    ["음수", -1],
+    ["소수", 6.5],
+    ["문자열", "6"],
+  ]) {
+    test(`${label} 봉투는 거부하고 데이터를 건드리지 않는다`, async ({
+      page,
+    }) => {
+      const before = await attemptImport(page, {
+        version,
+        notes: [NOTE],
+        cards: [],
+      });
+      // 오류 표시 + 기존 데이터 바이트 동일
+      await expect(page.locator(".io-error").first()).toContainText(
+        "가져오기 실패"
+      );
+      expect(JSON.stringify(await readNotes(page))).toBe(before);
+    });
+  }
+});

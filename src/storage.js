@@ -182,6 +182,17 @@ export function importEnvelope(parsed) {
   if (!parsed || !Array.isArray(parsed.notes) || !Array.isArray(parsed.cards)) {
     throw new Error("invalid shape");
   }
+  /* 봉투 버전은 지금까지 **쓰이지 않았다** — 내보낼 때 적고 읽을 때 무시했다.
+     지금은 필드가 전부 spread로 보존돼 우연히 무해하지만, 미래 스키마 파일을
+     구버전 코드가 받아들이면 그 파일의 뜻을 모른 채 현재 스키마로 다시 써서
+     되돌릴 수 없게 만든다. 버전이 있으면 검증하고, 없으면(레거시 v1 백업)
+     예전처럼 받아준다. */
+  if (parsed.version !== undefined) {
+    const v = parsed.version;
+    if (!Number.isSafeInteger(v) || v < 1 || v > SCHEMA_VERSION) {
+      throw new Error("unsupported version");
+    }
+  }
   const now = Date.now();
   return {
     notes: parsed.notes.map(migrateNote),
