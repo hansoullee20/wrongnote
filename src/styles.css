@@ -1209,7 +1209,6 @@ textarea:focus {
 
 .grade-mark.assisted {
   color: var(--success);
-  opacity: 0.75;
 }
 
 .grade-mark.fail {
@@ -2176,11 +2175,11 @@ textarea:focus {
   color: var(--success);
 }
 
-/* 도움받은 통과도 통과다 — 같은 색 계열을 쓰되 별표로 구분한다.
-   구분을 색에만 맡기면 흑백 출력·색각 이상에서 그냥 통과로 읽힌다. */
+/* 도움받은 통과도 통과다 — 같은 색을 그대로 쓰고 별표로만 구분한다.
+   opacity로 흐리게 만들지 않는다: 13px 글자가 4.5:1 아래로 떨어지는데
+   verify-contrast는 팔레트 토큰만 보므로 그걸 절대 잡지 못한다. */
 .traj-dot.assisted {
   color: var(--success);
-  opacity: 0.75;
 }
 
 .traj-dot.fail {
