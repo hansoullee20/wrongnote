@@ -790,3 +790,56 @@ test.describe("스냅샷 실패 시 저장 보류 (H2)", () => {
     await expect(page.locator('.btn:has-text("내보내기 (JSON)")')).toBeEnabled();
   });
 });
+
+/* M1 — 안전 정수를 넘는 숫자 마커. 1로 후퇴하면 "미래 버전"을 "아주 오래된
+   버전"으로 뒤집어 읽고 마이그레이션한다 — 막으려던 것과 정반대다. */
+test.describe("자릿수 넘치는 마커 (M1)", () => {
+  test("거대한 숫자 마커는 미래 버전으로 보고 잠근다", async ({ page }) => {
+    await page.goto("/");
+    const raw = await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "99999999999999999999");
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학", problem: "HUGE", topicMain: "", topicSub: "",
+            question: "", mySol: "", optSol: "", tags: [], derived: null,
+            memo: "", ts: 1700000000000, id: "h1", date: "2026-06-01",
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+      return localStorage.getItem("wr_notes");
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(400);
+
+    // 마이그레이션도 마커 강등도 일어나지 않는다
+    expect(await page.evaluate(() => localStorage.getItem("wr_notes"))).toBe(raw);
+    expect(
+      await page.evaluate(() => localStorage.getItem("wr_schema_version"))
+    ).toBe("99999999999999999999");
+    await expect(page.locator(".audit-warn").first()).toBeVisible();
+  });
+
+  test("다운그레이드 중에는 사용자 데이터 플래그도 쓰지 않는다", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      // 마커만 미래 + 노트 키 없음 → 예전엔 이 경로로 USER_DATA_KEY가 쓰였다
+      localStorage.setItem("wr_schema_version", "9");
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(400);
+
+    expect(
+      await page.evaluate(() => localStorage.getItem("wr_meta_has_user_data"))
+    ).toBeNull();
+  });
+});
