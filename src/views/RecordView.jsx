@@ -18,10 +18,10 @@ import {
   AttemptHistory,
 } from "../components.jsx";
 import { copyText } from "../clipboard.js";
+import { buildChatGPTRequest, parseAiImport } from "../aiBridge.js";
 import {
   compressImage,
   putImage,
-  deleteImages,
   getImage,
 } from "../imageStore.js";
 
@@ -95,6 +95,9 @@ const emptyDraft = (subject = "수학") => ({
   derived: null,
   tags: [],
   memo: "",
+  concepts: [],
+  questionLatex: "",
+  analysisLocale: "ko",
 });
 
 export default function RecordView({
@@ -103,7 +106,7 @@ export default function RecordView({
   onUpdate,
   initialEditId = null,
   onCancelEdit,
-  storageLocked = false,
+  locale = "ko",
 }) {
   const [draft, setDraft] = useState(() => emptyDraft());
   const [checks, setChecks] = useState([false, false, false, false]);
@@ -113,15 +116,25 @@ export default function RecordView({
   const [photo, setPhoto] = useState({ busy: false, label: "", error: "" });
   const [copied, setCopied] = useState("");
   const photoInputRef = useRef(null);
+  // 압축 동시 실행을 막는 동기 뮤텍스 (photo.busy는 렌더용, 이건 판정용)
+  const photoBusyRef = useRef(false);
+  const aiFileInputRef = useRef(null);
+  const [aiImportError, setAiImportError] = useState("");
 
   // 첨부 사진: {id}=IDB에 이미 저장(수정 모드), {blob,url}=이번에 붙인 것(저장 시 기록)
   const [photos, setPhotos] = useState([]);
+  const [solutionPhotos, setSolutionPhotos] = useState([]);
   const originalImageIds = useRef([]); // 수정 시작 시점의 저장된 사진 id
+  const originalSolutionImageIds = useRef([]);
   // IDB 쓰기 중 photos 스냅샷이 바뀌면 안 된다 — 중복 클릭·첨부·제거를 잠근다
   const [submitting, setSubmitting] = useState(false);
 
   function clearPendingPhotos() {
     setPhotos((ps) => {
+      ps.forEach((p) => p.url && URL.revokeObjectURL(p.url));
+      return [];
+    });
+    setSolutionPhotos((ps) => {
       ps.forEach((p) => p.url && URL.revokeObjectURL(p.url));
       return [];
     });
@@ -153,10 +166,15 @@ export default function RecordView({
       derived: n.derived,
       tags: n.tags,
       memo: n.memo,
+      concepts: n.concepts ?? [],
+      questionLatex: n.questionLatex ?? "",
+      analysisLocale: n.analysisLocale ?? "ko",
     });
     clearPendingPhotos();
     originalImageIds.current = n.images || [];
+    originalSolutionImageIds.current = n.solutionImages || [];
     setPhotos((n.images || []).map((id) => ({ id })));
+    setSolutionPhotos((n.solutionImages || []).map((id) => ({ id })));
     setEditingId(n.id);
     setStep(1);
     setChecks([false, false, false, false]); // 게이트는 수정에도 다시 통과해야 함
@@ -175,45 +193,92 @@ export default function RecordView({
     setChecks([false, false, false, false]);
     clearPendingPhotos();
     originalImageIds.current = [];
+    originalSolutionImageIds.current = [];
   }
 
   async function handleCopyPrompt() {
-    const ok = await copyText(buildClassifyPrompt(draft));
-    setCopied(ok ? "복사됨 — 클로드 앱에 붙여넣어라" : "복사 실패");
+    const ok = await copyText(buildChatGPTRequest({ ...draft, locale }));
+    setCopied(ok ? (locale === "en" ? "Copied — paste it with both image groups in ChatGPT" : "복사됨 — ChatGPT에 이미지와 함께 붙여넣어라") : (locale === "en" ? "Copy failed" : "복사 실패"));
     setTimeout(() => setCopied(""), 2500);
   }
 
-  async function handlePhotoFiles(e) {
-    const files = Array.from(e.target.files || []);
+  function handleAiImport(e) {
+    const file = e.target.files?.[0];
     e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = parseAiImport(reader.result);
+        setDraft((d) => ({ ...d, ...imported, problem: imported.problem || d.problem }));
+        setAiImportError("");
+      } catch {
+        setAiImportError("AI 분석 JSON 형식이 맞지 않는다. ChatGPT 응답을 파일로 저장한 뒤 다시 선택해라.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function addPhotoFiles(files, kind = "question") {
     if (!files.length) return;
+
+    /* 압축은 한 번에 하나만. setState는 비동기라 같은 렌더 구간에 들어온
+       두 번째 붙여넣기를 photo.busy로는 못 막는다 — 동기 ref가 필요하다.
+       거부할 때 busy를 건드리면 안 된다. 진행 중인 압축이 아직 살아 있는데
+       busy를 내리면 바로 그 동시성 창이 다시 열린다. */
+    if (photoBusyRef.current || submitting) {
+      setPhoto((p) => ({ ...p, error: "사진 처리 중이다 — 끝난 뒤에 추가해라" }));
+      return;
+    }
+    photoBusyRef.current = true;
 
     // 사진 첨부 — 각 파일을 압축해서 그대로 붙인다. 글자 추출은 하지 않는다.
     setPhoto({ busy: true, label: "사진 처리 중…", error: "" });
     try {
       for (const file of files) {
         const blob = await compressImage(file);
-        setPhotos((ps) => [...ps, { blob, url: URL.createObjectURL(blob) }]);
+        /* url은 여기서 만든다 — updater 클로저 안에서 만들면 React가 렌더
+           단계에 호출하므로 이 try 밖이다. 거기서 던지면 "첨부 실패"가
+           아니라 트리 언마운트(백지)가 된다. */
+        const url = URL.createObjectURL(blob);
+        const add = (ps) => [...ps, { blob, url }];
+        kind === "solution" ? setSolutionPhotos(add) : setPhotos(add);
       }
       setPhoto({ busy: false, label: "", error: "" });
     } catch {
       setPhoto({ busy: false, label: "", error: "사진 첨부 실패" });
+    } finally {
+      // 조건 없이 푼다 — 여기서 새면 폼이 영구히 잠긴다 (저장까지 막으므로)
+      photoBusyRef.current = false;
     }
   }
 
-  function removePhoto(index) {
-    setPhotos((ps) => {
+  async function handlePhotoFiles(e, kind = "question") {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    await addPhotoFiles(files, kind);
+  }
+
+  function removePhoto(index, kind = "question") {
+    const remove = (ps) => {
       const p = ps[index];
       if (p?.url) URL.revokeObjectURL(p.url);
       return ps.filter((_, i) => i !== index);
-    });
+    };
+    kind === "solution" ? setSolutionPhotos(remove) : setPhotos(remove);
   }
 
   const isMath = draft.subject === "수학";
   const gateActive = isMath && draft.cause === CAUSE_EXECUTION;
   const gatePassed = !gateActive || checks.every(Boolean);
+  // 압축 중에는 첨부·이동·저장을 모두 잠근다 — 저장이 pending 사진을 빠뜨리면
+  // 사용자는 붙여넣은 사진이 사라진 걸 나중에야 안다
+  const attachmentsLocked = photo.busy || submitting;
   const canSave =
-    draft.problem.trim().length > 0 && draft.cause !== "" && gatePassed;
+    draft.problem.trim().length > 0 &&
+    draft.cause !== "" &&
+    gatePassed &&
+    !photo.busy;
 
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -235,7 +300,7 @@ export default function RecordView({
   };
 
   const submit = async () => {
-    if (!canSave || submitting) return;
+    if (!canSave || submitting || photoBusyRef.current) return;
     setSubmitting(true);
     setPhoto((p) => ({ ...p, error: "" }));
 
@@ -243,19 +308,22 @@ export default function RecordView({
     // IDB 쿼터는 localStorage와 따로 찬다 — 여기서 던지면 onAdd가 안 불려
     // 노트가 통째로 사라지는데 예전엔 사용자에게 아무 말도 없었다.
     const imageIds = [];
+    const solutionImageIds = [];
     try {
-      for (const p of photos) {
+      for (const [source, target] of [[photos, imageIds], [solutionPhotos, solutionImageIds]]) {
+        for (const p of source) {
         if (p.id) {
-          imageIds.push(p.id);
+          target.push(p.id);
         } else {
           const newId = await putImage(p.blob);
-          imageIds.push(newId);
+          target.push(newId);
           /* 성공한 blob은 즉시 photos에 체크포인트한다. 재시도 때 p.id 경로를
              타므로 같은 사진이 두 번째 blob으로 중복 저장되지 않는다.
              object URL은 노트 저장이 실제로 성공한 뒤에만 해제한다 —
              여기서 풀면 실패 후 미리보기가 깨진 채 남는다. */
-          setPhotos((ps) => ps.map((x) => (x === p ? { ...x, id: newId } : x)));
+          (source === solutionPhotos ? setSolutionPhotos : setPhotos)((ps) => ps.map((x) => (x === p ? { ...x, id: newId } : x)));
         }
+      }
       }
     } catch {
       /* 실패해도 이미 저장된 blob을 지우지 않는다. 지금 즉시 삭제를 넣으면
@@ -270,26 +338,21 @@ export default function RecordView({
       return; // draft·첨부·수정 상태를 그대로 둬서 재시도할 수 있게 한다
     }
 
-    /* 수정 중 제거한 기존 사진은 IDB에서도 삭제.
-       이건 정리일 뿐이라 실패해도 노트 저장을 막지 않는다 — putImage 실패는
-       "저장할 수 없다"지만 이건 "옛 사진이 남는다"(누수)에 불과하다.
-       저장이 잠겼으면 아예 건너뛴다 — onUpdate가 디스크에 안 남으므로
-       새로고침하면 옛 노트가 이미 지워진 사진 id를 가리키게 된다.
-       (App.deleteNote와 같은 최소 완화책 — 근본 수정은 별도 Tier 2) */
+    /* 수정 중 제거한 기존 사진은 여기서 지우지 않는다. 저장이 디스크에
+       안착했는지 여기서는 알 수 없고, 먼저 지우면 저장 실패 시 노트가
+       이미 사라진 사진 id를 가리킨다. id만 넘기고 수거는 App이 영속 성공
+       뒤에 한다. */
     const removed = originalImageIds.current.filter(
       (id) => !imageIds.includes(id)
     );
-    if (removed.length && !storageLocked) {
-      try {
-        await deleteImages(removed);
-      } catch {
-        // 정리 실패는 삼킨다 — 고아 blob은 D-gc가 회수한다
-      }
-    }
+    const removedSolutions = originalSolutionImageIds.current.filter(
+      (id) => !solutionImageIds.includes(id)
+    );
 
-    const payload = { ...draft, problem: draft.problem.trim(), images: imageIds };
+    const payload = { ...draft, problem: draft.problem.trim(), images: imageIds, solutionImages: solutionImageIds };
     if (editingId) {
-      onUpdate(editingId, payload); // 수정 시 자동 카드 생성 없음
+      // 수정 시 자동 카드 생성 없음
+      onUpdate(editingId, payload, [...removed, ...removedSolutions]);
       setEditingId(null);
     } else {
       onAdd(payload);
@@ -299,6 +362,7 @@ export default function RecordView({
     setChecks([false, false, false, false]);
     clearPendingPhotos(); // 성공했을 때만 object URL을 해제한다
     originalImageIds.current = [];
+    originalSolutionImageIds.current = [];
     setSubmitting(false);
   };
 
@@ -345,9 +409,10 @@ export default function RecordView({
                   photoInputRef.current && photoInputRef.current.click()
                 }
               >
-                {photo.busy ? photo.label : "📷 문제 사진 첨부"}
+                {photo.busy ? photo.label : "📷 문제 사진 첨부 / 붙여넣기"}
               </Button>
               <input
+                id="rec-problem-photo"
                 ref={photoInputRef}
                 type="file"
                 accept="image/*"
@@ -364,9 +429,37 @@ export default function RecordView({
                 }
                 onClick={handleCopyPrompt}
               >
-                {copied || "분류 프롬프트 복사"}
+                {copied || "ChatGPT 요청 복사"}
               </Button>
             </div>
+            <div
+              className="photo-paste"
+              aria-disabled={attachmentsLocked}
+              tabIndex={0}
+              onPaste={(e) => {
+                const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith("image/"));
+                if (files.length) { e.preventDefault(); addPhotoFiles(files); }
+              }}
+            >
+              문제 스크린샷 붙여넣기 (여기를 탭한 뒤 붙여넣기)
+            </div>
+            <div className="ocr-row">
+              <Button
+                variant="neutral"
+                onClick={() => aiFileInputRef.current?.click()}
+              >
+                AI 분석 JSON 가져오기
+              </Button>
+              <input
+                ref={aiFileInputRef}
+                type="file"
+                accept=".json,application/json"
+                style={{ display: "none" }}
+                onChange={handleAiImport}
+              />
+              <span className="hint">질문 사진과 내 풀이 사진을 ChatGPT에 붙여넣은 뒤 받은 JSON을 가져와라.</span>
+            </div>
+            {aiImportError && <div className="io-error">{aiImportError}</div>}
             {photo.error && <div className="io-error">{photo.error}</div>}
             {photos.length > 0 && (
               <div className="photo-strip">
@@ -376,12 +469,36 @@ export default function RecordView({
                     <button
                       type="button"
                       className="photo-remove"
-                      disabled={submitting}
+                      disabled={attachmentsLocked}
                       onClick={() => removePhoto(i)}
                       aria-label="사진 제거"
                     >
                       ✕
                     </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Field label="내 풀이 사진 (선택)" hint="사진을 붙여넣거나 파일을 골라라. AI 요청에는 문제 사진과 함께 이 사진도 첨부한다.">
+              <input id="rec-solution-photo" type="file" accept="image/*" multiple disabled={attachmentsLocked} onChange={(e) => handlePhotoFiles(e, "solution")} />
+            </Field>
+            <div
+              className="photo-paste"
+              aria-disabled={attachmentsLocked}
+              tabIndex={0}
+              onPaste={(e) => {
+                const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith("image/"));
+                if (files.length) { e.preventDefault(); addPhotoFiles(files, "solution"); }
+              }}
+            >
+              내 풀이 스크린샷 붙여넣기 (여기를 탭한 뒤 붙여넣기)
+            </div>
+            {solutionPhotos.length > 0 && (
+              <div className="photo-strip">
+                {solutionPhotos.map((p, i) => (
+                  <div key={p.id || p.url} className="photo-strip-item">
+                    <PhotoThumb photo={p} />
+                    <button type="button" className="photo-remove" disabled={attachmentsLocked} onClick={() => removePhoto(i, "solution")} aria-label="내 풀이 사진 제거">✕</button>
                   </div>
                 ))}
               </div>
@@ -394,6 +511,11 @@ export default function RecordView({
                 onChange={(e) => set({ question: e.target.value })}
               />
             </Field>
+            {draft.questionLatex && (
+              <Field label="문제 LaTex" hint="AI가 읽은 수식 — 저장 전 확인">
+                <textarea rows={2} value={draft.questionLatex} onChange={(e) => set({ questionLatex: e.target.value })} />
+              </Field>
+            )}
 
                 <div className="label">답 마킹</div>
                 <div className="ans-line">
@@ -452,8 +574,12 @@ export default function RecordView({
                 variant="primary"
                 size="lg"
                 block
-                disabled={!draft.problem.trim()}
-                onClick={() => setStep(2)}
+                disabled={!draft.problem.trim() || attachmentsLocked}
+                onClick={() => {
+                  // 압축 중 이동하면 pending 사진이 저장에서 빠진다
+                  if (photoBusyRef.current) return;
+                  setStep(2);
+                }}
               >
                 다음 — 왜 틀렸나
               </Button>
@@ -500,6 +626,20 @@ export default function RecordView({
               <div className="hint">{CAUSE_HINTS[draft.cause]}</div>
             )}
 
+            <Field label="이해가 부족했던 개념" hint="쉼표로 나눠 적어라. AI JSON을 가져오면 자동으로 채워진다.">
+              <input
+                value={draft.concepts.join(", ")}
+                onChange={(e) =>
+                  set({
+                    concepts: e.target.value
+                      .split(",")
+                      .map((x) => x.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
+            </Field>
+
             <div className="label">세부 — 여러 개 가능</div>
             {isMath && (
               <MultiChipRow
@@ -543,7 +683,9 @@ export default function RecordView({
                     })
                   }
                 />
-                {draft.topicMain && (
+                {/* 이미 저장된 노트에도 분류체계 밖 대단원이 있을 수 있다
+                    (검증 없던 시절 AI import). truthy만 보면 여기서 터진다. */}
+                {Object.hasOwn(MATH_TOPICS, draft.topicMain) && (
                   <>
                     <div className="label">소단원</div>
                     <ChipRow

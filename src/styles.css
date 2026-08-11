@@ -1207,6 +1207,10 @@ textarea:focus {
   color: var(--success);
 }
 
+.grade-mark.assisted {
+  color: var(--success);
+}
+
 .grade-mark.fail {
   color: var(--red-pen);
 }
@@ -1220,6 +1224,18 @@ textarea:focus {
 /* ---- 문제 사진 ---- */
 
 /* 폼 첨부 썸네일 스트립 */
+.photo-paste {
+  margin: 8px 0;
+  padding: 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.photo-paste:focus { outline: 2px solid var(--action); outline-offset: 2px; }
+
 .photo-strip {
   display: flex;
   flex-wrap: wrap;
@@ -1902,6 +1918,25 @@ textarea:focus {
   font-size: var(--fs-base);
 }
 
+/* 채점 직전에 묻는 도움 여부 — 설정의 mode-switch를 그대로 재사용한다 */
+.help-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-top: var(--sp-4);
+}
+
+.help-choice-label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.help-choice .mode-switch {
+  flex: 1;
+  min-width: 160px;
+}
+
 .grade-row {
   display: flex;
   gap: var(--sp-3);
@@ -2152,8 +2187,22 @@ textarea:focus {
   color: var(--success);
 }
 
+/* 도움받은 통과도 통과다 — 같은 색을 그대로 쓰고 별표로만 구분한다.
+   opacity로 흐리게 만들지 않는다: 13px 글자가 4.5:1 아래로 떨어지는데
+   verify-contrast는 팔레트 토큰만 보므로 그걸 절대 잡지 못한다. */
+.traj-dot.assisted {
+  color: var(--success);
+}
+
 .traj-dot.fail {
   color: var(--red-pen);
+}
+
+/* 13px 도트 줄에서 ✓* 만 넓어지면 gap이 들쭉날쭉해 보인다 */
+.traj-star {
+  font-size: 0.8em;
+  vertical-align: super;
+  line-height: 0;
 }
 
 .traj-none {

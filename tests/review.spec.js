@@ -68,10 +68,13 @@ test.describe("v4 → v5 attempt 마이그레이션", () => {
     expect(a0.tags).toEqual([]);
     expect(a0.memo).toBe("");
     expect(a0.source).toBe("legacy");
+    // v6: 과거 시도의 도움 여부는 알 수 없다 — 추측하지 않고 false
+    expect(a0.assisted).toBe(false);
     // 결정적 id
     expect(a0.id).toBe("legacy:v4n1:0:1700000100000");
 
     expect(a1.result).toBe("pass");
+    expect(a1.assisted).toBe(false);
     expect(a1.id).toBe("legacy:v4n1:1:1700000200000");
     // 모르는 필드도 spread로 보존
     expect(a1.extra).toBe("keep");
@@ -79,11 +82,11 @@ test.describe("v4 → v5 attempt 마이그레이션", () => {
     // 버전 승격 + v4 원본 스냅샷
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("5");
+    ).toBe("7");
     const backup = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("wr_backup_v4"))
+      JSON.parse(localStorage.getItem("wr_backup_v4_to_v7"))
     );
-    expect(backup.notes).toContain("V4-1");
+    expect(backup.notes.map((n) => n.problem)).toContain("V4-1");
   });
 
   test("seconds가 숫자가 아니면 null, 마이그레이션은 멱등", async ({ page }) => {
@@ -149,6 +152,67 @@ test.describe("review 셀렉터", () => {
     expect(results.fUnattempted).toBe(false);
   });
 
+  test("도움받은 pass는 연속 기록을 끊는다 (졸업 게이트)", async ({ page }) => {
+    const results = await evalReview(page, (r) => {
+      // "p" 독립 pass · "a" 도움받은 pass · "f" 실패
+      const mk = (pattern) => ({
+        id: "x",
+        ts: 0,
+        attempts: pattern.map((p, i) => ({
+          correct: p !== "f",
+          assisted: p === "a",
+          ts: i + 1,
+        })),
+      });
+      const probe = (pattern) => ({
+        streak: r.getConsecutivePasses(mk(pattern)),
+        state: r.classifyReviewState(mk(pattern)),
+      });
+      return {
+        pp: probe(["p", "p"]),
+        pap: probe(["p", "a", "p"]),
+        papp: probe(["p", "a", "p", "p"]),
+        pa: probe(["p", "a"]),
+        fa: probe(["f", "a"]),
+        aa: probe(["a", "a"]),
+      };
+    });
+
+    // 기준선: 도움 없는 연속 2회는 졸업이다
+    expect(results.pp).toEqual({ streak: 2, state: "graduated" });
+    // 도움받은 pass가 끼면 그 이전 pass는 이어지지 않는다
+    expect(results.pap).toEqual({ streak: 1, state: "progress" });
+    // 리셋 후 다시 2회 독립 pass하면 졸업한다
+    expect(results.papp).toEqual({ streak: 2, state: "graduated" });
+    // 마지막이 도움받은 pass면 streak 0 — 그래도 correct라 unstable은 아니다
+    expect(results.pa).toEqual({ streak: 0, state: "progress" });
+    expect(results.fa).toEqual({ streak: 0, state: "progress" });
+    // 도움받은 pass만 쌓아서는 절대 졸업할 수 없다
+    expect(results.aa).toEqual({ streak: 0, state: "progress" });
+  });
+
+  test("assisted 필드가 없는 레거시 시도는 독립 pass로 센다", async ({
+    page,
+  }) => {
+    const results = await evalReview(page, (r) => {
+      const legacy = {
+        id: "L",
+        ts: 0,
+        attempts: [
+          { correct: false, ts: 1 },
+          { correct: true, ts: 2 },
+          { correct: true, ts: 3 },
+        ],
+      };
+      return {
+        streak: r.getConsecutivePasses(legacy),
+        state: r.classifyReviewState(legacy),
+      };
+    });
+    // 필드 없음 = falsy — v5에서 졸업했던 노트가 조용히 강등되면 안 된다
+    expect(results).toEqual({ streak: 2, state: "graduated" });
+  });
+
   test("궤적은 최근 N개, 그룹 정렬은 결정적", async ({ page }) => {
     const results = await evalReview(page, (r) => {
       const many = {
@@ -191,15 +255,25 @@ test.describe("review 셀렉터", () => {
       });
       return r.calculateImprovement([
         mk("improved", ["f", "p"]), // eligible + improved
+        // 도움받은 pass도 개선으로 센다 — 졸업 게이트와 달리 의도적 비변경.
+        // 개선율은 "틀리던 걸 이제 맞힌다"이지 "혼자 맞힌다"가 아니다.
+        {
+          id: "assisted",
+          ts: 0,
+          attempts: [
+            { correct: false, ts: 0 },
+            { correct: true, assisted: true, ts: 1 },
+          ],
+        },
         mk("still", ["f", "f"]), // eligible
         mk("passonly", ["p", "p"]), // 제외
         mk("never", []), // 제외
       ]);
     });
 
-    expect(results.eligible).toBe(2);
-    expect(results.improved).toBe(1);
-    expect(results.rate).toBe(0.5);
+    expect(results.eligible).toBe(3);
+    expect(results.improved).toBe(2); // improved + assisted
+    expect(results.rate).toBeCloseTo(2 / 3);
   });
 });
 
@@ -327,5 +401,199 @@ test.describe("안정성 그룹 UI", () => {
     await page.click('.grade-btn:has-text("채점하기")');
     // 더 이상 불안정이 없다 — 졸업을 끌어오지 않는다
     await expect(page.locator('.end-btn:has-text("결과 보기")')).toBeVisible();
+  });
+});
+
+test.describe("도움받은 통과 표시 (v6)", () => {
+  /** 실패 2(원인 다름) · 도움받은 통과 · 독립 통과 순서로 심는다 */
+  async function seedMarks(page) {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학",
+            problem: "MARK-1",
+            topicMain: "수II·미분",
+            topicSub: "",
+            question: "MARK-1 원문",
+            mySol: "",
+            optSol: "최적 풀이",
+            cause: "개념 부족",
+            tags: [],
+            derived: null,
+            memo: "",
+            correctAnswer: "③",
+            myAnswer: "②",
+            attempts: [
+              {
+                id: "m1", ts: 1700000100000, answer: "②", correct: false,
+                result: "fail", seconds: 60, cause: "개념 부족", tags: [],
+                memo: "", source: "scheduled", assisted: false,
+              },
+              {
+                id: "m2", ts: 1700000200000, answer: "①", correct: false,
+                result: "fail", seconds: 70, cause: "읽기 실패", tags: [],
+                memo: "", source: "scheduled", assisted: false,
+              },
+              {
+                id: "m3", ts: 1700000300000, answer: "③", correct: true,
+                result: "pass", seconds: 50, cause: "", tags: [],
+                memo: "", source: "scheduled", assisted: true,
+              },
+              {
+                id: "m4", ts: 1700000400000, answer: "③", correct: true,
+                result: "pass", seconds: 40, cause: "", tags: [],
+                memo: "", source: "scheduled", assisted: false,
+              },
+            ],
+            ts: 1700000000000,
+            id: "mark1",
+            date: "2026-06-01",
+            rechecked: true,
+            recheckResult: "pass",
+            recheckCount: 4,
+            nextRecheckTs: null,
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+    await page.waitForTimeout(300);
+  }
+
+  test("궤적: ✕ ✕ ✓* ✓ — 도움받은 통과가 따로 보인다", async ({ page }) => {
+    await seedMarks(page);
+
+    const card = page.locator('.prob-card:has-text("MARK-1")');
+    await expect(card.locator(".traj-dot")).toHaveCount(4);
+    await expect(card.locator(".traj-dot.fail")).toHaveCount(2);
+    await expect(card.locator(".traj-dot.assisted")).toHaveCount(1);
+    await expect(card.locator(".traj-dot.pass")).toHaveCount(1);
+    // 순서 보존 — 오래된 것 → 최신
+    await expect(card.locator(".traj")).toHaveText("✕✕✓*✓");
+
+    /* 색이 아니라 라벨이 구분을 짊어진다.
+       속성을 직접 읽으면 role="img"가 사라져 이름이 노출되지 않게 돼도
+       그대로 통과한다 — 접근성 트리에서 **역할과 이름으로** 찾는다. */
+    await expect(
+      card.getByRole("img", {
+        name: "재풀이 궤적: 개념 부족, 읽기 실패, 도움받음, 통과",
+      })
+    ).toBeVisible();
+    // 도트 자체는 장식이어야 한다 (이름이 두 번 읽히면 안 된다)
+    const hidden = await card
+      .locator(".traj-dot")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-hidden")));
+    expect(hidden).toEqual(["true", "true", "true", "true"]);
+  });
+
+  test("이력 로그: 같은 네 시도가 같은 표기로 나온다", async ({ page }) => {
+    await seedMarks(page);
+
+    await page.click('.prob-card:has-text("MARK-1") .prob-card-edit');
+    await page.click('.btn--primary:has-text("다음 — 왜 틀렸나")');
+    await expect(page.locator(".attempt-history")).toBeVisible();
+
+    const lines = page.locator(".attempt-line");
+    await expect(lines).toHaveCount(4);
+    await expect(lines.locator(".grade-mark.fail")).toHaveCount(2);
+    await expect(lines.locator(".grade-mark.assisted")).toHaveCount(1);
+    await expect(lines.locator(".grade-mark.pass")).toHaveCount(1);
+
+    // 이력은 본문이 글로 말하므로 마크는 장식이다
+    await expect(lines.nth(0)).toContainText("개념 부족");
+    await expect(lines.nth(1)).toContainText("읽기 실패");
+    await expect(lines.nth(2)).toContainText("도움받음");
+    await expect(lines.nth(3)).toContainText("통과");
+    await expect(lines.nth(2).locator(".grade-mark")).toHaveAttribute(
+      "aria-hidden",
+      "true"
+    );
+  });
+});
+
+/* verify-contrast.mjs는 팔레트 토큰만 계산한다 — CSS opacity나 합성 결과는
+   보지 못한다. 실제로 opacity: 0.75가 이 마크를 3.21:1까지 떨어뜨린 적이
+   있는데도 게이트는 초록이었다. 그래서 **그려진 픽셀 기준**으로 다시 잰다. */
+test.describe("도움 표시 대비 — 렌더링 기준 (v6)", () => {
+  const PALETTE_IDS = ["warm", "mauve", "plum", "teal", "sage", "sky", "graphite", "navy"];
+
+  test("모든 팔레트·주야에서 ✓* 가 4.5:1 이상이다", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학", problem: "CONTRAST-1", topicMain: "", topicSub: "",
+            question: "", mySol: "", optSol: "", cause: "", tags: [],
+            derived: null, memo: "", correctAnswer: "③", myAnswer: "",
+            examTime: "", images: [], solutionImages: [],
+            attempts: [{
+              id: "c1", ts: 1700000100000, answer: "③", correct: true,
+              result: "pass", seconds: 30, cause: "", tags: [], memo: "",
+              source: "scheduled", assisted: true,
+            }],
+            ts: 1700000000000, id: "contrast1", date: "2026-06-01",
+            rechecked: true, recheckResult: "pass", recheckCount: 1,
+            nextRecheckTs: null,
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+    });
+
+    const worst = { ratio: 99, where: "" };
+    for (const id of PALETTE_IDS) {
+      for (const mode of ["light", "dark"]) {
+        await page.evaluate(
+          ([p, m]) => {
+            localStorage.setItem("wr_palette", p);
+            localStorage.setItem("wr_theme", m);
+          },
+          [id, mode]
+        );
+        await page.reload();
+        await page.locator(".traj-dot.assisted").first().waitFor();
+
+        const ratio = await page.evaluate(() => {
+          const el = document.querySelector(".traj-dot.assisted");
+          const parse = (s) => s.match(/[\d.]+/g).slice(0, 3).map(Number);
+          // 배경은 투명일 수 있으니 실제로 칠해진 조상까지 거슬러 올라간다
+          let bgEl = el, bg = null;
+          while (bgEl) {
+            const c = getComputedStyle(bgEl).backgroundColor;
+            const v = parse(c);
+            const alpha = c.startsWith("rgba") ? Number(c.match(/[\d.]+/g)[3]) : 1;
+            if (alpha > 0) { bg = v; break; }
+            bgEl = bgEl.parentElement;
+          }
+          const cs = getComputedStyle(el);
+          const fg = parse(cs.color);
+          // 조상까지 누적된 opacity를 전부 곱해 실제 합성 결과를 만든다
+          let a = 1, n = el;
+          while (n && n !== document.documentElement) {
+            a *= Number(getComputedStyle(n).opacity);
+            n = n.parentElement;
+          }
+          const eff = fg.map((v, i) => v * a + bg[i] * (1 - a));
+          const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+          const L = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+          const [hi, lo] = [L(eff), L(bg)].sort((x, y) => y - x);
+          return (hi + 0.05) / (lo + 0.05);
+        });
+
+        if (ratio < worst.ratio) { worst.ratio = ratio; worst.where = `${id}/${mode}`; }
+        expect(ratio, `${id}/${mode} 대비 ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    // 최악값이 실제로 계산됐는지 — 전부 건너뛰고 통과하는 일이 없게
+    expect(worst.ratio).toBeLessThan(99);
   });
 });

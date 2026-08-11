@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>오답노트 — 테마 목업</title>
+    <style>
+      :root {
+        --bg: #d8d9d7;
+        --paper: #fafafa;
+        --surface: #f1f2f2;
+        --border: #d1d3d4;
+        --border-strong: #9b9fa1;
+        --ink: #242729;
+        --secondary: #5e6569;
+        --muted: #777f83;
+        --action: #344e62;
+        --action-hover: #45657e;
+        --on-action: #fafafa;
+        --error: #a34d4d;
+        --error-soft: #f8e8e7;
+        --success: #426d58;
+        --success-soft: #e7f0e9;
+        --shadow: 0 14px 38px rgb(38 43 46 / 13%);
+      }
+
+      [data-palette="navy"] {
+        --bg: #dce2e8;
+        --paper: #fafbfd;
+        --surface: #edf1f5;
+        --border: #d3dbe4;
+        --border-strong: #94a7ba;
+        --ink: #202c38;
+        --secondary: #526476;
+        --muted: #708195;
+        --action: #285b82;
+        --action-hover: #34749f;
+        --on-action: #fafbfd;
+        --error: #a14f4f;
+        --error-soft: #f9e8e7;
+        --success: #397162;
+        --success-soft: #e4f0ec;
+        --shadow: 0 14px 38px rgb(27 52 76 / 14%);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+      .page { width: min(100% - 32px, 800px); margin: 0 auto; padding: 28px 0 64px; }
+      .masthead {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        padding: 18px 20px 14px; background: var(--paper); border: 1px solid var(--border);
+        border-bottom: 2px solid var(--border-strong); border-radius: 16px 16px 0 0;
+      }
+      .eyebrow { margin: 0 0 3px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+      h1 { margin: 0; font-family: Georgia, "Nanum Myeongjo", serif; font-size: 23px; letter-spacing: .08em; }
+      .count { color: var(--error); border: 1px solid currentColor; border-radius: 7px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
+      main { background: var(--paper); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 16px 16px; box-shadow: var(--shadow); padding: 24px 20px; }
+      .intro { margin: 0 0 20px; color: var(--secondary); }
+      .panel { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+      .panel-head { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
+      .panel-head strong { font-size: 14px; }
+      .panel-head span { color: var(--muted); font-size: 12px; }
+      .question { padding: 18px 14px 10px; font-family: Georgia, "Nanum Myeongjo", serif; font-size: 18px; font-weight: 700; }
+      .choices { display: grid; gap: 8px; padding: 8px 14px 18px; }
+      .choice { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px; color: var(--secondary); }
+      .choice b { color: var(--ink); }
+      .choice.selected { border-color: var(--action); box-shadow: 0 0 0 3px color-mix(in srgb, var(--action) 22%, transparent); }
+      .choice.selected b { color: var(--action); }
+      .feedback { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 13px 14px; background: var(--error-soft); border-left: 3px solid var(--error); border-radius: 8px; }
+      .feedback strong { color: var(--error); font-size: 14px; }
+      .feedback small { color: var(--secondary); }
+      .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px; }
+      button { appearance: none; border: 1px solid transparent; border-radius: 9px; min-height: 42px; padding: 0 15px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+      .primary { background: var(--action); color: var(--on-action); }
+      .secondary { background: var(--paper); border-color: var(--border-strong); color: var(--secondary); }
+      .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 24px; }
+      .token { border: 1px solid var(--border); border-radius: 9px; padding: 10px; font-size: 12px; }
+      .swatch { display: block; height: 8px; border-radius: 99px; margin-bottom: 7px; }
+      .swatch.action { background: var(--action); }.swatch.error { background: var(--error); }.swatch.success { background: var(--success); }
+      .token b { display: block; font-size: 12px; }.token span { color: var(--muted); }
+      .palette-switch { display: flex; gap: 6px; }
+      .palette-switch button { min-height: 32px; padding: 0 9px; background: var(--paper); border-color: var(--border); color: var(--secondary); font-size: 12px; }
+      .palette-switch button.active { background: var(--action); border-color: var(--action); color: var(--on-action); }
+      @media (max-width: 520px) { .masthead { align-items: flex-start; } .legend { grid-template-columns: 1fr; } .page { width: min(100% - 20px, 800px); } }
+    </style>
+  </head>
+  <body data-palette="graphite">
+    <div class="page">
+      <header class="masthead">
+        <div><p class="eyebrow">WRONG NOTE · THEME DIRECTION</p><h1>오답노트</h1></div>
+        <div><div class="palette-switch" aria-label="팔레트 선택"><button class="active" data-palette="graphite">흑연</button><button data-palette="navy">남색</button></div></div>
+        <span class="count">오늘 12문제</span>
+      </header>
+      <main>
+        <p class="intro">새 팔레트는 종이 같은 지면 구조를 유지하면서, 행동과 오답을 서로 다른 신호로 분리합니다.</p>
+        <section class="panel">
+          <div class="panel-head"><strong>2027학년도 6월 모의평가 · 수학 14번</strong><span>재풀이 2회차</span></div>
+          <div class="question">다음 중 함수의 최댓값이 되는 x의 값은?</div>
+          <div class="choices"><div class="choice"><b>①</b> −2</div><div class="choice selected"><b>②</b> 0</div><div class="choice"><b>③</b> 1</div><div class="choice"><b>④</b> 3</div></div>
+        </section>
+        <div class="feedback"><div><strong>오답 · 계산 실수</strong><br /><small>정답은 ③입니다. 부호가 바뀌는 지점을 다시 확인해 보세요.</small></div><span>✎</span></div>
+        <div class="actions"><button class="primary">다시 풀기</button><button class="secondary">풀이 보기</button></div>
+        <section class="legend" aria-label="색 역할"><div class="token"><i class="swatch action"></i><b>행동색</b><span>선택 · 포커스 · 진행</span></div><div class="token"><i class="swatch error"></i><b>오답색</b><span>실패 · 수정할 지점</span></div><div class="token"><i class="swatch success"></i><b>통과색</b><span>정답 · 회복</span></div></section>
+      </main>
+    </div>
+    <script>
+      document.querySelectorAll("[data-palette]").forEach((button) => button.addEventListener("click", () => {
+        document.body.dataset.palette = button.dataset.palette;
+        document.querySelectorAll(".palette-switch button").forEach((item) => item.classList.toggle("active", item === button));
+      }));
+    </script>
+  </body>
+</html>

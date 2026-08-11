@@ -57,9 +57,9 @@ const seedBlobs = (page, ids) =>
     { ids, url: TINY_PNG_URL }
   );
 
-const seedNoteWithImages = (page, { problem, images }) =>
+const seedNoteWithImages = (page, { problem, images, solutionImages = [] }) =>
   page.evaluate(
-    ({ problem, images }) => {
+    ({ problem, images, solutionImages }) => {
       localStorage.setItem(
         "wr_notes",
         JSON.stringify([
@@ -80,7 +80,7 @@ const seedNoteWithImages = (page, { problem, images }) =>
             tags: [],
             memo: "",
             images,
-            solutionImages: [],
+            solutionImages,
             attempts: [],
             ts: Date.now(),
             date: "2026-08-06",
@@ -93,7 +93,7 @@ const seedNoteWithImages = (page, { problem, images }) =>
       );
       localStorage.setItem("wr_cards", "[]");
     },
-    { problem, images }
+    { problem, images, solutionImages }
   );
 
 /**
@@ -484,5 +484,68 @@ test.describe("IDB 복원 실패 — 가져오기를 중단한다", () => {
       )
       .toBe(true);
     expect(await readImageIds(page)).toEqual(["imp_a", "imp_b"]);
+  });
+});
+
+/* 수정 중 제거한 사진은 노트가 디스크에 안착한 뒤에만 수거한다.
+   먼저 지우면 저장 실패 시 노트는 옛 id를 그대로 가리키는데 blob만 사라진다 —
+   되돌릴 수 없는 손실이다. 이건 손실 방향이 한쪽뿐이라 누수보다 나쁘다. */
+test.describe("저장 실패 시 제거된 사진은 살아남는다", () => {
+  test("쓰기가 막히면 blob도 노트 참조도 그대로다", async ({ page }) => {
+    await freshApp(page);
+    await seedBlobs(page, ["keep_q1", "drop_s1"]);
+    await seedNoteWithImages(page, {
+      problem: "REMOVE-FAIL",
+      images: ["keep_q1"],
+      solutionImages: ["drop_s1"],
+    });
+    await installQuotaTrap(page);
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+
+    const noteBefore = await readRaw(page, "wr_notes");
+
+    await openNoteByProblem(page, "REMOVE-FAIL");
+    // 해설 사진만 제거한다 (두 번째 스트립)
+    await page.locator(".photo-remove").last().click();
+
+    await armQuota(page);
+    await goAnalysis(page);
+    await page.click('.btn--primary:has-text("저장")');
+
+    await expect(page.locator(".audit-warn").first()).toBeVisible();
+
+    // 디스크의 노트는 손대지 않았으므로 여전히 해설 사진을 가리킨다
+    expect(await readRaw(page, "wr_notes")).toBe(noteBefore);
+    // 그리고 그 blob이 실제로 남아 있어야 참조가 유효하다
+    expect(await readImageIds(page)).toContain("drop_s1");
+  });
+
+  test("저장이 성공하면 그때 수거된다", async ({ page }) => {
+    await freshApp(page);
+    await seedBlobs(page, ["keep_q2", "drop_s2"]);
+    await seedNoteWithImages(page, {
+      problem: "REMOVE-OK",
+      images: ["keep_q2"],
+      solutionImages: ["drop_s2"],
+    });
+    await page.reload();
+    await page.getByRole("button", { name: /^문제/ }).waitFor();
+
+    await openNoteByProblem(page, "REMOVE-OK");
+    await page.locator(".photo-remove").last().click();
+    await goAnalysis(page);
+    await page.click('.btn--primary:has-text("저장")');
+
+    await expect
+      .poll(async () =>
+        (await readNotes(page)).find((n) => n.problem === "REMOVE-OK")
+          ?.solutionImages?.length
+      )
+      .toBe(0);
+    // 영속 성공 뒤에는 실제로 사라진다 — 지연이 누수로 굳으면 안 된다
+    await expect.poll(async () => await readImageIds(page)).not.toContain("drop_s2");
+    // 남긴 사진은 건드리지 않는다
+    expect(await readImageIds(page)).toContain("keep_q2");
   });
 });

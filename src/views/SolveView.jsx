@@ -85,12 +85,15 @@ export default function SolveView({
 }) {
   const [queue, setQueue] = useState([]); // 노트 id 배열
   const [index, setIndex] = useState(0);
-  const [results, setResults] = useState([]); // {id, correct, seconds, answer}
+  const [results, setResults] = useState([]); // {id, correct, seconds, answer, assisted}
   // idle | solving | classifying_fail | graded | summary
   const [phase, setPhase] = useState("idle");
   const [picked, setPicked] = useState("");
   const [freeAnswer, setFreeAnswer] = useState("");
   const [answerFix, setAnswerFix] = useState(""); // 정답이 비어 있을 때 지금 입력
+  /* 이번 시도에 도움을 썼는가 — 사용자가 직접 주장하는 값이다.
+     pass는 채점 즉시 저장되므로 채점 **전에** 답이 나와 있어야 한다. */
+  const [assisted, setAssisted] = useState(false);
   const [randomSize, setRandomSize] = useState(5);
   const [scope, setScope] = useState({ label: "", cause: "", source: "manual" });
   const startedAt = useRef(0);
@@ -114,6 +117,7 @@ export default function SolveView({
     setPicked("");
     setFreeAnswer("");
     setAnswerFix("");
+    setAssisted(false); // 큐를 새로 시작해도 도움 여부가 새어들면 안 된다
     setPendingFailure(null);
     setScope({ label, cause: "", source });
     setPhase("solving");
@@ -407,9 +411,16 @@ export default function SolveView({
         answer,
         correct: true,
         seconds,
+        assisted,
         source: scope.source,
       });
-      setResults((rs) => [...rs, { id: current.id, correct: true, seconds, answer }]);
+      /* assisted를 결과 스냅샷에 같이 넣는다 — 채점 화면이 컴포넌트 state를
+         읽으면 next()가 리셋하는 "다음 입력"의 수명에 매달리게 된다.
+         results는 일어난 일의 기록이고, 그 수명이 곧 이 화면의 수명이다. */
+      setResults((rs) => [
+        ...rs,
+        { id: current.id, correct: true, seconds, answer, assisted },
+      ]);
       setPhase("graded");
       return;
     }
@@ -418,7 +429,11 @@ export default function SolveView({
     beginFailClassification({ answer, seconds, source: scope.source });
   }
 
-  /** 풀이 보기 — 이번 시도는 fail로 기록되고, 분류를 마쳐야 저장된다 */
+  /* 풀이 보기 — 이번 시도는 fail로 기록되고, 분류를 마쳐야 저장된다.
+     D3: 여기서 assisted를 켜지 않는다. 풀이를 봤다는 **관측된** 사실은
+     source: "solution_reveal"이 이미 기록한다. assisted는 사용자가 직접
+     주장한 값이고, 위 선택에서 '예'를 골랐다면 그대로 흘러간다.
+     시스템이 대신 추론하기 시작하면 두 필드가 같은 말을 다르게 하게 된다. */
   function revealSolution() {
     const seconds = Math.max(1, Math.round((Date.now() - startedAt.current) / 1000));
     beginFailClassification({ answer, seconds, source: "solution_reveal" });
@@ -430,6 +445,8 @@ export default function SolveView({
       answer: a,
       correct: false,
       seconds,
+      // 분류를 마칠 때까지 살아남아야 한다 — finalizeFail이 이 객체를 편다
+      assisted,
       source,
     });
     setFailCause("");
@@ -456,6 +473,8 @@ export default function SolveView({
         correct: false,
         seconds: pendingFailure.seconds,
         answer: pendingFailure.answer,
+        // 분류 전에 찍힌 값을 그대로 — 모든 결과 스냅샷이 같은 모양이어야 한다
+        assisted: pendingFailure.assisted,
       },
     ]);
     setPendingFailure(null);
@@ -476,6 +495,7 @@ export default function SolveView({
     setPicked("");
     setFreeAnswer("");
     setAnswerFix("");
+    setAssisted(false); // 앞 문제의 도움 여부가 다음 문제로 새면 안 된다
     setPendingFailure(null);
     setPhase("solving");
     startedAt.current = Date.now();
@@ -558,6 +578,40 @@ export default function SolveView({
                 />
               </div>
             )}
+          </div>
+
+          {/* 채점 **전에** 묻는다. pass는 채점 즉시 저장되므로 뒤에 물으면
+              늦고, 새 화면을 만들면 재풀이가 한 단계 길어진다.
+              도움받은 pass는 졸업 연속 기록을 끊는다 — 다시 볼 때까지의
+              간격은 그대로다. */}
+          <div className="help-choice">
+            <span className="help-choice-label" id="solve-assist-label">
+              도움을 사용했나?
+            </span>
+            {/* 그룹으로 묶어 질문을 버튼에 **프로그램적으로** 잇는다 —
+                안 그러면 보조기기에서 "예" 한 마디만 들리고 무엇에 대한
+                예인지 알 방법이 없다 */}
+            <div
+              className="mode-switch"
+              role="group"
+              aria-labelledby="solve-assist-label"
+            >
+              {[
+                { id: "solve-assist-no", label: "아니오", value: false },
+                { id: "solve-assist-yes", label: "예", value: true },
+              ].map((c) => (
+                <button
+                  key={c.id}
+                  id={c.id}
+                  type="button"
+                  className={`mode-switch-btn${assisted === c.value ? " on" : ""}`}
+                  aria-pressed={assisted === c.value}
+                  onClick={() => setAssisted(c.value)}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {knownCorrect || answerFix.trim() ? (
@@ -712,6 +766,15 @@ export default function SolveView({
               {current.recheckCount}번째 시도 · 재검증{" "}
               {justResult.correct ? "통과" : "실패"}로 기록됨
               <br />
+              {/* 도움받은 pass는 통과로 기록되지만 졸업 연속 기록은 끊긴다.
+                  여기서 말하지 않으면 나중에 "왜 졸업이 안 되지"라는 원인 모를
+                  현상으로만 드러난다 — 정직한 자기 보고를 그렇게 갚으면 안 된다. */}
+              {justResult.correct && justResult.assisted && (
+                <>
+                  도움받은 통과 — 졸업까지 연속 통과는 다시 0회
+                  <br />
+                </>
+              )}
               {justResult.correct
                 ? "다음 복습은 2주 뒤로 밀린다"
                 : "다음 복습은 내일로 당겨진다"}

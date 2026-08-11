@@ -47,6 +47,41 @@ async function seedOneSolvable(
   await page.waitForTimeout(300);
 }
 
+/** 재검증 주기가 지난 노트 2개 — seedOneSolvable은 매번 clear라 큐가 1개다 */
+async function seedTwoSolvable(page) {
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.clear();
+    const mk = (id, problem) => ({
+      subject: "수학",
+      problem,
+      topicMain: "수II·미분",
+      topicSub: "접선",
+      question: "다시 풀 문제 원문",
+      mySol: "처음에 이렇게 틀렸다",
+      optSol: "이렇게 푸는 게 빠르다",
+      cause: "실행 실수",
+      correctAnswer: "③",
+      myAnswer: "②",
+      attempts: [],
+      tags: [],
+      derived: null,
+      memo: "",
+      ts: Date.now() - 30 * 86400000, // 재검증 주기(14일) 지난 상태
+      id,
+      date: "2026-06-19",
+    });
+    localStorage.setItem(
+      "wr_notes",
+      JSON.stringify([mk("two_a", "TWO-A"), mk("two_b", "TWO-B")])
+    );
+    localStorage.setItem("wr_cards", JSON.stringify([]));
+  });
+  await page.reload();
+  await page.getByRole("button", { name: /^문제/ }).waitFor();
+  await page.waitForTimeout(300);
+}
+
 test.describe("다시 풀기 세션", () => {
   test("오답 → 자동 채점, 시도 기록, 다음 복습 당겨짐", async ({ page }) => {
     await seedOneSolvable(page);
@@ -78,6 +113,8 @@ test.describe("다시 풀기 세션", () => {
     expect(note.attempts[0].cause).toBe("개념 부족");
     expect(note.attempts[0].result).toBe("fail");
     expect(note.attempts[0].source).toBe("scheduled");
+    // v6: 아무도 도움을 주장하지 않으면 false
+    expect(note.attempts[0].assisted).toBe(false);
     expect(note.recheckResult).toBe("fail");
     // 틀리면 내일로 당겨진다
     expect(note.nextRecheckTs - Date.now()).toBeLessThan(2 * 86400000);
@@ -280,6 +317,9 @@ test.describe("풀기 세션 현재 동작 고정", () => {
     expect(note.attempts[0].result).toBe("pass");
     expect(note.attempts[0].cause).toBe("");
     expect(note.attempts[0].source).toBe("scheduled");
+    // pass 폐기 삼항에 휩쓸리지 않았는지 — 여기가 false가 아니라 undefined면
+    // 졸업 게이트는 영영 죽은 코드다
+    expect(note.attempts[0].assisted).toBe(false);
   });
 
   test("reload 후에도 attempt가 남는다", async ({ page }) => {
@@ -410,6 +450,8 @@ test.describe("재풀이 fail 분류 (v5)", () => {
     note = (await readNotes(page)).find((n) => n.id === "solve_n1");
     expect(note.attempts[0].source).toBe("solution_reveal");
     expect(note.attempts[0].result).toBe("fail");
+    // 풀이를 봤다는 사실은 source가 기록한다 — assisted를 대신 켜지 않는다
+    expect(note.attempts[0].assisted).toBe(false);
   });
 
   test("분류를 마치지 않고 이탈하면 시도가 저장되지 않는다", async ({
@@ -430,5 +472,291 @@ test.describe("재풀이 fail 분류 (v5)", () => {
     const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
     expect(note.attempts.length).toBe(0);
     expect(note.recheckCount).toBe(0);
+  });
+});
+
+test.describe("도움 사용 여부 (v6)", () => {
+  test("기본값은 아니오 — 아무것도 안 누르면 독립 pass다", async ({ page }) => {
+    await seedOneSolvable(page);
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+
+    await expect(page.locator("#solve-assist-no")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await expect(page.locator("#solve-assist-yes")).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+
+    // 도움 안 받은 통과에까지 뜨면 안 된다
+    await expect(page.locator(".verdict-text")).not.toContainText(
+      "도움받은 통과"
+    );
+
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts[0].assisted).toBe(false);
+  });
+
+  test("질문이 선택지에 프로그램적으로 묶여 있다", async ({ page }) => {
+    await seedOneSolvable(page);
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+
+    /* "예"만 덜렁 읽히면 무엇에 대한 예인지 알 수 없다 —
+       그룹 이름으로 질문이 함께 전달돼야 한다 */
+    await expect(
+      page.getByRole("group", { name: "도움을 사용했나?" })
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("group", { name: "도움을 사용했나?" })
+        .getByRole("button", { name: "예" })
+    ).toBeVisible();
+  });
+
+  test("도움받은 정답: pass로 기록되고 다음 복습은 그대로 밀린다", async ({
+    page,
+  }) => {
+    await seedOneSolvable(page);
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.click("#solve-assist-yes");
+    await expect(page.locator("#solve-assist-yes")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+
+    await expect(page.locator(".verdict-stamp")).toHaveText("맞음");
+
+    /* 세 줄이 이 순서로 나와야 한다. 순서까지 고정해야 "통과로 기록됨" 뒤,
+       일정 안내 앞이라는 위치가 지켜지는지 잡힌다. */
+    const lines = (await page.locator(".verdict-text").innerText())
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    expect(lines).toEqual([
+      "1번째 시도 · 재검증 통과로 기록됨",
+      "도움받은 통과 — 졸업까지 연속 통과는 다시 0회",
+      "다음 복습은 2주 뒤로 밀린다",
+    ]);
+
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts[0].assisted).toBe(true);
+    // 도움을 받았어도 맞힌 건 맞힌 거다 — fail로 강등하지 않는다
+    expect(note.attempts[0].correct).toBe(true);
+    expect(note.attempts[0].result).toBe("pass");
+    expect(note.recheckResult).toBe("pass");
+    // 일정은 도움 여부와 무관하다 (RECHECK_DAYS 그대로)
+    expect(note.nextRecheckTs - Date.now()).toBeGreaterThan(10 * 86400000);
+  });
+
+  test("도움받은 pass는 연속 2회를 채워도 졸업하지 못한다", async ({ page }) => {
+    await seedOneSolvable(page);
+
+    // 1회차: 도움 없이 정답
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await expect(page.locator(".verdict-stamp")).toHaveText("맞음");
+
+    // 2회차: 도움을 받고 정답 — 여기서 연속 기록이 끊긴다
+    await page.click('.tab:has-text("문제")');
+    await page.click('.prob-card:has-text("SOLVE-1") .prob-card-main');
+    await page.click("#solve-assist-yes");
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await expect(page.locator(".verdict-stamp")).toHaveText("맞음");
+
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts.map((a) => a.assisted)).toEqual([false, true]);
+
+    // 연속 2 pass지만 졸업이 아니라 진행 중이다
+    await page.click('.tab:has-text("문제")');
+    await expect(
+      page.locator(".review-group.progress .group-label")
+    ).toContainText("진행 중 1");
+    await expect(
+      page.locator('.review-group.progress .prob-card:has-text("SOLVE-1")')
+    ).toBeVisible();
+    // 졸업 그룹 자체가 비어 토글이 뜨지 않는다
+    await expect(page.locator(".group-toggle")).toHaveCount(0);
+  });
+
+  test("도움 없이 연속 2회면 졸업한다 (정상 경로 회귀)", async ({ page }) => {
+    await seedOneSolvable(page);
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await expect(page.locator(".verdict-stamp")).toHaveText("맞음");
+
+    await page.click('.tab:has-text("문제")');
+    await page.click('.prob-card:has-text("SOLVE-1") .prob-card-main');
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await expect(page.locator(".verdict-stamp")).toHaveText("맞음");
+
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts.map((a) => a.assisted)).toEqual([false, false]);
+
+    // 같은 두 번의 pass가 도움 없이면 졸업한다 — 게이트만 다르다
+    await page.click('.tab:has-text("문제")');
+    await expect(page.locator(".group-toggle")).toContainText("졸업 1");
+    await page.click(".group-toggle");
+    await expect(
+      page.locator('.prob-card:has-text("SOLVE-1")')
+    ).toBeVisible();
+  });
+
+  test("도움받은 오답: 원인과 도움 여부가 함께 남는다", async ({ page }) => {
+    await seedOneSolvable(page);
+
+    /* 앞선 시도를 하나 심어둔다 — 새 시도를 덧붙이면서 옛 시도를 조용히
+       고쳐 쓰지 않는지 봐야 한다 (attempts는 append-only다). */
+    await page.evaluate(() => {
+      const ns = JSON.parse(localStorage.getItem("wr_notes"));
+      ns[0].attempts = [
+        {
+          id: "sentinel", ts: 1700000100000, answer: "①", correct: false,
+          result: "fail", seconds: 200, cause: "읽기 실패",
+          tags: ["조건 누락"], memo: "앞선 시도", source: "recheck",
+          assisted: false,
+        },
+      ];
+      localStorage.setItem("wr_notes", JSON.stringify(ns));
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(300);
+    const before = (await readNotes(page)).find((n) => n.id === "solve_n1")
+      .attempts[0];
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.click("#solve-assist-yes");
+    await page.click('.ans-opt:has-text("②")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await classifyFail(page, "개념 부족");
+
+    /* 도움받은 **오답**에는 뜨면 안 된다 — assisted만 보고 correct를 빼먹으면
+       틀린 시도에도 "통과" 문구가 붙는다 */
+    await expect(page.locator(".verdict-text")).not.toContainText(
+      "도움받은 통과"
+    );
+
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts.length).toBe(2);
+    // 앞선 시도는 바이트 단위로 그대로여야 한다
+    expect(note.attempts[0]).toEqual(before);
+    // 분류를 거치는 동안(pendingFailure) 도움 여부가 살아남아야 한다
+    expect(note.attempts[1].assisted).toBe(true);
+    expect(note.attempts[1].cause).toBe("개념 부족");
+    expect(note.attempts[1].result).toBe("fail");
+    // 이번 시도가 노트의 주원인을 멋대로 바꾸지 않는다
+    expect(note.cause).toBe("실행 실수");
+  });
+
+  test("자기 채점 흐름에도 같은 선택이 있다 (정답 미기록 노트)", async ({
+    page,
+  }) => {
+    // 정답이 없으면 '맞았다 / 또 틀렸다' 자기 채점으로 갈린다 — 여기도 물어야 한다
+    await seedOneSolvable(page, { correctAnswer: "" });
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await expect(page.locator(".help-choice")).toBeVisible();
+    await page.click("#solve-assist-yes");
+    await page.click('.grade-btn:has-text("맞았다")');
+
+    await expect(page.locator(".verdict-stamp")).toHaveText("맞음");
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts[0].assisted).toBe(true);
+    expect(note.attempts[0].result).toBe("pass");
+  });
+
+  test("풀이 보기: 예를 골랐으면 그대로 흐르고, 안 골랐으면 켜지지 않는다", async ({
+    page,
+  }) => {
+    await seedOneSolvable(page);
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.click("#solve-assist-yes");
+    await page.click(".reveal-give-up");
+    await classifyFail(page, "개념 부족");
+
+    const note = (await readNotes(page)).find((n) => n.id === "solve_n1");
+    expect(note.attempts[0].source).toBe("solution_reveal");
+    // 시스템이 추론하지 않는다 — 사용자가 예를 골랐기 때문에 true다
+    expect(note.attempts[0].assisted).toBe(true);
+  });
+
+  test("다음 문제로 넘어가면 아니오로 리셋된다", async ({ page }) => {
+    await seedTwoSolvable(page);
+
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await expect(page.locator(".solve-prog")).toContainText("1 / 2");
+
+    // 1번: 도움 받고 정답
+    await page.click("#solve-assist-yes");
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await page.click('.end-btn:has-text("다음 문제")');
+
+    // 2번: 선택이 초기화돼 있어야 한다 — 안 그러면 도움 여부가 새어 번진다
+    await expect(page.locator(".solve-prog")).toContainText("2 / 2");
+    await expect(page.locator("#solve-assist-no")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await expect(page.locator("#solve-assist-yes")).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+
+    const notes = await readNotes(page);
+    expect(notes.find((n) => n.id === "two_a").attempts[0].assisted).toBe(true);
+    expect(notes.find((n) => n.id === "two_b").attempts[0].assisted).toBe(
+      false
+    );
+  });
+
+  test("큐를 새로 시작해도 아니오로 리셋된다", async ({ page }) => {
+    await seedTwoSolvable(page);
+
+    // 첫 세션에서 도움을 켜둔 채 끝낸다
+    await page.click('.tab:has-text("풀기")');
+    await page.click(".mode.primary .mode-go");
+    await page.click("#solve-assist-yes");
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await page.click('.end-btn:has-text("다음 문제")');
+    await page.click('.ans-opt:has-text("③")');
+    await page.click('.grade-btn:has-text("채점하기")');
+    await page.click('.end-btn:has-text("결과 보기")');
+    await page.click('.end-btn:has-text("끝내기")');
+
+    // 새 큐 — start()가 리셋하지 않으면 앞 세션 상태가 그대로 살아 있다
+    await page.click(".mode-picker .chip:has-text('5문제')");
+    await page.click(".mode:has(.mode-picker) .mode-go");
+    await expect(page.locator("#solve-assist-no")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
   });
 });

@@ -42,6 +42,7 @@ const TABS = [
 
 const THEME_KEY = "wr_theme";
 const PALETTE_KEY = "wr_palette";
+const LOCALE_KEY = "wr_locale";
 
 /* 사용자 **선택**과 실제 **적용값**은 다른 개념이다.
    예전엔 첫 실행 때 시스템 값을 읽어 "light"/"dark"로 굳혀 저장했기 때문에,
@@ -64,12 +65,17 @@ function initialPalette() {
   return isPalette(saved) ? saved : DEFAULT_PALETTE;
 }
 
+function initialLocale() {
+  return localStorage.getItem(LOCALE_KEY) === "en" ? "en" : "ko";
+}
+
 export default function App() {
   // 부팅 시 1회 로드 + 마이그레이션. 파싱 실패면 저장을 잠가 원본을 보호한다.
   const [boot] = useState(loadAll);
   const [themePreference, setThemePreference] = useState(initialThemePreference);
   const [systemTheme, setSystemTheme] = useState(systemScheme);
   const [palette, setPalette] = useState(initialPalette);
+  const [locale, setLocale] = useState(initialLocale);
 
   /* 시스템 설정을 **계속** 따라간다 — 앱이 열려 있는 동안 기기 모드가 바뀌면
      즉시 반영되어야 한다. addEventListener를 못 쓰는 환경(구형 Safari)에는
@@ -104,12 +110,13 @@ export default function App() {
        배너는 노트/카드 저장 실패가 띄운다. */
     savePref(THEME_KEY, themePreference); // 선택을 저장한다 (해석 결과가 아니라)
     savePref(PALETTE_KEY, palette);
+    savePref(LOCALE_KEY, locale);
 
     const p = PALETTES.find((x) => x.id === palette) ?? PALETTES[0];
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", theme === "dark" ? p.night.paper : p.day.paper);
-  }, [theme, themePreference, palette]);
+  }, [theme, themePreference, palette, locale]);
   const [notes, setNotes] = useState(boot.notes);
   const [cards, setCards] = useState(boot.cards);
   /* 두 실패는 성격이 다르다 — storage.js의 loadAll 주석 참고.
@@ -119,6 +126,11 @@ export default function App() {
   const [writeError, setWriteError] = useState(boot.writeError);
   // 사용자가 실제로 노트를 만들었을 때만 참 — 시드/마이그레이션 쓰기와 구분한다
   const pendingPersistRequest = useRef(false);
+  /* 수정 중 제거된 사진은 노트가 **디스크에 안착한 뒤** 수거한다.
+     먼저 지우면 저장이 실패했을 때 노트는 옛 사진 id를 그대로 가리키는데
+     blob만 사라진다 — 되돌릴 수 없는 손실이다. 저장 실패나 잠금 상태에서는
+     큐를 그대로 들고 있다가 다음 성공 때 비운다. */
+  const pendingImageDeletes = useRef([]);
 
   /* 이 플래그는 나중에 추가됐다. 이미 노트를 쌓아둔 사용자는 addNote를 다시
      부르기 전까지 플래그가 없어서 **백업 경고가 조용히 꺼진다** — 정작 잃을
@@ -163,6 +175,14 @@ export default function App() {
     if (!saveNotes(notes)) {
       setWriteError(WRITE_ERROR_MESSAGE);
       return;
+    }
+    // 여기서부터는 노트가 확실히 디스크에 있다 — 이제야 옛 blob을 버린다
+    if (pendingImageDeletes.current.length) {
+      const ids = [...new Set(pendingImageDeletes.current)];
+      pendingImageDeletes.current = [];
+      // 수거 실패는 삼킨다 — 고아 blob은 D-gc가 회수한다. 반대로 되돌리면
+      // 노트가 없는 사진을 가리키게 되므로, 실패는 누수 쪽으로 떨어뜨린다.
+      Promise.resolve(deleteImages(ids)).catch(() => {});
     }
     /* 영구 저장소는 **실제 노트가 디스크에 안착한 뒤** 한 번만 요청한다.
        부팅마다 물으면 잔소리가 되고, 시드/마이그레이션 쓰기로 요청하면
@@ -234,8 +254,13 @@ export default function App() {
     }
   }
 
-  function updateNote(id, rawPatch) {
+  function updateNote(id, rawPatch, removedImageIds = []) {
     const patch = applyDerivedTag(rawPatch);
+    // 상태 갱신 **전에** 큐에 넣는다 — 이 setNotes가 유발하는 저장이
+    // 성공하는 순간 비워져야 하므로 순서가 뒤집히면 한 사이클 늦는다
+    if (removedImageIds.length) {
+      pendingImageDeletes.current.push(...removedImageIds);
+    }
     setNotes((ns) =>
       ns.map((n) =>
         n.id === id
@@ -290,6 +315,10 @@ export default function App() {
       correct,
       result: correct ? "pass" : "fail",
       seconds: Number.isFinite(draft.seconds) ? draft.seconds : null,
+      // 아래 pass 폐기 삼항 **바깥**이어야 한다. pass일 때 버리면 졸업 게이트가
+      // 읽을 값이 영영 없어지고(항상 false), fail 경로 테스트는 다 통과해서
+      // 죽은 게이트인 걸 아무도 모른다.
+      assisted: draft.assisted === true,
       // pass에 딸려온 원인은 버린다 — pass에는 실패 원인이 없다
       cause: correct ? "" : draft.cause,
       tags: correct ? [] : [...(draft.tags || [])],
@@ -517,12 +546,15 @@ export default function App() {
               cards={cards}
               parseError={parseError}
               writeError={writeError}
+              dataVersion={boot.dataVersion}
               onReplaceAll={replaceAll}
               palette={palette}
               onSetPalette={setPalette}
               theme={theme}
               themePreference={themePreference}
               onSetThemePreference={setThemePreference}
+              locale={locale}
+              onSetLocale={setLocale}
             />
           </div>
         </div>
@@ -565,19 +597,19 @@ export default function App() {
           <div className="sheet-body">
             {storageBanner}
             <RecordView
-              storageLocked={storageLocked}
               notes={notes}
               onAdd={(payload) => {
                 addNote(payload);
                 setRecording(false);
               }}
-              onUpdate={(id, payload) => {
-                updateNote(id, payload);
+              onUpdate={(id, payload, removedImageIds) => {
+                updateNote(id, payload, removedImageIds);
                 setRecording(false);
                 setEditingNoteId(null);
               }}
               initialEditId={editingNoteId}
               onCancelEdit={() => setEditingNoteId(null)}
+              locale={locale}
             />
           </div>
         </div>

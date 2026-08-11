@@ -34,6 +34,23 @@ export default function StatsView({
   }, [notes]);
   const maxTagCount = tagCounts.length ? tagCounts[0][1] : 1;
 
+  // "토픽에서 몇 번 틀렸나"가 아니라 개념 부족으로 판정된 개념만 센다.
+  const conceptCounts = useMemo(() => {
+    const map = new Map();
+    notes
+      .filter((n) => n.subject === "수학" && n.cause === "개념 부족")
+      .forEach((n) =>
+        (n.concepts || []).forEach((concept) => {
+          const current = map.get(concept) || { concept, count: 0, topics: new Set() };
+          current.count += 1;
+          if (n.topicMain) current.topics.add(n.topicMain);
+          map.set(concept, current);
+        })
+      );
+    return [...map.values()].sort((a, b) => b.count - a.count || a.concept.localeCompare(b.concept));
+  }, [notes]);
+  const maxConceptCount = conceptCounts[0]?.count || 1;
+
   /* 주원인 분포 — 노트당 1개라 합계가 노트 수와 일치한다.
      미분류는 묻지 않고 따로 센다. */
   const causeCounts = useMemo(() => {
@@ -212,6 +229,25 @@ export default function StatsView({
             </span>
           </div>
         )}
+      </Section>
+
+      <Section title="수학 개념 이해 지도">
+        {conceptCounts.length === 0 && (
+          <div className="empty">아직 개념 부족으로 기록된 세부 개념이 없다. 기록 화면에서 직접 적거나 AI 분석 JSON을 가져와라.</div>
+        )}
+        {conceptCounts.map((row) => (
+          <button
+            type="button"
+            className="bar-row"
+            key={row.concept}
+            onClick={() => row.topics.size === 1 && onTopicClick([...row.topics][0])}
+          >
+            <span className="bar-label">{row.concept}</span>
+            <span className="bar-track"><span className="bar-fill" style={{ width: `${(row.count / maxConceptCount) * 100}%` }} /></span>
+            <span className="bar-count">{row.count}</span>
+          </button>
+        ))}
+        {conceptCounts.length > 0 && <div className="hint">개념 부족으로 분류된 기록만 집계한다. 한 토픽에만 속한 행을 누르면 해당 문제로 간다.</div>}
       </Section>
 
       {/* 최초 기록만 센다 — 재풀이 포함 집계는 위 '태그 변화' 섹션 */}

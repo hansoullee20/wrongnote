@@ -167,8 +167,22 @@ export function ExecutionGate({ checks, onToggle }) {
 }
 
 /**
- * 재풀이 궤적 도트 — 오래된 것 → 최신. 색이 아니라 모양(●/○)으로
- * 갈라 보이게 하고, 스크린리더용 라벨을 단다.
+ * 시도 하나를 세 상태로 읽는다: 실패 / 도움받은 통과 / 독립 통과.
+ * 궤적과 이력이 **같은 함수**를 써야 한 화면 안에서 다른 말을 하지 않는다.
+ * 구분은 색이 아니라 글자(✕ ✓* ✓)와 라벨이 짊어진다 — 색맹·흑백에서도 읽힌다.
+ * @param {object} a attempt
+ */
+function readAttemptMark(a) {
+  if (!a.correct) {
+    return { kind: "fail", glyph: "✕", label: a.cause || "원인 미기록" };
+  }
+  return a.assisted
+    ? { kind: "assisted", glyph: "✓", star: true, label: "도움받음" }
+    : { kind: "pass", glyph: "✓", label: "통과" };
+}
+
+/**
+ * 재풀이 궤적 — 오래된 것 → 최신. 도움받은 통과는 ✓* 로 따로 보인다.
  * @param {{ attempts: object[] }} props
  */
 export function TrajectoryDots({ attempts }) {
@@ -176,15 +190,25 @@ export function TrajectoryDots({ attempts }) {
   if (recent.length === 0) {
     return <span className="traj-none">미재풀이</span>;
   }
+  const marks = recent.map(readAttemptMark);
+  /* role="img"는 하위를 **평탄화**한다 — 도트마다 aria-label을 달아봐야
+     보조기기에는 "재풀이 궤적" 한 마디만 들리고 도움 여부는 사라진다.
+     그래서 순서대로 이어붙인 라벨을 부모 이름에 싣고, 도트는 장식으로 숨긴다. */
   return (
-    <span className="traj" role="img" aria-label="재풀이 궤적">
-      {recent.map((a) => (
+    <span
+      className="traj"
+      role="img"
+      aria-label={`재풀이 궤적: ${marks.map((m) => m.label).join(", ")}`}
+    >
+      {recent.map((a, i) => (
         <span
           key={a.id ?? a.ts}
-          className={`traj-dot ${a.correct ? "pass" : "fail"}`}
-          aria-label={a.correct ? "통과" : "실패"}
+          className={`traj-dot ${marks[i].kind}`}
+          aria-hidden="true"
         >
-          {a.correct ? "○" : "●"}
+          {marks[i].glyph}
+          {/* 별표를 따로 빼야 ✓* 가 넓어져도 도트 줄이 들쭉날쭉해지지 않는다 */}
+          {marks[i].star && <span className="traj-star">*</span>}
         </span>
       ))}
     </span>
@@ -217,21 +241,27 @@ export function AttemptHistory({ attempts }) {
         {all.length > 0 && <TrajectoryDots attempts={all} />}
       </div>
       {all.length === 0 && <div className="hint">아직 다시 푼 적 없음</div>}
-      {all.map((a) => (
-        <div key={a.id ?? a.ts} className="attempt-line">
-          <span className="attempt-date">{fmtShortDate(a.ts)}</span>
-          <span className={`grade-mark ${a.correct ? "pass" : "fail"}`}>
-            {a.correct ? "○" : "✗"}
-          </span>
-          <span className="attempt-body">
-            {a.correct ? "통과" : a.cause || "원인 미기록"}
-            {!a.correct && a.tags?.length > 0 && ` · ${a.tags.join(" · ")}`}
-            {a.answer && ` — ${a.answer}`}
-            {a.seconds != null && ` — ${fmtSecShort(a.seconds)}`}
-          </span>
-          {a.memo && <span className="attempt-memo">{a.memo}</span>}
-        </div>
-      ))}
+      {all.map((a) => {
+        const m = readAttemptMark(a);
+        return (
+          <div key={a.id ?? a.ts} className="attempt-line">
+            <span className="attempt-date">{fmtShortDate(a.ts)}</span>
+            {/* 라벨은 바로 옆 본문이 글로 말한다 — 여기 aria-label을 달면
+                role 없는 span이라 무시되거나 같은 말을 두 번 읽는다 */}
+            <span className={`grade-mark ${m.kind}`} aria-hidden="true">
+              {m.glyph}
+              {m.star && <span className="traj-star">*</span>}
+            </span>
+            <span className="attempt-body">
+              {m.label}
+              {!a.correct && a.tags?.length > 0 && ` · ${a.tags.join(" · ")}`}
+              {a.answer && ` — ${a.answer}`}
+              {a.seconds != null && ` — ${fmtSecShort(a.seconds)}`}
+            </span>
+            {a.memo && <span className="attempt-memo">{a.memo}</span>}
+          </div>
+        );
+      })}
     </div>
   );
 }
