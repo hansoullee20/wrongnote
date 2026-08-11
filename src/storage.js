@@ -14,6 +14,19 @@ const VERSION_KEY = "wr_schema_version";
 const backupKeyFor = (fromVersion, toVersion) =>
   `wr_backup_v${fromVersion}_to_v${toVersion}`;
 
+/* 저장된 스키마 마커를 읽는다. 없으면 1 (버전 표기 이전 설치).
+   정수 십진 문자열만 신뢰한다 — 그 밖의 쓰레기("banana", "6.5", "1e3")는
+   Number()로 읽으면 NaN이나 엉뚱한 수가 되고, NaN < SCHEMA_VERSION 은
+   false라서 **스냅샷이 조용히 생략된다**. 판별 불가면 1로 후퇴한다:
+   가장 보수적인 해석이라 반드시 스냅샷을 시도하게 된다. */
+function readStoredVersion() {
+  const raw = localStorage.getItem(VERSION_KEY);
+  if (raw === null) return 1;
+  if (!/^[1-9]\d*$/.test(raw)) return 1;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) ? n : 1;
+}
+
 function parseArray(raw) {
   const parsed = JSON.parse(raw);
   if (!Array.isArray(parsed)) throw new Error("not an array");
@@ -57,7 +70,7 @@ export const DOWNGRADE_ERROR_MESSAGE =
  * @returns {{notes: object[], cards: object[], error: string, writeError: string}}
  */
 export function loadAll() {
-  const storedVersion = Number(localStorage.getItem(VERSION_KEY) || 1);
+  const storedVersion = readStoredVersion();
   const rawNotes = localStorage.getItem(NOTES_KEY);
   const rawCards =
     localStorage.getItem(CARDS_KEY) ?? localStorage.getItem(LEGACY_CARDS_KEY);

@@ -569,3 +569,47 @@ test.describe("전이 스냅샷 · 다운그레이드 잠금 (A1)", () => {
     ).toBe("6");
   });
 });
+
+/* A2 — 마커가 쓰레기면 1로 후퇴한다. Number("banana")는 NaN이고
+   NaN < SCHEMA_VERSION 은 false — 즉 검증 없이는 손상된 마커 하나가
+   업그레이드 스냅샷을 조용히 없앤다. */
+test.describe("스키마 마커 검증 (A2)", () => {
+  for (const bad of ["banana", "6.5", "0", "-3", " 5", "1e3", ""]) {
+    test(`마커 ${JSON.stringify(bad)} → 버전 1로 취급, 스냅샷 강제`, async ({
+      page,
+    }) => {
+      await page.goto("/");
+      const raw = await page.evaluate((v) => {
+        localStorage.clear();
+        localStorage.setItem("wr_schema_version", v);
+        localStorage.setItem(
+          "wr_notes",
+          JSON.stringify([
+            {
+              subject: "수학", problem: `BAD-${v}`, topicMain: "",
+              topicSub: "", question: "", mySol: "", optSol: "", tags: [],
+              derived: null, memo: "", ts: 1700000000000, id: "badv1",
+              date: "2026-06-01",
+            },
+          ])
+        );
+        localStorage.setItem("wr_cards", JSON.stringify([]));
+        return localStorage.getItem("wr_notes");
+      }, bad);
+      await page.reload();
+      await page.locator(".tab.on").first().waitFor();
+      await page.waitForTimeout(300);
+
+      // 판별 불가 → 1로 후퇴 → v1→현재 전이 스냅샷이 반드시 찍힌다
+      const backup = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("wr_backup_v1_to_v6"))
+      );
+      expect(backup.notes).toBe(raw);
+      // 데이터는 보존되고 마커는 현재 버전으로 승격된다
+      expect((await readNotes(page))[0].problem).toBe(`BAD-${bad}`);
+      expect(
+        await page.evaluate(() => localStorage.getItem("wr_schema_version"))
+      ).toBe("6");
+    });
+  }
+});
