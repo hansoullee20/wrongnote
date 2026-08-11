@@ -92,7 +92,25 @@ two counts, both correct:
 - **[med]** `tests/migration.spec.js` — no coverage for equal-version
   cross-branch loading, 6→5→7, or a stale `wr_backup_v5`.
 
-## Work required once the order is decided (~30 min)
+## STATUS: done — landed as `6e6db9f` on `release/schema-7-reconciliation`
+
+The promotion below is implemented. Deviations from the plan as written, all
+because the storage hardening landed first and changed the key scheme:
+
+- Snapshot keys are now transition-keyed (`wr_backup_v5_to_v7`), not
+  source-keyed (`wr_backup_v5`), so step 2's "the backup-key assertion stays
+  `wr_backup_v5`" no longer applies.
+- The A1 equal-version test seeded 6; under 7 that is an *upgrade*, so it was
+  reseeded to 7. The downgrade test seeded 7 and moved to 8.
+- The new v6→v7 case (step 2's addition) was verified by falsification: with
+  `SCHEMA_VERSION` forced back to 6 the snapshot reads `null` and the test
+  fails; at 7 it passes. This is the hazard this document exists for.
+
+Suite: 160 passed. The `storage.js` defects listed under "Related defects"
+were already fixed by the storage-hardening work (transition keys, downgrade
+lock, `Number.isSafeInteger` marker validation).
+
+## Work required once the order is decided (~30 min) — as planned
 
 On the combined branch (v1 merged in, then amend01):
 1. `SCHEMA_VERSION = 7`, comment `// v7: assistance + AI concept analysis`.
