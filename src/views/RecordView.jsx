@@ -22,7 +22,6 @@ import { buildChatGPTRequest, parseAiImport } from "../aiBridge.js";
 import {
   compressImage,
   putImage,
-  deleteImages,
   getImage,
 } from "../imageStore.js";
 
@@ -107,7 +106,6 @@ export default function RecordView({
   onUpdate,
   initialEditId = null,
   onCancelEdit,
-  storageLocked = false,
   locale = "ko",
 }) {
   const [draft, setDraft] = useState(() => emptyDraft());
@@ -315,29 +313,21 @@ export default function RecordView({
       return; // draft·첨부·수정 상태를 그대로 둬서 재시도할 수 있게 한다
     }
 
-    /* 수정 중 제거한 기존 사진은 IDB에서도 삭제.
-       이건 정리일 뿐이라 실패해도 노트 저장을 막지 않는다 — putImage 실패는
-       "저장할 수 없다"지만 이건 "옛 사진이 남는다"(누수)에 불과하다.
-       저장이 잠겼으면 아예 건너뛴다 — onUpdate가 디스크에 안 남으므로
-       새로고침하면 옛 노트가 이미 지워진 사진 id를 가리키게 된다.
-       (App.deleteNote와 같은 최소 완화책 — 근본 수정은 별도 Tier 2) */
+    /* 수정 중 제거한 기존 사진은 여기서 지우지 않는다. 저장이 디스크에
+       안착했는지 여기서는 알 수 없고, 먼저 지우면 저장 실패 시 노트가
+       이미 사라진 사진 id를 가리킨다. id만 넘기고 수거는 App이 영속 성공
+       뒤에 한다. */
     const removed = originalImageIds.current.filter(
       (id) => !imageIds.includes(id)
     );
     const removedSolutions = originalSolutionImageIds.current.filter(
       (id) => !solutionImageIds.includes(id)
     );
-    if ((removed.length || removedSolutions.length) && !storageLocked) {
-      try {
-        await deleteImages([...removed, ...removedSolutions]);
-      } catch {
-        // 정리 실패는 삼킨다 — 고아 blob은 D-gc가 회수한다
-      }
-    }
 
     const payload = { ...draft, problem: draft.problem.trim(), images: imageIds, solutionImages: solutionImageIds };
     if (editingId) {
-      onUpdate(editingId, payload); // 수정 시 자동 카드 생성 없음
+      // 수정 시 자동 카드 생성 없음
+      onUpdate(editingId, payload, [...removed, ...removedSolutions]);
       setEditingId(null);
     } else {
       onAdd(payload);
