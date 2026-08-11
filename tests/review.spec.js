@@ -79,7 +79,7 @@ test.describe("v4 → v5 attempt 마이그레이션", () => {
     // 버전 승격 + v4 원본 스냅샷
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("5");
+    ).toBe("6");
     const backup = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("wr_backup_v4"))
     );

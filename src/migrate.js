@@ -2,7 +2,7 @@
 
 import { LEGACY_CAUSE_MAP, CAUSES } from "./constants.js";
 
-export const SCHEMA_VERSION = 5; // v5: 시도별 실패 원인 (attempt superset)
+export const SCHEMA_VERSION = 6; // v6: personal AI-imported concept analysis
 
 /**
  * v2: 카드에 SRS 필드 추가.
@@ -99,5 +99,10 @@ export function migrateNote(note) {
     solutionImages: Array.isArray(note.solutionImages)
       ? note.solutionImages
       : [],
+    // AI가 추출한 개념은 사용자가 가져온 값만 보존한다. 과거 노트에는 추측하지 않는다.
+    concepts: Array.isArray(note.concepts)
+      ? note.concepts.filter((c) => typeof c === "string" && c.trim())
+      : [],
+    analysisLocale: note.analysisLocale === "en" ? "en" : "ko",
   };
 }

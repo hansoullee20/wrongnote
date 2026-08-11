@@ -31,6 +31,8 @@ export default function SettingsView({
   theme,
   themePreference = "system",
   onSetThemePreference,
+  locale = "ko",
+  onSetLocale,
 }) {
   const fileRef = useRef(null);
   const [importError, setImportError] = useState("");
@@ -195,6 +197,14 @@ export default function SettingsView({
         <div className="hint">
           맨 위 ☾ 버튼을 누르면 주간·야간으로 고정된다
         </div>
+      </Section>
+
+      <Section title="Language · 언어">
+        <div className="mode-switch">
+          <button type="button" className={`mode-switch-btn${locale === "ko" ? " on" : ""}`} onClick={() => onSetLocale("ko")}>한국어</button>
+          <button type="button" className={`mode-switch-btn${locale === "en" ? " on" : ""}`} onClick={() => onSetLocale("en")}>English</button>
+        </div>
+        <div className="hint">AI 분석 요청과 가져온 분석의 표시 언어를 정한다.</div>
       </Section>
 
       <Section title="저장소" className="storage-health">
