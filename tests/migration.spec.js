@@ -733,3 +733,60 @@ test.describe("전이 스냅샷은 처음 것을 지킨다 (H1)", () => {
     expect(after).toBe(first);
   });
 });
+
+/* H2 — 스냅샷을 못 남겼으면 마이그레이션 결과도 쓰지 않는다. 백업 없이
+   덮어쓰면 되돌릴 방법이 사라진다. "로드는 계속한다"는 "저장해도 된다"가
+   아니다. */
+test.describe("스냅샷 실패 시 저장 보류 (H2)", () => {
+  test("백업 키만 쓰기 실패 → 원본·마커 유지, 데이터는 보이고 내보내기는 열림", async ({
+    page,
+  }) => {
+    // 전이 백업 키에만 QuotaExceededError를 던진다
+    await page.addInitScript(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (this === localStorage && key.startsWith("wr_backup_v")) {
+          const err = new Error("quota");
+          err.name = "QuotaExceededError";
+          throw err;
+        }
+        return original.call(this, key, value);
+      };
+    });
+
+    await page.goto("/");
+    const raw = await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("wr_schema_version", "5");
+      localStorage.setItem(
+        "wr_notes",
+        JSON.stringify([
+          {
+            subject: "수학", problem: "NOSNAP", topicMain: "", topicSub: "",
+            question: "", mySol: "", optSol: "", tags: [], derived: null,
+            memo: "", ts: 1700000000000, id: "ns1", date: "2026-06-01",
+          },
+        ])
+      );
+      localStorage.setItem("wr_cards", JSON.stringify([]));
+      return localStorage.getItem("wr_notes");
+    });
+    await page.reload();
+    await page.locator(".tab.on").first().waitFor();
+    await page.waitForTimeout(400);
+
+    // 디스크는 옛 스키마 그대로 — 되돌릴 수 없는 덮어쓰기를 하지 않았다
+    expect(await page.evaluate(() => localStorage.getItem("wr_notes"))).toBe(raw);
+    expect(
+      await page.evaluate(() => localStorage.getItem("wr_schema_version"))
+    ).toBe("5");
+
+    // 화면에는 정상으로 보이고 경고가 뜬다
+    await expect(page.locator(".audit-warn").first()).toBeVisible();
+    expect((await readNotes(page))[0].problem).toBe("NOSNAP");
+
+    // 내보내기는 유일한 구조 수단이라 열려 있어야 한다
+    await page.click(".settings-open");
+    await expect(page.locator('.btn:has-text("내보내기 (JSON)")')).toBeEnabled();
+  });
+});

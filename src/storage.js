@@ -51,6 +51,12 @@ export const WRITE_ERROR_MESSAGE =
   "중단했다. 지금부터의 변경은 저장되지 않는다. 먼저 내보낸 뒤 이 사이트의 " +
   "저장공간을 정리하고 앱을 다시 열어라.";
 
+/* 스냅샷 실패 — 원인은 용량이지만 사용자가 할 일이 다르다. 여기서는 아직
+   아무것도 망가지지 않았고, 공간을 비우고 다시 열면 정상 진행된다. */
+export const SNAPSHOT_ERROR_MESSAGE =
+  "업그레이드 직전 백업을 만들지 못해 저장을 보류했다. 데이터는 그대로이고 " +
+  "화면에도 정상으로 보인다. 먼저 내보낸 뒤 저장공간을 정리하고 앱을 다시 열어라.";
+
 /* 다운그레이드 잠금 — 용량 문제와는 다른 사건이므로 문구를 섞으면 안 된다.
    "저장공간을 정리해라"는 지시가 여기서는 틀린 처방이다. */
 export const DOWNGRADE_ERROR_MESSAGE =
@@ -156,6 +162,12 @@ export function loadAll() {
   // 다운그레이드면 아무것도 쓰지 않는다 — 정규화 결과는 메모리에만 둔다.
   if (isDowngrade) {
     writeError = DOWNGRADE_ERROR_MESSAGE;
+  } else if (snapshotFailed) {
+    /* 스냅샷을 못 남겼는데 마이그레이션 결과를 덮어쓰면 되돌릴 방법이 없다.
+       읽기·내보내기는 계속 열어두되(메모리 데이터는 온전하다) 디스크는
+       옛 스키마 그대로 둔다 — 다음 부팅에서 다시 시도할 수 있다.
+       "로드는 계속한다"와 "저장해도 된다"는 다른 말이다. */
+    writeError = SNAPSHOT_ERROR_MESSAGE;
   } else if (!error) {
     const ok =
       safeSet(NOTES_KEY, JSON.stringify(notes)) &&
