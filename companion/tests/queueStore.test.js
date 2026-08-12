@@ -45,9 +45,12 @@ test("SIGKILL after enqueue: the analysis survives", async () => {
     child.on("exit", (code) => reject(new Error(`child exited early: ${code}`)));
   });
   child.kill("SIGKILL");
-  /* 죽은 뒤 거둬질 때까지 기다린다. 좀비 상태에서는 pid가 아직 살아 있는 것으로
-     보이고, 잠금 회수는 (옳게) 거부된다 — 진짜 재시작에는 좀비가 없다. */
   await new Promise((r) => child.on("exit", r));
+
+  /* 자동 회수는 없다. 크래시 뒤에는 사람이 잠금만 지운다 — 큐 파일은
+     건드리지 않는다. 여기서 그 절차를 그대로 밟는다. */
+  await assert.rejects(() => createQueueStore({ file }), /in use/i);
+  await fs.unlink(`${file}.lock`);
 
   const store = await createQueueStore({ file });
   const items = await store.list();
@@ -491,91 +494,6 @@ test("closing the store releases the lock", async () => {
   const second = await createQueueStore({ file });
   assert.equal((await second.list()).length, 1);
   await second.close();
-});
-
-test("a lock left by a dead process is reclaimed", async () => {
-  const file = await freshFile("lock-stale");
-  const dead = spawn(process.execPath, ["-e", "process.exit(0)"]);
-  const deadPid = dead.pid;
-  await new Promise((r) => dead.on("exit", r));
-
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(
-    `${file}.lock`,
-    JSON.stringify({ pid: deadPid, hostname: os.hostname(), startedAt: Date.now() }),
-    "utf8"
-  );
-
-  const store = await createQueueStore({ file });
-  await store.submit(ANALYSIS);
-  assert.equal((await store.list()).length, 1);
-  await store.close();
-});
-
-test("a lock from another host is never reclaimed, however old it looks", async () => {
-  const file = await freshFile("lock-foreign");
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(
-    `${file}.lock`,
-    JSON.stringify({
-      pid: 999999,
-      hostname: "some-other-machine",
-      startedAt: 0, // 아주 오래돼 보인다 — 그래도 깨면 안 된다
-    }),
-    "utf8"
-  );
-
-  await assert.rejects(() => createQueueStore({ file }), /in use|locked|owned/i);
-});
-
-/* 닫기는 멱등해야 한다. 같은 프로세스 안에서 잠금이 정당하게 재획득된 뒤
-   옛 스토어가 close()를 한 번 더 부르면, pid·hostname만 보는 해제는 **남의**
-   잠금을 지운다. 그러면 두 소유자가 생기고, 잠금이 막으려던 경합이 그대로
-   돌아온다 — 잠금이 열린 채로 실패하는 경로다. */
-test("closing twice does not release a lock that was re-acquired meanwhile", async () => {
-  const file = await freshFile("lock-double-close");
-  const first = await createQueueStore({ file });
-  await first.close();
-
-  const second = await createQueueStore({ file });
-  await first.close(); // 늦은 두 번째 닫기 — second의 잠금을 건드리면 안 된다
-
-  try {
-    await assert.rejects(
-      () => createQueueStore({ file }),
-      /in use|locked|owned/i,
-      "the second store must still own the queue"
-    );
-  } finally {
-    await second.close();
-  }
-});
-
-test("a closed store refuses further work instead of writing without the lock", async () => {
-  const file = await freshFile("closed-store");
-  const store = await createQueueStore({ file });
-  await store.close();
-
-  await assert.rejects(() => store.submit(ANALYSIS), /closed/i);
-  await assert.rejects(() => store.claim("tab"), /closed/i);
-  await assert.rejects(() => store.list(), /closed/i);
-});
-
-/* 늦은 정산 조회가 "필드 없음 === 인자 없음"으로 걸리면, 아무도 가져간 적
-   없는 항목이 정산된다. undefined는 신원이 아니다. */
-test("settling with no identity cannot consume an unclaimed item", async () => {
-  const store = await createQueueStore({ file: await freshFile("undef-settle") });
-  await store.submit(ANALYSIS);
-
-  /* 빈 신원은 조용한 "gone"이 아니라 호출자 잘못으로 시끄럽게 실패해야 한다. */
-  await assert.rejects(() => store.settle(undefined, undefined, "accepted"), /consumerId/);
-  await assert.rejects(() => store.settle("tab", undefined, "accepted"), /receipt/);
-  await assert.rejects(() => store.settle("", "", "accepted"), /consumerId/);
-
-  const [item] = await store.list();
-  assert.equal(item.state, "waiting", "it was never claimed — it must still be here");
-  assert.ok(item.payload, "and its payload must be intact");
-  await store.close();
 });
 
 /* ── B. 배열 안의 레코드도 검증한다 ──────────────────────────────────

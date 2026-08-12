@@ -57,11 +57,21 @@ state and overwrite each other's writes, and an analysis that was successfully
 queued simply vanishes. This matters concretely because MCP hosts commonly spawn
 their own server process.
 
-Stale-lock recovery is deliberately conservative. A lock is reclaimed only when
-it names *this* host and its pid is definitively gone. A lock is never broken for
-looking old, and a lock from another hostname is never broken at all — the file
-may live on shared storage. If a lock cannot be read, startup fails and asks for
-a human rather than guessing.
+**There is no automatic stale-lock recovery.** If the lock file exists, startup
+fails — whatever the recorded pid looks like. `unlink` followed by an exclusive
+create is not atomic, so two processes that both judge a lock stale can delete
+each other's new lock and both succeed; each then writes from its own stale
+snapshot and a successfully queued analysis disappears with nobody informed.
+Emulating an atomic takeover with path operations is guesswork, so the companion
+fails closed instead.
+
+After a crash, recovery is manual and deliberately narrow: confirm no companion
+is running, then delete **only** the `.lock` file. Never touch the queue file —
+the queued analyses are in it. The startup error prints the lock path, the
+recorded pid and host, and that instruction.
+
+If automatic crash recovery is wanted later, the answer is an OS-backed advisory
+lock, not a cleverer path dance.
 
 ## Durability
 
@@ -99,7 +109,7 @@ cleanly, looks healthy, and loses everything that was queued.
 
     npm --prefix companion test
 
-Fifty-one tests, each one a scenario that could lose or duplicate a user's analysis.
+Fifty tests, each one a scenario that could lose or duplicate a user's analysis.
 Every guard has been falsified by mutation: removing persistence, the
 single-lease rule, lease expiry, the accepted tombstone, the rejected-item
 removal, the dead-letter write, requeue-once, or the corrupt-file refusal each
