@@ -1,69 +1,121 @@
-# Browser AI Inbox — clean adversarial pass
+# Browser AI Inbox — adversarial review record
+
+## First clean pass
 
 Review target: `bd2e2f19484e88c27bedde5ad8d3e1bffc1adac6`
 
 The tree was read without edits during the pass. CI for this target was green on the full root suite, companion suite, contrast/themes/build, and Windows companion job.
 
-Verdict at frozen target: **not yet sign-off**. No new queue-store corruption/loss path was found, but two protocol-lifecycle issues can still wedge or mis-report settlement, plus several browser robustness issues should be tightened before the real-machine gate.
+Verdict at frozen target: **not yet sign-off**. No new queue-store corruption/loss path was found, but two protocol-lifecycle issues could still wedge or mis-report settlement, plus several browser robustness issues needed tightening before the real-machine gate.
 
-## A — high: lost response after `released` can wedge the browser session
+### A — high: lost response after `released` could wedge the browser session
 
-`queueStore.settle(..., "released")` clears `session.delivery` and leaves the item active. Unlike accepted/rejected, release creates no terminal receipt record. If that write commits but the HTTP response is lost, the browser retries the old release receipt. The store now returns `receipt_mismatch`; `useCompanionInbox.settlePending()` treats that as retryable and keeps `pendingReleaseRef` forever. `tick()` prioritizes the pending release and the renew loop keeps the session alive, so the queue can be held indefinitely by an operation that already succeeded.
+`queueStore.settle(..., "released")` clears `session.delivery` and leaves the item active. Unlike accepted/rejected, release creates no terminal receipt record. If that write commits but the HTTP response is lost, retrying the old release receipt returns `receipt_mismatch`.
 
-Required rule: for a **release** intent, `receipt_mismatch` after a retry is terminal for that old receipt. Release is non-destructive; once the receipt is no longer current there is nothing left for that old intent to release. Stop retrying it and allow ordinary claim/session flow to resume. Keep accepted/rejected stricter because their outcome changes durable event state.
+Required/fixed rule: for **release** only, `receipt_mismatch` after retry is terminal for that old receipt. Release is non-destructive; once the receipt is no longer current there is nothing left for that old intent to release. Accepted/rejected remain stricter because their outcome changes durable event state.
 
-Regression needed: first release request applies, client observes a simulated lost response, retry receives `receipt_mismatch`, pending release clears and the session does not remain permanently blocked.
+Regression now simulates release commit + lost response + `receipt_mismatch`, then proves the item becomes claimable again rather than pinning the session.
 
-## B — high: `already_settled` ignores the actual prior outcome
+### B — high: `already_settled` ignored the actual prior outcome
 
-The store deliberately returns:
+The store returns:
 
 ```text
 { status: "already_settled", outcome: "accepted" | "rejected", eventId }
 ```
 
-The browser currently treats every `already_settled` as successful regardless of the requested outcome. Therefore an `accepted` retry can be reported locally as successful even if the receipt is durably `rejected`, and vice versa.
+Required/fixed rule:
 
-Required rule:
+- same requested/prior outcome → idempotent success;
+- accepted vs rejected mismatch → explicit visible conflict, never ordinary success.
 
-- same requested/prior outcome → successful idempotent retry;
-- accepted vs rejected mismatch → explicit settlement conflict, never ordinary success;
-- release encountering an already-terminal accepted/rejected receipt may stop retrying because the old release intent is no longer applicable, but the terminal outcome should remain visible if it matters to UI/recovery.
+Regressions cover accepted→already-rejected and rejected→already-accepted.
 
-Regression needed for accepted→already_rejected and rejected→already_accepted.
+### C — medium: AI opt-in preference write could throw
 
-## C — medium: AI opt-in preference write can throw
+Fixed by using Wrongnote's existing best-effort `savePref()` contract. A preference-storage failure cannot crash the toggle.
 
-The rest of Wrongnote deliberately uses `savePref()` for best-effort preference writes so quota/security failures cannot crash a UI toggle. `setAiBridgeEnabled()` currently calls raw `localStorage.setItem/removeItem`. Make this preference obey the existing safe-write rule.
+### D — medium: AI-disabled browsers required `crypto.randomUUID()` at render time
 
-## D — medium: AI-disabled browsers still require `crypto.randomUUID()` at render time
+Fixed by creating the companion session ID lazily on first acquisition and falling back to secure `crypto.getRandomValues()` when `randomUUID()` is unavailable. AI-disabled startup has zero session-ID dependency.
 
-`useCompanionInbox()` constructs its session ID immediately, even when the user has never enabled the companion. A browser without `crypto.randomUUID()` can therefore fail the entire app for a feature the user is not using.
+### E — medium: failed note persistence could close review from in-memory dedupe
 
-Generate the companion session identity lazily on first acquisition, or provide a cryptographically adequate browser fallback. Disabled AI must have zero compatibility cost.
+Fixed by basing accept/redelivery dedupe on the actual persisted `wr_notes` bytes, not React state. AI review Save is disabled after storage lock. A quota-failure regression proves `accepted` is never sent when the note did not persist.
 
-## E — medium UX/correctness boundary: failed note persistence can close review from in-memory dedupe
+---
 
-The new durable guard in `acceptReady()` correctly prevents queue acceptance unless the exact `aiEventId` exists in persisted `wr_notes`. That closes the silent-loss hole.
+## Final clean pass
 
-However `App` still has a redelivery/dedupe effect based on in-memory `notes`. After `saveNotes()` fails, React state still contains the attempted AI note, so that effect can close the review before `acceptReady()` refuses the ACK. Queue correctness survives, but UI says less than the actual state and leaves a storage-locked delivery behind a reopened badge.
+Frozen review target before documentation-only sign-off commit:
 
-Use the same persisted-identity predicate before closing/ACKing a deduped delivery. Also disable AI review save while storage is locked instead of leaving a button that can only no-op.
+```text
+7d207072166ffed2eb11dd612489a92993b86426
+```
 
-## Low/UX notes
+No source edits were made while this pass was running. The pass re-read the browser inbox lifecycle and specifically challenged:
 
-- The badge text says `AI 분석 1` although it represents the one current delivery, not total queue depth. Prefer wording that does not imply a reliable count unless health/queue depth is intentionally surfaced.
-- `normalizeInitial()` defaults a missing subject to `수학`; acceptable for current math-first usage but worth revisiting if non-math producer payloads become first-class.
-- The current AI review sheet correctly emphasizes `내 풀이` and `추천 풀이`, while full solution-version progression/best-known-solution/AI coach remains explicitly out of this PR.
+- acquire / claim / renew / settle classification;
+- settlement single-flight and duplicate invocation;
+- release commit with lost response;
+- accepted/rejected terminal-outcome conflicts;
+- accepted receipt mismatch / item-not-found handling;
+- permanent 4xx / malformed-protocol stop-gates;
+- protocol stop surviving unrelated Record/Settings/AI-review UI suppression;
+- persisted `aiEventId` dedupe and storage-failure behavior;
+- disabled/no-companion behavior;
+- session-ID capability fallback;
+- localhost requests that hang before headers **or after headers while the JSON body stalls**.
 
-## Sign-off gate
+Additional issues found after the first pass and fixed before this target:
 
-Fix A–E with focused regression coverage, freeze the new head, rerun CI, then perform one more clean pass specifically over:
+1. accepted/rejected `receipt_mismatch` and all `not_found` outcomes no longer retry forever while renewing the lease; they terminate as visible conflicts without claiming success;
+2. unknown logical settle/acquire/claim/renew statuses fail closed rather than being guessed retryable;
+3. permanent 4xx / malformed companion responses stop automatic polling/renewal instead of pinning a session;
+4. the protocol stop-gate is not cleared merely because another Wrongnote form temporarily suppresses inbox polling;
+5. acquire/claim/renew now use the same permanent-protocol stop policy as settle;
+6. same-receipt settlement calls are single-flighted so a button handler and interval tick cannot race each other;
+7. localhost requests have a bounded timeout, and the timeout remains active through `response.json()` body consumption rather than ending when headers arrive;
+8. the proven pre-existing storage implementation is preserved byte-for-byte as `storageCore.js`; the AI persisted-identity check is layered separately instead of rewriting migration/snapshot semantics.
 
-- settlement retry classification;
-- persisted-event dedupe;
-- storage failure;
-- opt-in/no-companion behavior;
-- release/reject/accept lifecycle.
+### CI evidence
 
-Only after that should PR #20 proceed to the real Chrome + localhost companion + Claude end-to-end test.
+GitHub Actions run `31604666653` for exact target `7d207072...` completed green:
+
+- root Playwright test suite: success;
+- companion test suite: success;
+- contrast gate: success;
+- theme drift gate: success;
+- production build: success;
+- Windows companion job: success.
+
+The final run includes the new timeout coverage for both a request that never returns headers and a response whose headers arrive but JSON body never completes.
+
+### Final verdict
+
+**Browser inbox / durable accept-on-save boundary: APPROVED at `7d207072166ffed2eb11dd612489a92993b86426`.**
+
+No blocker/high correctness defect remained in the reviewed browser/save boundary.
+
+Approval means only that this code boundary is ready for the next gate. It does **not** claim that Chrome's current production Local Network Access behavior has been proven from GitHub Pages. The next gate is intentionally a real-machine end-to-end test:
+
+```text
+Claude Code / MCP
+→ local companion
+→ http://127.0.0.1:43119
+→ Wrongnote in Chrome
+→ explicit AI 연결 opt-in
+→ AI 분석 badge
+→ editable review
+→ durable note save with aiEventId
+→ accepted settlement
+→ reload / no duplicate
+```
+
+## Remaining non-blocking follow-ups
+
+- `AI 연결됨` currently describes opt-in state more than verified health; wording/health indication can be refined after the real-machine test.
+- `normalizeInitial()` defaults missing subject to `수학`; acceptable for current math-first use but should be revisited if non-math producer payloads become first-class.
+- User-rejection intent is not independently persisted in the browser across a browser crash during an uncertain rejection settlement; at-least-once redelivery may ask the user to reject again. This does not silently lose accepted study data but is worth improving if rejection UX becomes frequent.
+- The MCP producer tool currently accepts a generic JSON `payload`; a later producer-ergonomics change should expose the expected Wrongnote analysis shape more explicitly so the model does not have to infer it from project context.
+- Full solution-version progression / best-known solution / contextual AI coach remains intentionally outside PR #20 and is frozen separately in `.reviews/solution-progression-spec.md`.
