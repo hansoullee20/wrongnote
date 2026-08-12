@@ -1,36 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseAiImport } from "./aiBridge.js";
 import { createCompanionClient, newCompanionSessionId } from "./companionClient.js";
+import { hasPersistedAiEvent } from "./storage.js";
 
 const POLL_MS = 4_000;
 const RENEW_MS = 20_000;
 
 const terminalOwnershipStatus = new Set(["no_session", "not_owner", "stale_fence"]);
-const terminalSettlementStatus = new Set(["released", "rejected", "accepted", "already_settled"]);
+const directSettlementStatus = new Set(["released", "rejected", "accepted"]);
 
 function parseFailureReason(err) {
   const message = err?.message ? String(err.message) : "unknown AI import error";
   return `Wrongnote parseAiImport rejected the queued payload: ${message}`;
 }
 
-/* accepted는 브라우저 메모리의 notes가 아니라 **실제 localStorage에 쓰인 note**를
-   증거로 삼는다. React state는 saveNotes 실패 뒤에도 새 note를 들고 있으므로,
-   그 값을 보고 ACK하면 queue는 사라지고 새로고침 뒤 note도 사라지는 silent loss다. */
-function hasPersistedAiEvent(eventId) {
-  if (typeof eventId !== "string" || !eventId) return false;
-  try {
-    const raw = globalThis.localStorage?.getItem("wr_notes");
-    if (raw === null || raw === undefined) return false;
-    const notes = JSON.parse(raw);
-    return Array.isArray(notes) && notes.some((note) => note?.aiEventId === eventId);
-  } catch {
-    return false;
-  }
-}
-
 export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   const clientRef = useRef(clientOverride || createCompanionClient());
-  const sessionIdRef = useRef(newCompanionSessionId());
+  // AI가 꺼진 브라우저는 session identity조차 만들 필요가 없다. randomUUID 같은
+  // companion 전용 capability가 일반 Wrongnote 부팅을 깨면 안 된다.
+  const sessionIdRef = useRef(null);
   const sessionRef = useRef(null);
   const readyRef = useRef(null);
   const pendingRejectRef = useRef(null);
@@ -50,9 +38,16 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     sessionRef.current = null;
   }, []);
 
+  /*
+   * 반환값은 "HTTP가 끝났나"가 아니라 settlement intent의 상태다.
+   * done=true면 같은 receipt를 더 재시도하면 안 된다.
+   * matched=true일 때만 요청한 outcome과 durable queue outcome이 일치한다.
+   */
   const settlePending = useCallback(async (pending) => {
     const session = sessionRef.current;
-    if (!session || session.fence !== pending.fence) return false;
+    if (!session || session.fence !== pending.fence) {
+      return { done: true, matched: false };
+    }
     try {
       const result = await clientRef.current.settle(
         session.sessionId,
@@ -61,15 +56,46 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
         pending.outcome,
         pending.error ? { error: pending.error } : undefined
       );
-      if (terminalSettlementStatus.has(result.status)) return true;
+
+      if (directSettlementStatus.has(result.status)) {
+        return {
+          done: true,
+          matched: result.status === pending.outcome,
+          result,
+        };
+      }
+
+      if (result.status === "already_settled") {
+        if (result.outcome === pending.outcome) {
+          return { done: true, matched: true, result };
+        }
+        if (aliveRef.current) {
+          setNotice(
+            `AI 처리 상태 충돌: ${pending.outcome}로 완료하려 했지만 로컬 큐에는 이미 ${result.outcome || "다른 상태"}로 기록되어 있다. 자동으로 덮어쓰지 않았다.`
+          );
+        }
+        return { done: true, matched: false, conflict: true, result };
+      }
+
+      /* release는 event를 파괴하지 않는다. release 응답만 유실된 뒤 재시도하면
+         store에는 terminal receipt가 없어서 receipt_mismatch가 정상적으로 나온다.
+         그 오래된 receipt를 계속 재시도하면 세션을 영원히 잡으므로 여기서 끝낸다. */
+      if (
+        pending.outcome === "released" &&
+        ["receipt_mismatch", "not_found"].includes(result.status)
+      ) {
+        return { done: true, matched: true, recoveredRelease: true, result };
+      }
+
       if (terminalOwnershipStatus.has(result.status)) {
         clearSession();
-        return true;
+        return { done: true, matched: false, result };
       }
-      return false;
+      return { done: false, matched: false, result };
     } catch (err) {
-      if (err?.code === "companion_unavailable") return false;
-      return false;
+      // 네트워크 단절·commit durability uncertainty·일시 I/O는 같은 receipt로
+      // 재시도하는 것이 안전하다. 영속 terminal outcome은 다음 응답에서 판별한다.
+      return { done: false, matched: false, error: err };
     }
   }, [clearSession]);
 
@@ -83,11 +109,11 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
       error: reason,
     };
     pendingRejectRef.current = pending;
-    const settled = await settlePending(pending);
-    if (settled) pendingRejectRef.current = null;
-    if (aliveRef.current) {
+    const settlement = await settlePending(pending);
+    if (settlement.done) pendingRejectRef.current = null;
+    if (aliveRef.current && !settlement.conflict) {
       setNotice(
-        settled
+        settlement.matched
           ? "AI 분석 JSON이 Wrongnote 검증을 통과하지 못해 격리했다."
           : "AI 분석 JSON 검증 실패 — 격리 상태를 로컬 컴패니언에 기록하는 중이다."
       );
@@ -96,16 +122,17 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
 
   const acquireIfNeeded = useCallback(async () => {
     if (sessionRef.current) return sessionRef.current;
+    const sessionId = sessionIdRef.current || newCompanionSessionId();
+    sessionIdRef.current = sessionId;
     let result;
     try {
-      result = await clientRef.current.acquireSession(sessionIdRef.current);
-    } catch (err) {
-      if (err?.code === "companion_unavailable") return null;
+      result = await clientRef.current.acquireSession(sessionId);
+    } catch {
       return null;
     }
     if (["acquired", "already_acquired"].includes(result.status)) {
       const session = {
-        sessionId: sessionIdRef.current,
+        sessionId,
         fence: result.fence,
         expiresAt: result.expiresAt,
       };
@@ -122,18 +149,23 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     tickBusyRef.current = true;
     try {
       if (pendingRejectRef.current) {
-        if (await settlePending(pendingRejectRef.current)) {
+        const settlement = await settlePending(pendingRejectRef.current);
+        if (settlement.done) {
           pendingRejectRef.current = null;
-          if (aliveRef.current) setNotice("AI 분석 JSON이 Wrongnote 검증을 통과하지 못해 격리했다.");
+          if (aliveRef.current && settlement.matched && !settlement.conflict) {
+            setNotice("AI 분석 JSON이 Wrongnote 검증을 통과하지 못해 격리했다.");
+          }
         }
         return;
       }
       if (pendingAcceptRef.current) {
-        if (await settlePending(pendingAcceptRef.current)) pendingAcceptRef.current = null;
+        const settlement = await settlePending(pendingAcceptRef.current);
+        if (settlement.done) pendingAcceptRef.current = null;
         return;
       }
       if (pendingReleaseRef.current) {
-        if (await settlePending(pendingReleaseRef.current)) pendingReleaseRef.current = null;
+        const settlement = await settlePending(pendingReleaseRef.current);
+        if (settlement.done) pendingReleaseRef.current = null;
         return;
       }
       if (!enabled || readyRef.current || document.visibilityState === "hidden") return;
@@ -192,9 +224,9 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     };
     pendingReleaseRef.current = pending;
     setReady(null);
-    const settled = await settlePending(pending);
-    if (settled) pendingReleaseRef.current = null;
-    return settled;
+    const settlement = await settlePending(pending);
+    if (settlement.done) pendingReleaseRef.current = null;
+    return settlement.matched;
   }, [setReady, settlePending]);
 
   const acceptReady = useCallback(async () => {
@@ -218,9 +250,9 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     };
     pendingAcceptRef.current = pending;
     setReady(null);
-    const settled = await settlePending(pending);
-    if (settled) pendingAcceptRef.current = null;
-    return settled;
+    const settlement = await settlePending(pending);
+    if (settlement.done) pendingAcceptRef.current = null;
+    return settlement.matched;
   }, [setReady, settlePending]);
 
   const rejectReady = useCallback(async (reason = "사용자가 AI 분석을 기록하지 않음") => {
@@ -240,9 +272,9 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     };
     pendingRejectRef.current = pending;
     setReady(null);
-    const settled = await settlePending(pending);
-    if (settled) pendingRejectRef.current = null;
-    return settled;
+    const settlement = await settlePending(pending);
+    if (settlement.done) pendingRejectRef.current = null;
+    return settlement.matched;
   }, [setReady, settlePending]);
 
   useEffect(() => {
@@ -283,8 +315,6 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
         }
       } catch {
         // 컴패니언이 잠깐 꺼져도 delivery/settlement intent를 버리지 않는다.
-        // 같은 receipt로 settle을 재시도하거나, 재시작 뒤 eventId dedupe로
-        // 안전하게 회복할 수 있어야 한다.
       }
     }, RENEW_MS);
     return () => window.clearInterval(timer);
