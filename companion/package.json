@@ -4,6 +4,12 @@
   "version": "0.2.0",
   "type": "module",
   "engines": { "node": ">=20" },
-  "bin": { "wrongnote-queue": "src/cli.js" },
-  "scripts": { "test": "node --test" }
+  "bin": {
+    "wrongnote-queue": "src/cli.js",
+    "wrongnote-companion": "src/serve.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "serve": "node src/serve.js"
+  }
 }
