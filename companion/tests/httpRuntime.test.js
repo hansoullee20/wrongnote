@@ -4,7 +4,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { startCompanionHttp } from "../src/serve.js";
+import { startCompanionHttp } from "../src/httpRuntime.js";
 import { inspectQueueLock, lockPathForQueue } from "../src/lockFile.js";
 
 async function tempFile(name) {
