@@ -11,8 +11,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "serve": "node src/serve.js",
-    "mcp": "node src/mcp.js"
+    "serve": "node src/serve.js"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
