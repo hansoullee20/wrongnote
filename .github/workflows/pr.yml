@@ -30,6 +30,12 @@ jobs:
       # 컴패니언은 별도 package.json을 쓰며 commit 3부터 MCP SDK 의존성이 있다.
       # 직접 버전은 package.json에서 고정하며, companion lockfile이 생기기 전까지 install 후 테스트한다.
       - run: npm --prefix companion install --ignore-scripts --no-audit --no-fund
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-generated-lock
+          path: companion/package-lock.json
+          retention-days: 1
+          if-no-files-found: error
       - run: npm --prefix companion test
       # 아래 두 게이트는 deploy.yml과 **같아야 한다**. 여기서 빠지면
       # PR이 초록불인데 머지 직후 main 배포가 깨진다.
