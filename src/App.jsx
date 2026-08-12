@@ -16,6 +16,7 @@ import {
   saveNotes,
   saveCards,
   savePref,
+  hasPersistedAiEvent,
   WRITE_ERROR_MESSAGE,
 } from "./storage.js";
 import {
@@ -198,16 +199,15 @@ export default function App() {
   }, [cards, storageLocked]);
 
   /* 브라우저가 note 저장에는 성공했지만 queue settlement 응답을 잃고 죽은 경우,
-     같은 event가 다시 온다. 이미 영속된 aiEventId를 발견하면 사용자에게 같은
-     기록을 또 만들라고 하지 않고 accepted ACK만 복구한다. 현재 저장 중인 event는
-     위 saveNotes effect가 책임지므로 여기서 먼저 ACK하면 안 된다. */
+     같은 event가 다시 온다. React state는 저장 실패 뒤에도 새 note를 품을 수
+     있으므로, dedupe/ACK와 review 닫기는 반드시 현재 persisted bytes로 판정한다. */
   useEffect(() => {
     if (!aiReady || pendingAiAcceptRef.current) return;
-    if (notes.some((note) => note.aiEventId && note.aiEventId === aiReady.eventId)) {
+    if (hasPersistedAiEvent(aiReady.eventId)) {
       setAiReviewOpen(false);
       void acceptAiReady();
     }
-  }, [aiReady, notes, acceptAiReady]);
+  }, [aiReady, acceptAiReady]);
 
   useEffect(() => {
     if (aiReviewOpen && !aiReady && !aiSaving) setAiReviewOpen(false);
@@ -220,8 +220,9 @@ export default function App() {
   const cardDueCount = useMemo(() => dueCards(cards).length, [cards]);
 
   function setAiBridgeEnabled(enabled) {
-    if (enabled) localStorage.setItem(AI_COMPANION_KEY, "1");
-    else localStorage.removeItem(AI_COMPANION_KEY);
+    // 다른 UI 취향과 같은 best-effort preference 계약: 저장 실패가 토글 이벤트를
+    // 예외로 터뜨리면 안 된다. 현재 세션에는 적용하고, 다음 reload에서만 잊는다.
+    savePref(AI_COMPANION_KEY, enabled ? "1" : "0");
     setAiCompanionEnabled(enabled);
   }
 
@@ -272,7 +273,7 @@ export default function App() {
 
   function addAiNote(rawDraft, eventId) {
     if (!eventId || aiSaving || storageLocked) return;
-    if (notes.some((note) => note.aiEventId === eventId)) {
+    if (hasPersistedAiEvent(eventId)) {
       setAiReviewOpen(false);
       void acceptAiReady();
       return;
@@ -476,7 +477,7 @@ export default function App() {
               className="btn btn--ink btn--block"
               onClick={() => setAiReviewOpen(true)}
             >
-              ✦ AI 분석 1 · {aiReady.imported.problem || "새 분석"} 검토
+              ✦ AI 분석 · {aiReady.imported.problem || "새 분석"} 검토
             </button>
           </div>
         )}
@@ -620,6 +621,7 @@ export default function App() {
             <AiReviewView
               delivery={aiReady}
               saving={aiSaving}
+              disabled={storageLocked}
               onSave={(payload) => addAiNote(payload, aiReady.eventId)}
               onReject={(reason) => {
                 setAiSaving(false);
