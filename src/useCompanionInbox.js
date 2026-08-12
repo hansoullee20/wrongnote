@@ -6,6 +6,7 @@ const POLL_MS = 4_000;
 const RENEW_MS = 20_000;
 
 const terminalOwnershipStatus = new Set(["no_session", "not_owner", "stale_fence"]);
+const terminalSettlementStatus = new Set(["released", "rejected", "accepted", "already_settled"]);
 
 function parseFailureReason(err) {
   const message = err?.message ? String(err.message) : "unknown AI import error";
@@ -18,6 +19,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   const sessionRef = useRef(null);
   const readyRef = useRef(null);
   const pendingRejectRef = useRef(null);
+  const pendingAcceptRef = useRef(null);
   const pendingReleaseRef = useRef(null);
   const tickBusyRef = useRef(false);
   const aliveRef = useRef(true);
@@ -44,7 +46,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
         pending.outcome,
         pending.error ? { error: pending.error } : undefined
       );
-      if (["released", "rejected", "already_settled"].includes(result.status)) return true;
+      if (terminalSettlementStatus.has(result.status)) return true;
       if (terminalOwnershipStatus.has(result.status)) {
         clearSession();
         return true;
@@ -109,6 +111,10 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
           pendingRejectRef.current = null;
           if (aliveRef.current) setNotice("AI 분석 JSON이 Wrongnote 검증을 통과하지 못해 격리했다.");
         }
+        return;
+      }
+      if (pendingAcceptRef.current) {
+        if (await settlePending(pendingAcceptRef.current)) pendingAcceptRef.current = null;
         return;
       }
       if (pendingReleaseRef.current) {
@@ -176,6 +182,44 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     return settled;
   }, [setReady, settlePending]);
 
+  const acceptReady = useCallback(async () => {
+    const current = readyRef.current;
+    const session = sessionRef.current;
+    if (!current || !session) return true;
+    const pending = {
+      fence: session.fence,
+      receipt: current.receipt,
+      outcome: "accepted",
+    };
+    pendingAcceptRef.current = pending;
+    setReady(null);
+    const settled = await settlePending(pending);
+    if (settled) pendingAcceptRef.current = null;
+    return settled;
+  }, [setReady, settlePending]);
+
+  const rejectReady = useCallback(async (reason = "사용자가 AI 분석을 기록하지 않음") => {
+    const current = readyRef.current;
+    const session = sessionRef.current;
+    if (!current || !session) {
+      setReady(null);
+      return true;
+    }
+    const error = String(reason || "").trim();
+    if (!error) throw new Error("rejection reason must be nonblank");
+    const pending = {
+      fence: session.fence,
+      receipt: current.receipt,
+      outcome: "rejected",
+      error,
+    };
+    pendingRejectRef.current = pending;
+    setReady(null);
+    const settled = await settlePending(pending);
+    if (settled) pendingRejectRef.current = null;
+    return settled;
+  }, [setReady, settlePending]);
+
   useEffect(() => {
     aliveRef.current = true;
     void tick();
@@ -194,28 +238,38 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   useEffect(() => {
     const timer = window.setInterval(async () => {
       const session = sessionRef.current;
-      if (!session || (!readyRef.current && !enabled)) return;
+      const hasPending = Boolean(
+        pendingRejectRef.current || pendingAcceptRef.current || pendingReleaseRef.current
+      );
+      if (!session || (!readyRef.current && !hasPending && !enabled)) return;
       try {
         const result = await clientRef.current.renewSession(session.sessionId, session.fence);
         if (result.status === "renewed") {
           session.expiresAt = result.expiresAt;
         } else if (terminalOwnershipStatus.has(result.status)) {
           clearSession();
+          pendingRejectRef.current = null;
+          pendingAcceptRef.current = null;
+          pendingReleaseRef.current = null;
           if (readyRef.current) {
             setReady(null);
             if (aliveRef.current) setNotice("AI 분석 소유권이 다른 탭으로 넘어갔다. 다시 도착하면 배지에 표시한다.");
           }
         }
       } catch {
-        // 컴패니언이 잠깐 꺼져도 delivery를 버리지 않는다. 같은 receipt로
-        // settle을 재시도할 수 있어야 하므로 네트워크 실패는 조용히 둔다.
+        // 컴패니언이 잠깐 꺼져도 delivery/settlement intent를 버리지 않는다.
+        // 같은 receipt로 settle을 재시도하거나, 재시작 뒤 eventId dedupe로
+        // 안전하게 회복할 수 있어야 한다.
       }
     }, RENEW_MS);
     return () => window.clearInterval(timer);
   }, [clearSession, enabled, setReady]);
 
   useEffect(() => {
-    if (enabled || readyRef.current || !sessionRef.current) return;
+    const hasPending = Boolean(
+      pendingRejectRef.current || pendingAcceptRef.current || pendingReleaseRef.current
+    );
+    if (enabled || readyRef.current || hasPending || !sessionRef.current) return;
     const session = sessionRef.current;
     clearSession();
     void clientRef.current
@@ -225,7 +279,10 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
 
   useEffect(() => () => {
     const session = sessionRef.current;
-    if (!session || readyRef.current) return;
+    const hasPending = Boolean(
+      pendingRejectRef.current || pendingAcceptRef.current || pendingReleaseRef.current
+    );
+    if (!session || readyRef.current || hasPending) return;
     void clientRef.current
       .releaseSession(session.sessionId, session.fence, { keepalive: true })
       .catch(() => {});
@@ -236,5 +293,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     notice,
     dismissNotice: () => setNotice(""),
     releaseReady,
+    acceptReady,
+    rejectReady,
   };
 }
