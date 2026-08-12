@@ -66,7 +66,6 @@ export async function createQueueStore({
   const clock = () => {
     const raw = Number(now());
     if (!Number.isFinite(raw) || raw < 0) throw new Error("clock returned an invalid timestamp");
-    // A backward wall-clock adjustment cannot make a lease expire earlier or create retrograde records.
     lastNow = Math.max(lastNow, raw);
     return lastNow;
   };
@@ -102,7 +101,6 @@ export async function createQueueStore({
       return resultWithDurability(result);
     } catch (err) {
       if (err instanceof QueueCommitError || err?.committed === true) {
-        // rename is the commit point: disk-visible state is candidate even though crash durability is uncertain.
         state = candidate;
         durability = "uncertain";
         err.result = result;
@@ -117,10 +115,6 @@ export async function createQueueStore({
       const candidate = clone(state);
       const tx = await fn(candidate);
       if (!tx || tx.changed !== true) {
-        /* A post-rename failure leaves the logical state applied but crash durability
-           unknown. A retry must never turn that into an ordinary duplicate/busy/etc.
-           Re-persist the current state first; a successful directory sync closes the
-           ambiguity, while another failure stays loud. */
         if (durability === "uncertain") {
           try {
             const persisted = await writeStateAtomic(file, state, { fsImpl, platform });
@@ -168,13 +162,12 @@ export async function createQueueStore({
 
   return {
     async submit(eventId, payload) {
-      // Snapshot before entering the serialized async queue. The caller may mutate its object immediately after this call.
       assertEventId(eventId);
       const snap = snapshotPayload(payload);
       return transact((candidate) => {
         const active = candidate.items.find((i) => i.eventId === eventId);
         const accepted = candidate.accepted.find((r) => r.eventId === eventId);
-        const rejected = [...candidate.rejected].reverse().find((r) => r.eventId === eventId);
+        const rejected = candidate.rejected.find((r) => r.eventId === eventId && r.requeuedItemId === null);
         const existing = active || accepted || rejected;
         if (existing) {
           if (existing.payloadHash !== snap.hash) {
@@ -192,7 +185,7 @@ export async function createQueueStore({
             changed: false,
             result: {
               status: "duplicate",
-              state: rejected.requeuedItemId ? "rejected_history" : "rejected",
+              state: "rejected",
               eventId,
               rejectionId: rejected.rejectionId,
             },
@@ -398,7 +391,7 @@ export async function createQueueStore({
         };
         candidate.items.push(item);
         dead.requeuedItemId = item.id;
-        dead.payload = null; // evidence remains; full payload now lives on the active retry
+        dead.payload = null;
         return { changed: true, result: { status: "requeued", eventId: item.eventId, itemId: item.id, rejectionId } };
       });
     },
@@ -455,7 +448,7 @@ export async function createQueueStore({
         await lock.release();
         closed = true;
       })().finally(() => {
-        if (!closed) closing = false; // release failure remains retryable
+        if (!closed) closing = false;
         closeFlight = null;
       });
       return closeFlight;

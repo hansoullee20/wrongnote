@@ -48,3 +48,15 @@ test("one event cannot have two disconnected unresolved rejection heads", async 
   await fs.writeFile(file, JSON.stringify(state), "utf8");
   await assert.rejects(() => createQueueStore({ file }), (e) => e.code === "corrupt_queue");
 });
+
+test("submit finds the unresolved rejection head from linkage, not array order", async () => {
+  const file = await tempFile("reorder");
+  const state = await twoRejectionChain(file);
+  state.rejected.reverse();
+  await fs.writeFile(file, JSON.stringify(state), "utf8");
+  const store = await createQueueStore({ file });
+  const duplicate = await store.submit("event-1", PAYLOAD);
+  assert.equal(duplicate.status, "duplicate");
+  assert.equal(duplicate.state, "rejected");
+  await store.close();
+});
