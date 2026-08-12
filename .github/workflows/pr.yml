@@ -27,8 +27,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm test
-      # 컴패니언은 별도 package.json을 쓰므로 루트 Playwright 테스트로는 실행되지 않는다.
-      # 큐 경계가 이 PR의 핵심인 만큼 CI에서 직접 강제한다.
+      # 컴패니언은 별도 잠금 파일을 갖는다. MCP SDK/클라이언트까지 동일 그래프로 재현한다.
+      - run: npm --prefix companion ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix companion test
       # 아래 두 게이트는 deploy.yml과 **같아야 한다**. 여기서 빠지면
       # PR이 초록불인데 머지 직후 main 배포가 깨진다.
@@ -46,8 +46,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # 컴패니언의 잠금/rename/fsync 경계에는 플랫폼별 동작이 있다.
-  # 전체 브라우저 스택을 복제하지 않고 Node 경계 테스트만 Windows에서 직접 실행한다.
+  # 컴패니언의 잠금/rename/fsync/stdio 경계에는 플랫폼별 동작이 있다.
   companion-windows:
     runs-on: windows-latest
     steps:
@@ -55,4 +54,5 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 20
+      - run: npm --prefix companion ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix companion test
