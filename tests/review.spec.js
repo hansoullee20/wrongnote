@@ -82,9 +82,9 @@ test.describe("v4 → v5 attempt 마이그레이션", () => {
     // 버전 승격 + v4 원본 스냅샷
     expect(
       await page.evaluate(() => localStorage.getItem("wr_schema_version"))
-    ).toBe("7");
+    ).toBe("8");
     const backup = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("wr_backup_v4_to_v7"))
+      JSON.parse(localStorage.getItem("wr_backup_v4_to_v8"))
     );
     expect(backup.notes.map((n) => n.problem)).toContain("V4-1");
   });
