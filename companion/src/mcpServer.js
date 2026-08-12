@@ -42,7 +42,7 @@ function successGuidance(result) {
     return `Queued Wrongnote analysis ${result.eventId}. The browser can now claim it.`;
   }
   if (result.status === "duplicate") {
-    return `Wrongnote analysis ${result.eventId} was already queued or settled. Do not create a replacement eventId for this same analysis.`;
+    return `Wrongnote analysis ${result.eventId} is already ${result.state}. Do not create a replacement eventId for this same analysis.`;
   }
   return JSON.stringify(result);
 }
@@ -54,13 +54,23 @@ function logicalFailureGuidance(result) {
   if (result.status === "queue_full") {
     return `Wrongnote's local AI queue is full (${result.limit} active items). Do not invent a new eventId to bypass the queue limit.`;
   }
+  if (result.status === "duplicate" && result.state === "rejected") {
+    return `Wrongnote analysis ${result.eventId} is already in rejected/dead-letter state. Do not create a new eventId to bypass that evidence; inspect or explicitly requeue the rejection through companion recovery tooling.`;
+  }
   return JSON.stringify(result);
+}
+
+function isLogicalFailure(result) {
+  return (
+    ["idempotency_conflict", "queue_full"].includes(result.status) ||
+    (result.status === "duplicate" && result.state === "rejected")
+  );
 }
 
 export async function submitWrongnoteAnalysis(store, { eventId, payload }, { logger = console } = {}) {
   try {
     const result = await store.submit(eventId, payload);
-    const structuredContent = { ok: !["idempotency_conflict", "queue_full"].includes(result.status), ...result };
+    const structuredContent = { ok: !isLogicalFailure(result), ...result };
     if (!structuredContent.ok) {
       return asToolResult(structuredContent, {
         isError: true,
@@ -69,7 +79,7 @@ export async function submitWrongnoteAnalysis(store, { eventId, payload }, { log
     }
     return asToolResult(structuredContent, { guidance: successGuidance(result) });
   } catch (err) {
-    if (err instanceof QueueError || typeof err?.code === "string") {
+    if (err instanceof QueueError) {
       const structuredContent = {
         ok: false,
         code: err.code || "queue_error",
@@ -80,6 +90,22 @@ export async function submitWrongnoteAnalysis(store, { eventId, payload }, { log
         ? `Wrongnote reports that the submission may already have committed but crash durability is uncertain. Retry the exact same tool call with the exact same eventId ${eventId}; do not generate a new eventId.`
         : `Wrongnote rejected or could not queue analysis ${eventId}: ${structuredContent.code}. Keep the same eventId if you retry the same analysis.`;
       return asToolResult(structuredContent, { isError: true, guidance });
+    }
+
+    if (typeof err?.code === "string") {
+      logger?.error?.("wrongnote MCP queue I/O failure", err);
+      return asToolResult(
+        {
+          ok: false,
+          code: err.code,
+          message: "Wrongnote local queue I/O failure",
+          ...safeErrorDetails(err),
+        },
+        {
+          isError: true,
+          guidance: `Wrongnote could not queue analysis ${eventId} because of local I/O failure ${err.code}. If retrying the same analysis, keep the same eventId.`,
+        }
+      );
     }
 
     logger?.error?.("wrongnote MCP submit failed", err);
@@ -102,7 +128,7 @@ export function createWrongnoteMcpServer(store, { logger = console } = {}) {
     { name: "wrongnote-companion", version: "0.3.0" },
     {
       instructions:
-        "Wrongnote accepts completed math-error analyses as untrusted queue items. Use wrongnote_submit_analysis only after you have produced the complete AI-import JSON. Generate one stable eventId per distinct analysis and reuse that exact eventId on retries. Never create a replacement eventId merely because a previous call returned an ambiguous or retryable error.",
+        "Wrongnote accepts completed math-error analyses as untrusted queue items. Use wrongnote_submit_analysis only after you have produced the complete AI-import JSON. Generate one stable eventId per distinct analysis and reuse that exact eventId on retries. Never create a replacement eventId merely because a previous call returned an ambiguous, rejected, or retryable result.",
     }
   );
 
