@@ -14,6 +14,17 @@ function parseFailureReason(err) {
   return `Wrongnote parseAiImport rejected the queued payload: ${message}`;
 }
 
+function settlementKey(pending) {
+  return `${pending.fence}:${pending.receipt}:${pending.outcome}`;
+}
+
+function permanentSettlementError(err) {
+  return (
+    err?.code === "bad_companion_response" ||
+    (Number.isInteger(err?.status) && err.status >= 400 && err.status < 500)
+  );
+}
+
 export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   const clientRef = useRef(clientOverride || createCompanionClient());
   // AI가 꺼진 브라우저는 session identity조차 만들 필요가 없다. randomUUID 같은
@@ -24,6 +35,8 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   const pendingRejectRef = useRef(null);
   const pendingAcceptRef = useRef(null);
   const pendingReleaseRef = useRef(null);
+  const settlementFlightRef = useRef(null);
+  const protocolBlockedRef = useRef(false);
   const tickBusyRef = useRef(false);
   const aliveRef = useRef(true);
   const [ready, setReadyState] = useState(null);
@@ -38,64 +51,98 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     sessionRef.current = null;
   }, []);
 
-  /*
-   * 반환값은 "HTTP가 끝났나"가 아니라 settlement intent의 상태다.
-   * done=true면 같은 receipt를 더 재시도하면 안 된다.
-   * matched=true일 때만 요청한 outcome과 durable queue outcome이 일치한다.
-   */
   const settlePending = useCallback(async (pending) => {
-    const session = sessionRef.current;
-    if (!session || session.fence !== pending.fence) {
-      return { done: true, matched: false };
+    const key = settlementKey(pending);
+
+    /* 버튼 handler와 interval tick이 같은 pending receipt를 동시에 보더라도
+       HTTP settle은 하나만 날린다. accepted/rejected는 idempotent지만 release는
+       첫 호출이 성공한 직후 두 번째가 receipt_mismatch가 될 수 있어, 병렬 호출을
+       허용하면 caller-visible 상태가 실행 순서에 따라 달라진다. */
+    const existing = settlementFlightRef.current;
+    if (existing) {
+      if (existing.key === key) return existing.promise;
+      try {
+        await existing.promise;
+      } catch {
+        // 실제 결과는 아래 새 intent가 자기 요청으로 판정한다.
+      }
     }
+
+    const run = (async () => {
+      const session = sessionRef.current;
+      if (!session || session.fence !== pending.fence) {
+        return { done: true, matched: false };
+      }
+      try {
+        const result = await clientRef.current.settle(
+          session.sessionId,
+          session.fence,
+          pending.receipt,
+          pending.outcome,
+          pending.error ? { error: pending.error } : undefined
+        );
+
+        if (directSettlementStatus.has(result.status)) {
+          const matched = result.status === pending.outcome;
+          if (!matched && aliveRef.current) {
+            setNotice(
+              `AI 처리 상태 충돌: ${pending.outcome}로 완료하려 했지만 로컬 큐는 ${result.status}로 응답했다. 자동으로 성공 처리하지 않았다.`
+            );
+          }
+          return { done: true, matched, conflict: !matched, result };
+        }
+
+        if (result.status === "already_settled") {
+          if (result.outcome === pending.outcome) {
+            return { done: true, matched: true, result };
+          }
+          if (aliveRef.current) {
+            setNotice(
+              `AI 처리 상태 충돌: ${pending.outcome}로 완료하려 했지만 로컬 큐에는 이미 ${result.outcome || "다른 상태"}로 기록되어 있다. 자동으로 덮어쓰지 않았다.`
+            );
+          }
+          return { done: true, matched: false, conflict: true, result };
+        }
+
+        /* release는 event를 파괴하지 않는다. release 응답만 유실된 뒤 재시도하면
+           store에는 terminal receipt가 없어서 receipt_mismatch가 정상적으로 나온다.
+           not_found는 item 자체가 없다는 더 강한 신호이므로 성공으로 둔갑시키지 않는다. */
+        if (pending.outcome === "released" && result.status === "receipt_mismatch") {
+          return { done: true, matched: true, recoveredRelease: true, result };
+        }
+
+        if (terminalOwnershipStatus.has(result.status)) {
+          clearSession();
+          return { done: true, matched: false, result };
+        }
+        return { done: false, matched: false, result };
+      } catch (err) {
+        if (permanentSettlementError(err)) {
+          /* 같은 잘못된 요청을 영원히 재시도하며 lease를 갱신하지 않는다.
+             queue item은 지우지 않고 현재 session lease가 만료되게 둔다. 사용자가
+             AI 연결을 껐다 켜야 다시 시도하므로 protocol mismatch가 눈에 보인다. */
+          protocolBlockedRef.current = true;
+          clearSession();
+          if (aliveRef.current) {
+            setNotice(
+              `AI 처리 요청을 로컬 컴패니언이 거부했다 (${err.code || err.status || "protocol error"}). 자동 재시도를 멈췄다. AI 연결을 껐다가 컴패니언 상태를 확인한 뒤 다시 켜라.`
+            );
+          }
+          return { done: true, matched: false, permanent: true, error: err };
+        }
+        // 네트워크 단절·commit durability uncertainty·일시 5xx/I/O는 같은
+        // receipt로 재시도한다. terminal outcome은 다음 응답에서 판별한다.
+        return { done: false, matched: false, error: err };
+      }
+    })();
+
+    settlementFlightRef.current = { key, promise: run };
     try {
-      const result = await clientRef.current.settle(
-        session.sessionId,
-        session.fence,
-        pending.receipt,
-        pending.outcome,
-        pending.error ? { error: pending.error } : undefined
-      );
-
-      if (directSettlementStatus.has(result.status)) {
-        return {
-          done: true,
-          matched: result.status === pending.outcome,
-          result,
-        };
+      return await run;
+    } finally {
+      if (settlementFlightRef.current?.promise === run) {
+        settlementFlightRef.current = null;
       }
-
-      if (result.status === "already_settled") {
-        if (result.outcome === pending.outcome) {
-          return { done: true, matched: true, result };
-        }
-        if (aliveRef.current) {
-          setNotice(
-            `AI 처리 상태 충돌: ${pending.outcome}로 완료하려 했지만 로컬 큐에는 이미 ${result.outcome || "다른 상태"}로 기록되어 있다. 자동으로 덮어쓰지 않았다.`
-          );
-        }
-        return { done: true, matched: false, conflict: true, result };
-      }
-
-      /* release는 event를 파괴하지 않는다. release 응답만 유실된 뒤 재시도하면
-         store에는 terminal receipt가 없어서 receipt_mismatch가 정상적으로 나온다.
-         그 오래된 receipt를 계속 재시도하면 세션을 영원히 잡으므로 여기서 끝낸다. */
-      if (
-        pending.outcome === "released" &&
-        ["receipt_mismatch", "not_found"].includes(result.status)
-      ) {
-        return { done: true, matched: true, recoveredRelease: true, result };
-      }
-
-      if (terminalOwnershipStatus.has(result.status)) {
-        clearSession();
-        return { done: true, matched: false, result };
-      }
-      return { done: false, matched: false, result };
-    } catch (err) {
-      // 네트워크 단절·commit durability uncertainty·일시 I/O는 같은 receipt로
-      // 재시도하는 것이 안전하다. 영속 terminal outcome은 다음 응답에서 판별한다.
-      return { done: false, matched: false, error: err };
     }
   }, [clearSession]);
 
@@ -111,7 +158,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     pendingRejectRef.current = pending;
     const settlement = await settlePending(pending);
     if (settlement.done) pendingRejectRef.current = null;
-    if (aliveRef.current && !settlement.conflict) {
+    if (aliveRef.current && !settlement.conflict && !settlement.permanent) {
       setNotice(
         settlement.matched
           ? "AI 분석 JSON이 Wrongnote 검증을 통과하지 못해 격리했다."
@@ -121,6 +168,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   }, [settlePending]);
 
   const acquireIfNeeded = useCallback(async () => {
+    if (protocolBlockedRef.current) return null;
     if (sessionRef.current) return sessionRef.current;
     const sessionId = sessionIdRef.current || newCompanionSessionId();
     sessionIdRef.current = sessionId;
@@ -145,14 +193,19 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   }, [clearSession]);
 
   const tick = useCallback(async () => {
-    if (!aliveRef.current || tickBusyRef.current) return;
+    if (!aliveRef.current || tickBusyRef.current || protocolBlockedRef.current) return;
     tickBusyRef.current = true;
     try {
       if (pendingRejectRef.current) {
         const settlement = await settlePending(pendingRejectRef.current);
         if (settlement.done) {
           pendingRejectRef.current = null;
-          if (aliveRef.current && settlement.matched && !settlement.conflict) {
+          if (
+            aliveRef.current &&
+            settlement.matched &&
+            !settlement.conflict &&
+            !settlement.permanent
+          ) {
             setNotice("AI 분석 JSON이 Wrongnote 검증을 통과하지 못해 격리했다.");
           }
         }
@@ -298,7 +351,11 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
       const hasPending = Boolean(
         pendingRejectRef.current || pendingAcceptRef.current || pendingReleaseRef.current
       );
-      if (!session || (!readyRef.current && !hasPending && !enabled)) return;
+      if (
+        protocolBlockedRef.current ||
+        !session ||
+        (!readyRef.current && !hasPending && !enabled)
+      ) return;
       try {
         const result = await clientRef.current.renewSession(session.sessionId, session.fence);
         if (result.status === "renewed") {
@@ -321,6 +378,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   }, [clearSession, enabled, setReady]);
 
   useEffect(() => {
+    if (!enabled) protocolBlockedRef.current = false;
     const hasPending = Boolean(
       pendingRejectRef.current || pendingAcceptRef.current || pendingReleaseRef.current
     );
