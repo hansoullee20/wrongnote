@@ -10,9 +10,7 @@ async function main() {
     },
   });
 
-  console.error(
-    `Wrongnote MCP running on stdio; browser bridge http://${runtime.companion.address.address}:${runtime.companion.address.port}`
-  );
+  console.error("Wrongnote MCP running on stdio; browser bridge starts on first analysis submission");
 
   let stopping = false;
   const stop = async (reason) => {
