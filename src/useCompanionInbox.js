@@ -18,7 +18,7 @@ function settlementKey(pending) {
   return `${pending.fence}:${pending.receipt}:${pending.outcome}`;
 }
 
-function permanentSettlementError(err) {
+function permanentCompanionError(err) {
   return (
     err?.code === "bad_companion_response" ||
     (Number.isInteger(err?.status) && err.status >= 400 && err.status < 500)
@@ -50,6 +50,15 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   const clearSession = useCallback(() => {
     sessionRef.current = null;
   }, []);
+
+  const blockProtocol = useCallback((message) => {
+    protocolBlockedRef.current = true;
+    clearSession();
+    // A review tied to a protocol-incompatible session must not remain looking
+    // live. The queue item itself is untouched and can redeliver after reload.
+    setReady(null);
+    if (aliveRef.current) setNotice(message);
+  }, [clearSession, setReady]);
 
   const visibleConflict = useCallback((pending, actual) => {
     if (!aliveRef.current) return;
@@ -122,28 +131,15 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
           return { done: true, matched: false, result };
         }
 
-        /* settle의 정상 응답 집합은 위에서 모두 열거했다. 새/이상한 상태를
-           retryable로 추측하면 똑같은 receipt로 lease를 영구 점유할 수 있다. */
-        protocolBlockedRef.current = true;
-        clearSession();
-        if (aliveRef.current) {
-          setNotice(
-            `로컬 컴패니언이 알 수 없는 AI 처리 상태(${String(result.status)})를 반환했다. 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
-          );
-        }
+        blockProtocol(
+          `로컬 컴패니언이 알 수 없는 AI 처리 상태(${String(result.status)})를 반환했다. 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
+        );
         return { done: true, matched: false, permanent: true, result };
       } catch (err) {
-        if (permanentSettlementError(err)) {
-          /* 같은 잘못된 요청을 영원히 재시도하며 lease를 갱신하지 않는다.
-             queue item은 지우지 않고 현재 session lease가 만료되게 둔다. UI 폼이
-             잠깐 열렸다는 이유로 이 stop-gate를 풀지 않는다. 복구는 명시적 reload다. */
-          protocolBlockedRef.current = true;
-          clearSession();
-          if (aliveRef.current) {
-            setNotice(
-              `AI 처리 요청을 로컬 컴패니언이 거부했다 (${err.code || err.status || "protocol error"}). 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
-            );
-          }
+        if (permanentCompanionError(err)) {
+          blockProtocol(
+            `AI 처리 요청을 로컬 컴패니언이 거부했다 (${err.code || err.status || "protocol error"}). 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
+          );
           return { done: true, matched: false, permanent: true, error: err };
         }
         // 네트워크 단절·commit durability uncertainty·일시 5xx/I/O는 같은
@@ -160,7 +156,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
         settlementFlightRef.current = null;
       }
     }
-  }, [clearSession, visibleConflict]);
+  }, [blockProtocol, clearSession, visibleConflict]);
 
   const rejectMalformed = useCallback(async (delivery, reason) => {
     const session = sessionRef.current;
@@ -191,7 +187,12 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     let result;
     try {
       result = await clientRef.current.acquireSession(sessionId);
-    } catch {
+    } catch (err) {
+      if (permanentCompanionError(err)) {
+        blockProtocol(
+          `로컬 AI 세션 연결을 컴패니언이 거부했다 (${err.code || err.status || "protocol error"}). 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
+        );
+      }
       return null;
     }
     if (["acquired", "already_acquired"].includes(result.status)) {
@@ -204,9 +205,15 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
       return session;
     }
     if (result.status === "busy") return null;
-    if (terminalOwnershipStatus.has(result.status)) clearSession();
+    if (terminalOwnershipStatus.has(result.status)) {
+      clearSession();
+      return null;
+    }
+    blockProtocol(
+      `로컬 컴패니언이 알 수 없는 세션 상태(${String(result.status)})를 반환했다. 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
+    );
     return null;
-  }, [clearSession]);
+  }, [blockProtocol, clearSession]);
 
   const tick = useCallback(async () => {
     if (!aliveRef.current || tickBusyRef.current || protocolBlockedRef.current) return;
@@ -245,7 +252,11 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
       try {
         result = await clientRef.current.claim(session.sessionId, session.fence);
       } catch (err) {
-        if (err?.code !== "companion_unavailable" && aliveRef.current) {
+        if (permanentCompanionError(err)) {
+          blockProtocol(
+            `AI 분석 수신 요청을 컴패니언이 거부했다 (${err.code || err.status || "protocol error"}). 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
+          );
+        } else if (err?.code !== "companion_unavailable" && aliveRef.current) {
           setNotice("로컬 AI 컴패니언 응답을 확인하지 못했다. 다음 주기에 다시 시도한다.");
         }
         return;
@@ -260,7 +271,12 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
         clearSession();
         return;
       }
-      if (result.status !== "delivered") return;
+      if (result.status !== "delivered") {
+        blockProtocol(
+          `로컬 컴패니언이 알 수 없는 수신 상태(${String(result.status)})를 반환했다. 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
+        );
+        return;
+      }
 
       try {
         const imported = parseAiImport(result.payload);
@@ -277,7 +293,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     } finally {
       tickBusyRef.current = false;
     }
-  }, [acquireIfNeeded, clearSession, enabled, rejectMalformed, setReady, settlePending]);
+  }, [acquireIfNeeded, blockProtocol, clearSession, enabled, rejectMalformed, setReady, settlePending]);
 
   const releaseReady = useCallback(async () => {
     const current = readyRef.current;
@@ -376,6 +392,10 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
         const result = await clientRef.current.renewSession(session.sessionId, session.fence);
         if (result.status === "renewed") {
           session.expiresAt = result.expiresAt;
+        } else if (result.status === "lease_expired") {
+          // A current delivery may still settle late if nobody has taken over;
+          // keep it reviewable. Without a delivery there is nothing to preserve.
+          if (!readyRef.current && !hasPending) clearSession();
         } else if (terminalOwnershipStatus.has(result.status)) {
           clearSession();
           pendingRejectRef.current = null;
@@ -385,13 +405,23 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
             setReady(null);
             if (aliveRef.current) setNotice("AI 분석 소유권이 다른 탭으로 넘어갔다. 다시 도착하면 배지에 표시한다.");
           }
+        } else {
+          blockProtocol(
+            `로컬 컴패니언이 알 수 없는 세션 갱신 상태(${String(result.status)})를 반환했다. 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
+          );
         }
-      } catch {
-        // 컴패니언이 잠깐 꺼져도 delivery/settlement intent를 버리지 않는다.
+      } catch (err) {
+        if (permanentCompanionError(err)) {
+          blockProtocol(
+            `AI 세션 갱신을 컴패니언이 거부했다 (${err.code || err.status || "protocol error"}). 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
+          );
+        }
+        // transient companion/network failures keep the local intent so a later
+        // renew/settle can recover without fabricating a new receipt.
       }
     }, RENEW_MS);
     return () => window.clearInterval(timer);
-  }, [clearSession, enabled, setReady]);
+  }, [blockProtocol, clearSession, enabled, setReady]);
 
   useEffect(() => {
     const hasPending = Boolean(
