@@ -5,6 +5,7 @@ import { hasPersistedAiEvent } from "./storage.js";
 
 const POLL_MS = 4_000;
 const RENEW_MS = 20_000;
+const AI_COMPANION_KEY = "wr_ai_companion_enabled";
 
 const terminalOwnershipStatus = new Set(["no_session", "not_owner", "stale_fence"]);
 const directSettlementStatus = new Set(["released", "rejected", "accepted"]);
@@ -23,6 +24,14 @@ function permanentSettlementError(err) {
     err?.code === "bad_companion_response" ||
     (Number.isInteger(err?.status) && err.status >= 400 && err.status < 500)
   );
+}
+
+function userConnectionOptedIn() {
+  try {
+    return localStorage.getItem(AI_COMPANION_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
@@ -49,6 +58,13 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
 
   const clearSession = useCallback(() => {
     sessionRef.current = null;
+  }, []);
+
+  const visibleConflict = useCallback((pending, actual) => {
+    if (!aliveRef.current) return;
+    setNotice(
+      `AI 처리 상태 충돌: ${pending.outcome}로 완료하려 했지만 로컬 큐는 ${actual} 상태다. 자동으로 성공 처리하지 않았다.`
+    );
   }, []);
 
   const settlePending = useCallback(async (pending) => {
@@ -84,11 +100,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
 
         if (directSettlementStatus.has(result.status)) {
           const matched = result.status === pending.outcome;
-          if (!matched && aliveRef.current) {
-            setNotice(
-              `AI 처리 상태 충돌: ${pending.outcome}로 완료하려 했지만 로컬 큐는 ${result.status}로 응답했다. 자동으로 성공 처리하지 않았다.`
-            );
-          }
+          if (!matched) visibleConflict(pending, result.status);
           return { done: true, matched, conflict: !matched, result };
         }
 
@@ -96,26 +108,39 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
           if (result.outcome === pending.outcome) {
             return { done: true, matched: true, result };
           }
-          if (aliveRef.current) {
-            setNotice(
-              `AI 처리 상태 충돌: ${pending.outcome}로 완료하려 했지만 로컬 큐에는 이미 ${result.outcome || "다른 상태"}로 기록되어 있다. 자동으로 덮어쓰지 않았다.`
-            );
-          }
+          visibleConflict(pending, `already_${result.outcome || "settled"}`);
           return { done: true, matched: false, conflict: true, result };
         }
 
         /* release는 event를 파괴하지 않는다. release 응답만 유실된 뒤 재시도하면
-           store에는 terminal receipt가 없어서 receipt_mismatch가 정상적으로 나온다.
-           not_found는 item 자체가 없다는 더 강한 신호이므로 성공으로 둔갑시키지 않는다. */
+           store에는 terminal receipt가 없어서 receipt_mismatch가 정상적으로 나온다. */
         if (pending.outcome === "released" && result.status === "receipt_mismatch") {
           return { done: true, matched: true, recoveredRelease: true, result };
+        }
+
+        /* accepted/rejected의 receipt_mismatch, 그리고 모든 outcome의 not_found는
+           같은 요청을 반복해도 해결되지 않는 논리 상태다. 성공으로 둔갑시키지도,
+           lease를 영원히 갱신하며 재시도하지도 않는다. */
+        if (["receipt_mismatch", "not_found"].includes(result.status)) {
+          visibleConflict(pending, result.status);
+          return { done: true, matched: false, conflict: true, result };
         }
 
         if (terminalOwnershipStatus.has(result.status)) {
           clearSession();
           return { done: true, matched: false, result };
         }
-        return { done: false, matched: false, result };
+
+        /* settle의 정상 응답 집합은 위에서 모두 열거했다. 새/이상한 상태를
+           retryable로 추측하면 똑같은 receipt로 lease를 영구 점유할 수 있다. */
+        protocolBlockedRef.current = true;
+        clearSession();
+        if (aliveRef.current) {
+          setNotice(
+            `로컬 컴패니언이 알 수 없는 AI 처리 상태(${String(result.status)})를 반환했다. 자동 재시도를 멈췄다. AI 연결을 껐다가 컴패니언 상태를 확인한 뒤 다시 켜라.`
+          );
+        }
+        return { done: true, matched: false, permanent: true, result };
       } catch (err) {
         if (permanentSettlementError(err)) {
           /* 같은 잘못된 요청을 영원히 재시도하며 lease를 갱신하지 않는다.
@@ -144,7 +169,7 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
         settlementFlightRef.current = null;
       }
     }
-  }, [clearSession]);
+  }, [clearSession, visibleConflict]);
 
   const rejectMalformed = useCallback(async (delivery, reason) => {
     const session = sessionRef.current;
@@ -378,7 +403,9 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   }, [clearSession, enabled, setReady]);
 
   useEffect(() => {
-    if (!enabled) protocolBlockedRef.current = false;
+    /* enabled=false는 기록/설정/AI review가 화면을 점유한 경우에도 생긴다.
+       protocol block은 실제 사용자 opt-out에서만 풀어야 한다. */
+    if (!enabled && !userConnectionOptedIn()) protocolBlockedRef.current = false;
     const hasPending = Boolean(
       pendingRejectRef.current || pendingAcceptRef.current || pendingReleaseRef.current
     );
