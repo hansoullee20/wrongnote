@@ -19,15 +19,17 @@ The queue boundary was rewritten from the schema-v8 base and intentionally does 
 
 ## MCP producer mode
 
-`wrongnote-mcp` is the preferred owner when Claude Code is the AI producer. One process owns all three boundaries together:
+`wrongnote-mcp` is the preferred owner when Claude Code is the AI producer. The stdio process starts side-effect free for MCP discovery/handshake. On the first real analysis submission it lazily acquires the queue and starts the browser bridge, after which one process owns all three boundaries together:
 
 ```text
 Claude Code
     ↕ MCP stdio
 wrongnote-mcp process
-    ├─ durable queue
-    └─ http://127.0.0.1:43119 browser bridge
+    ├─ durable queue          (starts on first submit)
+    └─ http://127.0.0.1:43119 browser bridge (starts on first submit)
 ```
+
+Lazy ownership is deliberate. Modern MCP stdio negotiation may launch a disposable discovery process before the real connection. Discovery must not take the queue lock or bind the HTTP port, otherwise the probe and the real server can collide with each other.
 
 The MCP server exposes exactly one producer tool:
 
@@ -92,9 +94,9 @@ Use an absolute path if Claude Code will launch the server from a different work
 
 ### One owner at a time
 
-Do not run `wrongnote-companion` and `wrongnote-mcp` simultaneously against the same queue file. Both intentionally acquire the same process lock, so the second owner will fail rather than race the queue.
+Before its first producer submission, `wrongnote-mcp` owns no queue lock and no HTTP port. Once the first submission starts the companion, do not run `wrongnote-companion` against the same queue file. Both intentionally use the same process lock, so the second owner will fail rather than race the queue.
 
-- `wrongnote-mcp`: MCP producer + browser HTTP bridge in one process.
+- `wrongnote-mcp`: MCP producer; lazily becomes the queue + browser HTTP owner on first submission.
 - `wrongnote-companion`: HTTP-only owner, useful when the producer will arrive through another integration later.
 
 ## Localhost HTTP transport
