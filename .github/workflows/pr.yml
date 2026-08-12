@@ -27,15 +27,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm test
-      # 컴패니언은 별도 package.json을 쓰며 commit 3부터 MCP SDK 의존성이 있다.
-      # 직접 버전은 package.json에서 고정하며, companion lockfile이 생기기 전까지 install 후 테스트한다.
-      - run: npm --prefix companion install --ignore-scripts --no-audit --no-fund
-      - uses: actions/upload-artifact@v4
-        with:
-          name: companion-generated-lock
-          path: companion/package-lock.json
-          retention-days: 1
-          if-no-files-found: error
+      # 컴패니언은 별도 잠금 파일을 갖는다. MCP SDK/클라이언트까지 동일 그래프로 재현한다.
+      - run: npm --prefix companion ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix companion test
       # 아래 두 게이트는 deploy.yml과 **같아야 한다**. 여기서 빠지면
       # PR이 초록불인데 머지 직후 main 배포가 깨진다.
@@ -61,5 +54,5 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 20
-      - run: npm --prefix companion install --ignore-scripts --no-audit --no-fund
+      - run: npm --prefix companion ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix companion test
