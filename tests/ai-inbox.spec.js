@@ -87,6 +87,23 @@ async function installCompanionMock(page, { eventId = "evt-ai-1", problem = "AI-
   return { settlements };
 }
 
+const installNotesQuotaTrap = (page) =>
+  page.addInitScript(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (
+        this === localStorage &&
+        key === "wr_notes" &&
+        sessionStorage.getItem("__aiNotesQuota") === "on"
+      ) {
+        const err = new Error("quota");
+        err.name = "QuotaExceededError";
+        throw err;
+      }
+      return original.call(this, key, value);
+    };
+  });
+
 test("AI inbox stays reviewable and only settles accepted after the note is persisted", async ({ page }) => {
   const mock = await installCompanionMock(page);
   await freshApp(page);
@@ -116,6 +133,26 @@ test("AI inbox stays reviewable and only settles accepted after the note is pers
   expect(saved).toHaveLength(1);
   expect(saved[0].failurePoint).toBe("내부도함수를 한 번 누락했다.");
   expect(saved[0].optSol).toBe("모든 후보를 비교한다.");
+});
+
+test("failed note persistence cannot settle the AI event as accepted", async ({ page }) => {
+  await installNotesQuotaTrap(page);
+  const mock = await installCompanionMock(page, { eventId: "evt-quota", problem: "AI-QUOTA" });
+  await freshApp(page);
+  await page.getByTestId("ai-companion-enable").click();
+
+  const badge = page.getByTestId("ai-inbox-badge");
+  await expect(badge).toContainText("AI-QUOTA", { timeout: 10_000 });
+  await badge.getByRole("button").click();
+
+  const beforeRaw = await page.evaluate(() => localStorage.getItem("wr_notes"));
+  await page.evaluate(() => sessionStorage.setItem("__aiNotesQuota", "on"));
+  await page.getByRole("button", { name: "저장 (기록하기)" }).click();
+
+  await expect(page.locator(".audit-warn").first()).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(mock.settlements.some((entry) => entry.outcome === "accepted")).toBe(false);
+  expect(await page.evaluate(() => localStorage.getItem("wr_notes"))).toBe(beforeRaw);
 });
 
 test("redelivery of an already-saved event is ACKed without creating a duplicate note", async ({ page }) => {
