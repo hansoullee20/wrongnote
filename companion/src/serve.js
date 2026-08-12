@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
 import { BIND_ADDRESS, queueAllowedOrigins, queueFilePath, queuePort } from "./config.js";
+import { QueueError } from "./errors.js";
 import { createHttpTransport } from "./httpServer.js";
 import { createQueueStore } from "./queueStore.js";
 
@@ -30,10 +31,11 @@ export async function startCompanionHttp({ env = process.env, logger = console }
           await store.close();
         } catch (storeError) {
           if (transportError) {
-            const combined = new Error("HTTP transport and queue store both failed to close");
-            combined.transportError = transportError;
-            combined.storeError = storeError;
-            throw combined;
+            throw new QueueError("http_shutdown_cleanup_failed", "HTTP transport and queue store both failed to close", {
+              transportError,
+              storeError,
+              queueFile: file,
+            });
           }
           throw storeError;
         }
@@ -41,9 +43,19 @@ export async function startCompanionHttp({ env = process.env, logger = console }
       },
     };
   } catch (err) {
-    await store.close().catch((cleanupErr) => {
-      err.storeCleanupError = cleanupErr;
-    });
+    try {
+      await store.close();
+    } catch (cleanupErr) {
+      throw new QueueError(
+        "http_startup_cleanup_failed",
+        `HTTP companion startup failed and the queue store could not be closed: ${file}`,
+        {
+          queueFile: file,
+          cause: err,
+          cleanupCause: cleanupErr,
+        }
+      );
+    }
     throw err;
   }
 }
@@ -76,6 +88,7 @@ async function main() {
         JSON.stringify({
           status: "shutdown_failed",
           signal,
+          code: err?.code || "error",
           message: err?.message || String(err),
         })
       );
