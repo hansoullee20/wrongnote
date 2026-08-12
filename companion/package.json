@@ -1,0 +1,13 @@
+{
+  "name": "wrongnote-companion",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local companion for wrongnote. Exposes narrow tools to an MCP host and holds delivered analyses in a durable queue until the browser claims them.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

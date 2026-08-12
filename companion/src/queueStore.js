@@ -1,0 +1,318 @@
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
+import {
+  QUEUE_FORMAT_VERSION,
+  LEASE_MS,
+  TOMBSTONE_MS,
+  MAX_ACTIVE_ITEMS,
+  MAX_PAYLOAD_BYTES,
+} from "./config.js";
+
+/* 한 분석은 반드시 세 상태 중 하나로 끝난다: waiting / accepted / rejected.
+   조용히 사라지는 경로가 있으면 그건 결함이다 (.reviews/mcp-plan-merged.md §1).
+
+   - waiting  : 아직 아무도 못 가져갔거나, 가져갔다가 놓아준 것
+   - leased   : 한 소비자가 들고 있다 (waiting의 하위 상태 — 리스가 끝나면 돌아온다)
+   - accepted : 앱이 **저장까지** 마쳤다. 묘비만 남긴다 (중복 판정용)
+   - rejected : 배달은 됐지만 parseAiImport가 거부했다. dead-letter로 옮겨
+                무기한 보존한다. 다시 안 물리고, 사라지지도 않는다.
+
+   accepted 정산은 초안 초기화가 아니라 **저장** 시점이다. 초기화에서 정산하면
+   폼을 닫기만 해도 분석이 증발한다 — 위 불변식 위반이다. */
+
+const clone = (v) => JSON.parse(JSON.stringify(v));
+
+/* 키 순서가 달라도 같은 분석이면 같은 지문이어야 한다. 배열 순서는 의미가
+   있으므로 보존한다 (개념 목록의 순서는 데이터다). */
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((acc, k) => {
+        acc[k] = canonicalize(value[k]);
+        return acc;
+      }, {});
+  }
+  return value;
+}
+
+const fingerprintOf = (payload) =>
+  crypto.createHash("sha256").update(JSON.stringify(canonicalize(payload))).digest("hex");
+
+const randomId = () => crypto.randomBytes(12).toString("hex");
+
+const emptyState = () => ({
+  version: QUEUE_FORMAT_VERSION,
+  items: [],
+  rejected: [],
+});
+
+async function readState(file) {
+  let raw;
+  try {
+    raw = await fs.readFile(file, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return emptyState();
+    throw err;
+  }
+
+  /* 못 읽는 파일을 빈 상태로 덮어쓰면 그 안에 있던 분석이 전부 사라진다.
+     읽기 실패는 시작 실패로 끝낸다 — 파일은 그대로 두고 사람이 본다. */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `queue file is not valid JSON: ${file} (left untouched — inspect it by hand)`
+    );
+  }
+  if (!parsed || parsed.version !== QUEUE_FORMAT_VERSION) {
+    throw new Error(
+      `queue file has unsupported version ${parsed?.version} (expected ${QUEUE_FORMAT_VERSION}): ${file}`
+    );
+  }
+  /* JSON으로 읽힌다고 멀쩡한 파일이 아니다. items가 배열이 아닐 때 조용히
+     []로 갈아끼우면 그 안에 있던 분석이 전부 사라지고 시작은 성공한다 —
+     파싱 실패보다 나쁘다. 아무도 눈치채지 못하기 때문이다.
+     빠진 키도 똑같이 거부한다. 이 포맷은 항상 두 배열을 함께 쓴다. */
+  for (const key of ["items", "rejected"]) {
+    if (!Array.isArray(parsed[key])) {
+      throw new Error(
+        `queue file is structurally invalid: "${key}" is ${
+          key in parsed ? `not an array (${typeof parsed[key]})` : "missing"
+        } in ${file} (left untouched — inspect it by hand)`
+      );
+    }
+  }
+  return {
+    version: QUEUE_FORMAT_VERSION,
+    items: parsed.items,
+    rejected: parsed.rejected,
+  };
+}
+
+/* 같은 디렉터리 임시 파일 → fsync → rename. rename은 원자적이라 중간에
+   죽어도 이전 파일이 통째로 남는다. 부분 기록된 파일이 보이는 창이 없다. */
+async function writeStateAtomic(file, state) {
+  const dir = path.dirname(file);
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  const tmp = path.join(dir, `.${path.basename(file)}.tmp-${process.pid}-${randomId()}`);
+  const handle = await fs.open(tmp, "w", 0o600);
+  try {
+    await handle.writeFile(JSON.stringify(state, null, 2), "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await fs.rename(tmp, file);
+}
+
+export async function createQueueStore({
+  file,
+  leaseMs = LEASE_MS,
+  tombstoneMs = TOMBSTONE_MS,
+  now = () => Date.now(),
+} = {}) {
+  if (!file) throw new Error("queue store requires a file path");
+
+  let state = await readState(file);
+
+  /* 모든 변경을 한 줄로 세운다. MCP 쪽 submit과 HTTP 쪽 claim이 동시에 와도
+     읽고-고치고-쓰는 구간이 겹치지 않는다. 겹치면 나중에 쓴 쪽이 앞의 변경을
+     통째로 되돌린다 (lost update). */
+  let chain = Promise.resolve();
+  const mutate = (fn) => {
+    const run = chain.then(async () => {
+      const result = await fn();
+      await writeStateAtomic(file, state);
+      return result;
+    });
+    // 한 번 실패해도 줄이 끊기면 안 된다
+    chain = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  };
+
+  /* 만료된 리스는 waiting으로 되돌린다. 브라우저 탭이 죽으면 이 경로로만
+     항목이 돌아온다 — 명시적 release는 죽은 탭이 보낼 수 없다. */
+  function expireLeases() {
+    const t = now();
+    for (const item of state.items) {
+      if (item.state === "leased" && item.leaseExpiresAt <= t) {
+        item.state = "waiting";
+        item.leaseOwner = null;
+        item.leaseReceipt = null;
+        item.leaseExpiresAt = null;
+      }
+    }
+  }
+
+  function pruneTombstones() {
+    const t = now();
+    state.items = state.items.filter(
+      (i) => i.state !== "accepted" || t - i.settledAt < tombstoneMs
+    );
+    /* rejected는 자르지 않는다. 사용자가 요청한 분석이고, 왜 실패했는지가
+       유일하게 남아 있는 곳이다. */
+  }
+
+  function findDuplicate(fingerprint) {
+    const active = state.items.find((i) => i.fingerprint === fingerprint);
+    if (active) return { id: active.id, state: active.state };
+    const dead = state.rejected.find((r) => r.fingerprint === fingerprint);
+    /* 이미 거부된 것과 같은 내용이면 다시 큐에 넣지 않는다. 같은 페이로드는
+       같은 이유로 또 거부된다. 되살리려면 requeue를 쓴다 — 그래야 "왜
+       아무 일도 안 일어나지"가 아니라 "거부된 상태다"가 보인다. */
+    if (dead) return { id: dead.id, state: "rejected" };
+    return null;
+  }
+
+  return {
+    async submit(payload) {
+      const serialized = JSON.stringify(payload);
+      if (serialized === undefined) throw new Error("payload is not serializable");
+      if (Buffer.byteLength(serialized, "utf8") > MAX_PAYLOAD_BYTES) {
+        throw new Error(`payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
+      }
+
+      return mutate(() => {
+        expireLeases();
+        pruneTombstones();
+
+        const fingerprint = fingerprintOf(payload);
+        const duplicate = findDuplicate(fingerprint);
+        if (duplicate) {
+          return { id: duplicate.id, duplicate: true, state: duplicate.state };
+        }
+
+        const active = state.items.filter((i) => i.state !== "accepted");
+        if (active.length >= MAX_ACTIVE_ITEMS) {
+          throw new Error(`queue is full (${MAX_ACTIVE_ITEMS} active items)`);
+        }
+
+        const item = {
+          id: randomId(),
+          payload: clone(payload),
+          fingerprint,
+          createdAt: now(),
+          state: "waiting",
+          leaseOwner: null,
+          leaseReceipt: null,
+          leaseExpiresAt: null,
+          settledAt: null,
+        };
+        state.items.push(item);
+        return { id: item.id, duplicate: false, state: "waiting" };
+      });
+    },
+
+    async claim(consumerId) {
+      if (!consumerId) throw new Error("claim requires a consumerId");
+      return mutate(() => {
+        expireLeases();
+
+        /* 같은 소비자가 이미 들고 있는 게 있으면 그걸 그대로 돌려준다.
+           새 항목을 얹어주면 한 탭이 두 개를 들고 하나를 잃어버린다. */
+        const held = state.items.find(
+          (i) => i.state === "leased" && i.leaseOwner === consumerId
+        );
+        const target =
+          held || state.items.find((i) => i.state === "waiting");
+        if (!target) return null;
+
+        if (!held) {
+          target.state = "leased";
+          target.leaseOwner = consumerId;
+          target.leaseReceipt = randomId();
+        }
+        target.leaseExpiresAt = now() + leaseMs;
+        return {
+          id: target.id,
+          receipt: target.leaseReceipt,
+          payload: clone(target.payload),
+        };
+      });
+    },
+
+    /* outcome: "accepted" | "rejected" | "released"
+       반환: "settled" | "gone" | "conflict"
+       - gone     : 그 영수증은 이미 끝났거나 리스가 만료돼 남에게 갔다
+       - conflict : 살아 있는 리스인데 주인이 아니다 */
+    async settle(consumerId, receipt, outcome, { error = "" } = {}) {
+      if (!["accepted", "rejected", "released"].includes(outcome)) {
+        throw new Error(`unknown outcome: ${outcome}`);
+      }
+      return mutate(() => {
+        expireLeases();
+
+        const item = state.items.find((i) => i.leaseReceipt === receipt);
+        if (!item || item.state !== "leased") return "gone";
+        if (item.leaseOwner !== consumerId) return "conflict";
+
+        if (outcome === "released") {
+          item.state = "waiting";
+          item.leaseOwner = null;
+          item.leaseReceipt = null;
+          item.leaseExpiresAt = null;
+          return "settled";
+        }
+
+        if (outcome === "accepted") {
+          /* 묘비만 남긴다 — payload는 앱이 노트로 저장했으므로 여기 둘 이유가
+             없다. 지문은 재전송 중복 판정에 필요하다. */
+          item.state = "accepted";
+          item.payload = null;
+          item.leaseOwner = null;
+          item.leaseReceipt = null;
+          item.leaseExpiresAt = null;
+          item.settledAt = now();
+          return "settled";
+        }
+
+        // rejected — 큐 머리에서 치우되 버리지는 않는다
+        state.items = state.items.filter((i) => i.id !== item.id);
+        state.rejected.push({
+          id: item.id,
+          payload: item.payload,
+          fingerprint: item.fingerprint,
+          createdAt: item.createdAt,
+          rejectedAt: now(),
+          error: String(error || "").slice(0, 2000),
+        });
+        return "settled";
+      });
+    },
+
+    async requeue(id) {
+      return mutate(() => {
+        const idx = state.rejected.findIndex((r) => r.id === id);
+        if (idx === -1) return "gone";
+        const [dead] = state.rejected.splice(idx, 1);
+        state.items.push({
+          id: dead.id,
+          payload: dead.payload,
+          fingerprint: dead.fingerprint,
+          createdAt: dead.createdAt,
+          state: "waiting",
+          leaseOwner: null,
+          leaseReceipt: null,
+          leaseExpiresAt: null,
+          settledAt: null,
+        });
+        return "requeued";
+      });
+    },
+
+    async listRejected() {
+      return clone(state.rejected);
+    },
+
+    async list() {
+      return clone(state.items);
+    },
+  };
+}
