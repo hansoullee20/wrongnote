@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { acquireQueueLock } from "./lockFile.js";
 import {
   QUEUE_FORMAT_VERSION,
   LEASE_MS,
@@ -9,8 +10,15 @@ import {
   MAX_PAYLOAD_BYTES,
 } from "./config.js";
 
-/* 한 분석은 반드시 세 상태 중 하나로 끝난다: waiting / accepted / rejected.
-   조용히 사라지는 경로가 있으면 그건 결함이다 (.reviews/mcp-plan-merged.md §1).
+/* 불변식: 조용한 소실 없음 / 살아 있는 소비자는 최대 하나 / accepted는 앱이
+   노트를 **durable하게 저장한 뒤에만** / 재배달은 탐지 가능하고 멱등하다.
+
+   "정확히 한 번"은 이 큐 혼자 보장할 수 없다. 앱이 저장을 마친 뒤 ACK가
+   유실되면 재배달은 정당하다. 큐의 몫은 그것을 탐지 가능하게 만드는 것이고,
+   무해하게 만드는 것은 앱의 몫이다 — 저장된 노트에 분석 신원을 함께 남겨야
+   한다 (커밋 5).
+
+   한 분석은 여전히 세 상태 중 하나로 끝난다: waiting / accepted / rejected.
 
    - waiting  : 아직 아무도 못 가져갔거나, 가져갔다가 놓아준 것
    - leased   : 한 소비자가 들고 있다 (waiting의 하위 상태 — 리스가 끝나면 돌아온다)
@@ -98,11 +106,73 @@ async function readState(file, fsImpl) {
       );
     }
   }
+  validateRecords(parsed, file);
   return {
     version: QUEUE_FORMAT_VERSION,
     items: parsed.items,
     rejected: parsed.rejected,
   };
+}
+
+const isText = (v) => typeof v === "string" && v.length > 0;
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+
+/* 배열인지만 보고 안에 든 레코드를 안 보면, 멀쩡히 시작한 뒤 특정 항목이
+   영원히 청구 불가가 되거나(state를 모름), 큐 머리를 막거나(payload 없음),
+   죽은 소유자의 항목이 영영 안 돌아온다(leaseExpiresAt이 숫자가 아님).
+   조용히 잘못 도는 것이 시끄럽게 실패하는 것보다 나쁘다. */
+function validateRecords(parsed, file) {
+  const fail = (what) => {
+    throw new Error(
+      `queue file is structurally invalid: ${what} in ${file} (left untouched — inspect it by hand)`
+    );
+  };
+  const ids = new Set();
+  const receipts = new Set();
+  const takeId = (id, where) => {
+    if (!isText(id)) fail(`${where}.id is missing or not a string`);
+    if (ids.has(id)) fail(`duplicate id "${id}" (${where})`);
+    ids.add(id);
+  };
+  const takeReceipt = (receipt, where) => {
+    if (!isText(receipt)) return;
+    if (receipts.has(receipt)) fail(`duplicate receipt (${where})`);
+    receipts.add(receipt);
+  };
+
+  parsed.items.forEach((item, i) => {
+    const where = `items[${i}]`;
+    if (!item || typeof item !== "object" || Array.isArray(item)) fail(`${where} is not an object`);
+    takeId(item.id, where);
+    if (!isText(item.fingerprint)) fail(`${where}.fingerprint is missing or not a string`);
+    if (!isNum(item.createdAt)) fail(`${where}.createdAt is not a number`);
+    if (!["waiting", "leased", "accepted"].includes(item.state)) {
+      fail(`${where}.state is ${item.state === undefined ? "missing" : `unknown ("${item.state}")`}`);
+    }
+    if (item.state === "accepted") {
+      if (!isNum(item.settledAt)) fail(`${where}.settledAt is not a number`);
+    } else if (item.payload === undefined || item.payload === null) {
+      fail(`${where}.payload is missing but the item is ${item.state}`);
+    }
+    if (item.state === "leased") {
+      if (!isText(item.leaseOwner)) fail(`${where}.leaseOwner is missing`);
+      if (!isText(item.leaseReceipt)) fail(`${where}.leaseReceipt is missing`);
+      if (!isNum(item.leaseExpiresAt)) fail(`${where}.leaseExpiresAt is not a number`);
+    }
+    takeReceipt(item.leaseReceipt, where);
+    takeReceipt(item.expiredReceipt, where);
+  });
+
+  parsed.rejected.forEach((rec, i) => {
+    const where = `rejected[${i}]`;
+    if (!rec || typeof rec !== "object" || Array.isArray(rec)) fail(`${where} is not an object`);
+    takeId(rec.id, where);
+    if (rec.payload === undefined || rec.payload === null) fail(`${where}.payload is missing`);
+    if (!isText(rec.fingerprint)) fail(`${where}.fingerprint is missing or not a string`);
+    if (!isNum(rec.createdAt)) fail(`${where}.createdAt is not a number`);
+    if (!isNum(rec.rejectedAt)) fail(`${where}.rejectedAt is not a number`);
+    if (typeof rec.error !== "string") fail(`${where}.error is not a string`);
+  });
 }
 
 /* 같은 디렉터리 임시 파일 → fsync → rename. rename은 원자적이라 중간에
@@ -167,7 +237,17 @@ export async function createQueueStore({
 } = {}) {
   if (!file) throw new Error("queue store requires a file path");
 
-  let state = await readState(file, fsImpl);
+  /* 잠금은 readState **이전**에 잡는다. 먼저 읽고 나중에 잠그면, 그 사이에
+     다른 프로세스가 쓴 내용을 못 본 채로 소유권만 얻는다. */
+  await fsImpl.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+  const lock = await acquireQueueLock(`${file}.lock`, { fsImpl });
+  let state;
+  try {
+    state = await readState(file, fsImpl);
+  } catch (err) {
+    await lock.release();
+    throw err;
+  }
 
   /* 모든 변경을 한 줄로 세운다. MCP 쪽 submit과 HTTP 쪽 claim이 동시에 와도
      읽고-고치고-쓰는 구간이 겹치지 않는다. 겹치면 나중에 쓴 쪽이 앞의 변경을
@@ -220,7 +300,12 @@ export async function createQueueStore({
     const t = now();
     for (const item of state.items) {
       if (item.state === "leased" && item.leaseExpiresAt <= t) {
+        /* 영수증을 지우지 않고 옆으로 옮긴다. 앱이 노트를 저장한 직후 리스가
+           만료되는 경우, 아무도 새로 가져가지 않았다면 그 늦은 정산은
+           받아들여야 한다 — 아니면 이미 저장된 분석이 다시 배달된다. */
         item.state = "waiting";
+        item.expiredReceipt = item.leaseReceipt;
+        item.expiredOwner = item.leaseOwner;
         item.leaseOwner = null;
         item.leaseReceipt = null;
         item.leaseExpiresAt = null;
@@ -288,7 +373,11 @@ export async function createQueueStore({
     },
 
     async claim(consumerId) {
-      if (!consumerId) throw new Error("claim requires a consumerId");
+      if (typeof consumerId !== "string" || consumerId.length === 0) {
+        /* 호출자 소유 객체를 상태에 넣으면, 나중에 그 객체가 순환 참조가 되는
+           것만으로 쓰기 없이 스토어가 망가진다. 문자열만 받는다. */
+        throw new Error("claim requires a non-empty string consumerId");
+      }
       return mutate(() => {
         expireLeases();
 
@@ -305,6 +394,10 @@ export async function createQueueStore({
           target.state = "leased";
           target.leaseOwner = consumerId;
           target.leaseReceipt = randomId();
+          /* 새 소유자가 생기면 만료된 영수증은 더 이상 이 항목을 대변하지
+             못한다. 늦은 정산은 이 시점부터 "gone"이 되어야 한다. */
+          target.expiredReceipt = null;
+          target.expiredOwner = null;
         }
         target.leaseExpiresAt = now() + leaseMs;
         return {
@@ -326,15 +419,29 @@ export async function createQueueStore({
       return mutate(() => {
         expireLeases();
 
-        const item = state.items.find((i) => i.leaseReceipt === receipt);
-        if (!item || item.state !== "leased") return "gone";
-        if (item.leaseOwner !== consumerId) return "conflict";
+        let item = state.items.find(
+          (i) => i.state === "leased" && i.leaseReceipt === receipt
+        );
+        let owner = item?.leaseOwner;
+
+        if (!item) {
+          /* 리스는 만료됐지만 아직 아무도 가져가지 않은 항목. 앱은 이미 저장을
+             마쳤을 수 있으므로 이 정산을 버리면 중복 배달이 된다. */
+          item = state.items.find(
+            (i) => i.state === "waiting" && i.expiredReceipt === receipt
+          );
+          owner = item?.expiredOwner;
+        }
+        if (!item) return "gone";
+        if (owner !== consumerId) return "conflict";
 
         if (outcome === "released") {
           item.state = "waiting";
           item.leaseOwner = null;
           item.leaseReceipt = null;
           item.leaseExpiresAt = null;
+          item.expiredReceipt = null;
+          item.expiredOwner = null;
           return "settled";
         }
 
@@ -346,6 +453,8 @@ export async function createQueueStore({
           item.leaseOwner = null;
           item.leaseReceipt = null;
           item.leaseExpiresAt = null;
+          item.expiredReceipt = null;
+          item.expiredOwner = null;
           item.settledAt = now();
           return "settled";
         }
@@ -364,22 +473,36 @@ export async function createQueueStore({
       });
     },
 
+    /* 거부 이력은 지우지 않는다. 왜 실패했는지가 유일하게 남아 있는 곳이고,
+       사용자가 요청한 분석의 마지막 흔적이다. 재시도는 그 레코드를 없애는
+       것이 아니라 **연결된 새 항목**을 만드는 일이다.
+
+       레코드당 한 번만 되살린다. 무한히 돌 수 있으면 같은 분석이 몇 벌이든
+       생기고, 이미 재시도가 도는 중에 또 부르면 사본이 둘이 된다. 다시 거부되면
+       그때 새 레코드가 쌓이므로 이력은 끊기지 않는다. */
     async requeue(id) {
       return mutate(() => {
-        const idx = state.rejected.findIndex((r) => r.id === id);
-        if (idx === -1) return "gone";
-        const [dead] = state.rejected.splice(idx, 1);
-        state.items.push({
-          id: dead.id,
-          payload: dead.payload,
+        const dead = state.rejected.find((r) => r.id === id);
+        if (!dead) return "gone";
+        if (dead.requeuedAt) return "gone";
+
+        const retry = {
+          id: randomId(),
+          payload: clone(dead.payload),
           fingerprint: dead.fingerprint,
           createdAt: dead.createdAt,
           state: "waiting",
           leaseOwner: null,
           leaseReceipt: null,
           leaseExpiresAt: null,
+          expiredReceipt: null,
+          expiredOwner: null,
           settledAt: null,
-        });
+          originRejectionId: dead.id,
+        };
+        state.items.push(retry);
+        dead.requeuedAt = now();
+        dead.retryItemId = retry.id;
         return "requeued";
       });
     },
@@ -390,6 +513,12 @@ export async function createQueueStore({
 
     async list() {
       return read(() => clone(state.items));
+    },
+
+    /* 잠금은 프로세스 수명 동안 유지된다. 닫을 때만 놓는다. */
+    async close() {
+      await chain.catch(() => {});
+      await lock.release();
     },
   };
 }

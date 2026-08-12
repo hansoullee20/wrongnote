@@ -18,9 +18,19 @@ the browser polls are separate commits, built on top of this protocol.
 
 ## The invariant everything here serves
 
-> A successfully queued AI analysis must end in exactly one of three observable
-> states: **waiting**, **accepted into wrongnote**, or **rejected with a visible
-> reason**. It must never disappear silently.
+> **No silent loss; at most one live consumer; accepted only after durable app
+> save; any redelivery is detectable and idempotent.**
+
+"Exactly once" was the earlier wording and it was not defensible: the queue
+cannot guarantee it alone. If an ACK is lost after the app has saved a note, the
+item is legitimately redelivered. The queue's job is to make that redelivery
+*detectable*; the app's job is to make it *harmless* by carrying the analysis
+identity into the saved note. Both halves are required, and only the first lives
+in this package.
+
+A queued analysis still ends in exactly one of three observable states —
+**waiting**, **accepted**, or **rejected with a visible reason** — and never
+disappears silently.
 
 Concretely:
 
@@ -37,6 +47,21 @@ Concretely:
   indefinitely. It is never re-offered (which would loop the same error on every
   poll) and never deleted (which would be a silent disappearance). `requeue()`
   brings it back exactly once.
+
+## One queue file, one owning process
+
+Enforced, not assumed. The store takes an exclusive lock (`<queue file>.lock`)
+before it reads anything and holds it for its lifetime; a second companion fails
+loudly rather than opening the queue. Without this, two processes read the same
+state and overwrite each other's writes, and an analysis that was successfully
+queued simply vanishes. This matters concretely because MCP hosts commonly spawn
+their own server process.
+
+Stale-lock recovery is deliberately conservative. A lock is reclaimed only when
+it names *this* host and its pid is definitively gone. A lock is never broken for
+looking old, and a lock from another hostname is never broken at all — the file
+may live on shared storage. If a lock cannot be read, startup fails and asks for
+a human rather than guessing.
 
 ## Durability
 
@@ -74,7 +99,7 @@ cleanly, looks healthy, and loses everything that was queued.
 
     npm --prefix companion test
 
-Twenty-three tests, each one a scenario that could lose or duplicate a user's analysis.
+Forty-one tests, each one a scenario that could lose or duplicate a user's analysis.
 Every guard has been falsified by mutation: removing persistence, the
 single-lease rule, lease expiry, the accepted tombstone, the rejected-item
 removal, the dead-letter write, requeue-once, or the corrupt-file refusal each

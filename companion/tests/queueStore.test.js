@@ -45,6 +45,9 @@ test("SIGKILL after enqueue: the analysis survives", async () => {
     child.on("exit", (code) => reject(new Error(`child exited early: ${code}`)));
   });
   child.kill("SIGKILL");
+  /* 죽은 뒤 거둬질 때까지 기다린다. 좀비 상태에서는 pid가 아직 살아 있는 것으로
+     보이고, 잠금 회수는 (옳게) 거부된다 — 진짜 재시작에는 좀비가 없다. */
+  await new Promise((r) => child.on("exit", r));
 
   const store = await createQueueStore({ file });
   const items = await store.list();
@@ -135,6 +138,7 @@ test("rejected payload, error and timestamp survive a restart", async () => {
   const claimed = await store.claim("tab");
   await store.settle("tab", claimed.receipt, "rejected", { error: "boom" });
 
+  await store.close();
   const reopened = await createQueueStore({ file });
   const dead = await reopened.listRejected();
   assert.equal(dead.length, 1);
@@ -146,7 +150,7 @@ test("rejected payload, error and timestamp survive a restart", async () => {
 
 /* 7 — 되살리기는 정확히 한 번이어야 한다. 두 번 먹히면 같은 분석이 두 벌
    생긴다. */
-test("requeue moves rejected back to waiting exactly once", async () => {
+test("requeue moves rejected back to waiting exactly once, keeping the record", async () => {
   const store = await createQueueStore({ file: await freshFile("requeue") });
   await store.submit(ANALYSIS);
   const claimed = await store.claim("tab");
@@ -159,7 +163,9 @@ test("requeue moves rejected back to waiting exactly once", async () => {
   const items = await store.list();
   assert.equal(items.length, 1);
   assert.equal(items[0].state, "waiting");
-  assert.equal((await store.listRejected()).length, 0);
+  /* 거부 레코드는 남는다 — 재시도는 이력을 지우는 일이 아니다. */
+  assert.equal((await store.listRejected()).length, 1);
+  await store.close();
 });
 
 /* 8a — 못 읽는 파일을 빈 상태로 덮어쓰면 그 안의 분석이 전부 사라진다.
@@ -208,6 +214,7 @@ test("an interrupted write cannot erase previously queued items", async () => {
     "utf8"
   );
 
+  await store.close();
   const reopened = await createQueueStore({ file });
   assert.equal(await fs.readFile(file, "utf8"), before, "the live file is untouched");
   const items = await reopened.list();
@@ -413,13 +420,12 @@ test("a failed accepted-settlement does not consume the item", async () => {
   assert.equal(live.leaseReceipt, claimed.receipt, "the receipt must survive for a retry");
   assert.ok(live.payload, "the payload must not have been dropped");
 
-  // 디스크도 같은 이야기를 해야 한다
-  const reopened = await createQueueStore({ file });
-  const [persisted] = await reopened.list();
-  assert.equal(persisted.state, "leased");
-
   // 그리고 재시도가 실제로 먹혀야 한다
   assert.equal(await store.settle("tab", claimed.receipt, "accepted"), "settled");
+
+  // 디스크도 같은 이야기를 해야 한다 — 잠금을 놓은 뒤에 확인한다
+  const midway = JSON.parse(await fs.readFile(file, "utf8"));
+  assert.equal(midway.items[0].state, "accepted");
 });
 
 /* 12 — rename이 커밋 지점이다. rename이 성공한 뒤 디렉터리 fsync가 실패하면
@@ -449,14 +455,243 @@ test("a post-rename fsync failure does not resurrect the change on restart", asy
   const store = await createQueueStore({ file, fsImpl: dirFsyncFailure("EIO") });
   await assert.rejects(() => store.submit(ANALYSIS), /EIO/);
 
+  const live = await store.list();
+  await store.close();
   const reopened = await createQueueStore({ file });
   const persisted = await reopened.list();
-  const live = await store.list();
   assert.deepEqual(
     persisted.map((i) => i.id),
     live.map((i) => i.id),
     "a restart must see exactly what the running store sees"
   );
+});
+
+/* ── A. 한 큐 파일 = 한 소유 프로세스 ────────────────────────────────
+   이 아키텍처는 의도적으로 로컬 컴패니언 하나다. 그 불변식을 코드가 강제해야
+   한다 — MCP 호스트는 흔히 자기 서버 프로세스를 직접 띄우므로 "하나만 뜬다"는
+   가정으로는 부족하다. 잠금 없이 두 스토어가 같은 파일을 열면 서로의 쓰기를
+   덮어써서 이미 성공한 분석이 사라진다. */
+
+test("a second store cannot open a queue file that is already owned", async () => {
+  const file = await freshFile("lock-exclusive");
+  const first = await createQueueStore({ file });
+  try {
+    await assert.rejects(() => createQueueStore({ file }), /in use|locked|owned/i);
+  } finally {
+    await first.close();
+  }
+});
+
+test("closing the store releases the lock", async () => {
+  const file = await freshFile("lock-release");
+  const first = await createQueueStore({ file });
+  await first.submit(ANALYSIS);
+  await first.close();
+
+  const second = await createQueueStore({ file });
+  assert.equal((await second.list()).length, 1);
+  await second.close();
+});
+
+test("a lock left by a dead process is reclaimed", async () => {
+  const file = await freshFile("lock-stale");
+  const dead = spawn(process.execPath, ["-e", "process.exit(0)"]);
+  const deadPid = dead.pid;
+  await new Promise((r) => dead.on("exit", r));
+
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(
+    `${file}.lock`,
+    JSON.stringify({ pid: deadPid, hostname: os.hostname(), startedAt: Date.now() }),
+    "utf8"
+  );
+
+  const store = await createQueueStore({ file });
+  await store.submit(ANALYSIS);
+  assert.equal((await store.list()).length, 1);
+  await store.close();
+});
+
+test("a lock from another host is never reclaimed, however old it looks", async () => {
+  const file = await freshFile("lock-foreign");
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(
+    `${file}.lock`,
+    JSON.stringify({
+      pid: 999999,
+      hostname: "some-other-machine",
+      startedAt: 0, // 아주 오래돼 보인다 — 그래도 깨면 안 된다
+    }),
+    "utf8"
+  );
+
+  await assert.rejects(() => createQueueStore({ file }), /in use|locked|owned/i);
+});
+
+/* ── B. 배열 안의 레코드도 검증한다 ──────────────────────────────────
+   items가 배열인지만 보고 안에 든 객체를 안 보면, 멀쩡히 시작한 뒤 특정
+   항목이 영원히 청구 불가가 되거나 큐 머리를 막는다. 조용히 잘못 도는 것이
+   시끄럽게 실패하는 것보다 나쁘다. */
+const validItem = () => ({
+  id: "item-1",
+  payload: ANALYSIS,
+  fingerprint: "f".repeat(64),
+  createdAt: 1,
+  state: "waiting",
+  leaseOwner: null,
+  leaseReceipt: null,
+  leaseExpiresAt: null,
+  settledAt: null,
+});
+
+for (const [label, mutate] of [
+  ["state가 없다", (i) => delete i.state],
+  ["state를 모른다", (i) => (i.state = "halfway")],
+  ["waiting인데 payload가 없다", (i) => delete i.payload],
+  ["fingerprint가 없다", (i) => delete i.fingerprint],
+  ["createdAt이 숫자가 아니다", (i) => (i.createdAt = "yesterday")],
+  [
+    "leased인데 leaseExpiresAt이 숫자가 아니다",
+    (i) => Object.assign(i, { state: "leased", leaseOwner: "t", leaseReceipt: "r", leaseExpiresAt: "bad" }),
+  ],
+  [
+    "accepted인데 settledAt이 없다",
+    (i) => Object.assign(i, { state: "accepted", payload: null, settledAt: undefined }),
+  ],
+]) {
+  test(`a malformed record (${label}) fails startup instead of misbehaving later`, async () => {
+    const file = await freshFile("record");
+    const item = validItem();
+    mutate(item);
+    const raw = JSON.stringify({ version: 1, items: [item], rejected: [] });
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, raw, "utf8");
+
+    await assert.rejects(() => createQueueStore({ file }), /queue file/);
+    assert.equal(await fs.readFile(file, "utf8"), raw, "the file must not be rewritten");
+  });
+}
+
+test("duplicate ids fail startup — rejecting one would delete both", async () => {
+  const file = await freshFile("dupe-id");
+  const raw = JSON.stringify({
+    version: 1,
+    items: [validItem(), { ...validItem(), fingerprint: "e".repeat(64) }],
+    rejected: [],
+  });
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, raw, "utf8");
+  await assert.rejects(() => createQueueStore({ file }), /duplicate|queue file/i);
+});
+
+test("a null element fails startup rather than throwing on first use", async () => {
+  const file = await freshFile("null-el");
+  const raw = JSON.stringify({ version: 1, items: [null], rejected: [] });
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, raw, "utf8");
+  await assert.rejects(() => createQueueStore({ file }), /queue file/);
+});
+
+/* ── C. 거부 이력은 지워지지 않는다 ──────────────────────────────────
+   requeue가 dead-letter 레코드를 splice로 없애면 Han이 명시적으로 보존을
+   요구한 오류 텍스트가 사라지고, reject→requeue를 무한히 돌 수 있다. */
+
+test("requeue keeps the rejection record and its error", async () => {
+  const store = await createQueueStore({ file: await freshFile("requeue-keep") });
+  await store.submit(ANALYSIS);
+  const claimed = await store.claim("tab");
+  await store.settle("tab", claimed.receipt, "rejected", { error: "unsupported AI analysis file" });
+
+  const [dead] = await store.listRejected();
+  assert.equal(await store.requeue(dead.id), "requeued");
+
+  const after = await store.listRejected();
+  assert.equal(after.length, 1, "the rejection history must survive its own retry");
+  assert.equal(after[0].error, "unsupported AI analysis file");
+  assert.equal(typeof after[0].requeuedAt, "number");
+  assert.equal((await store.list()).length, 1, "and a retry is now waiting");
+  await store.close();
+});
+
+test("requeueing the same rejection twice does not create a second copy", async () => {
+  const store = await createQueueStore({ file: await freshFile("requeue-once") });
+  await store.submit(ANALYSIS);
+  const claimed = await store.claim("tab");
+  await store.settle("tab", claimed.receipt, "rejected", { error: "bad" });
+
+  const [dead] = await store.listRejected();
+  assert.equal(await store.requeue(dead.id), "requeued");
+  assert.equal(await store.requeue(dead.id), "gone");
+  assert.equal((await store.list()).length, 1, "exactly one retry exists");
+  await store.close();
+});
+
+test("re-rejecting a retry appends history instead of overwriting it", async () => {
+  const store = await createQueueStore({ file: await freshFile("requeue-history") });
+  await store.submit(ANALYSIS);
+  const first = await store.claim("tab");
+  await store.settle("tab", first.receipt, "rejected", { error: "first failure" });
+
+  const [dead] = await store.listRejected();
+  await store.requeue(dead.id);
+  const retry = await store.claim("tab");
+  await store.settle("tab", retry.receipt, "rejected", { error: "second failure" });
+
+  const history = await store.listRejected();
+  assert.equal(history.length, 2, "both failures are on the record");
+  assert.deepEqual(
+    history.map((r) => r.error).sort(),
+    ["first failure", "second failure"]
+  );
+  await store.close();
+});
+
+/* ── D. 리스 경계를 넘긴 늦은 정산 ───────────────────────────────────
+   앱이 노트를 저장한 직후 리스가 만료되면, 영수증이 이미 지워져 정산이
+   "gone"이 되고 같은 분석이 다시 배달된다. 아무도 새로 가져가지 않았다면
+   늦은 정산은 받아들여야 한다. */
+
+test("a late settlement is accepted while nobody else has claimed the item", async () => {
+  let clock = 1_000_000;
+  const store = await createQueueStore({
+    file: await freshFile("late-settle"),
+    leaseMs: 60_000,
+    now: () => clock,
+  });
+  await store.submit(ANALYSIS);
+  const claimed = await store.claim("tab");
+
+  clock += 60_001; // 저장은 끝났는데 리스가 막 만료됐다
+
+  assert.equal(
+    await store.settle("tab", claimed.receipt, "accepted"),
+    "settled",
+    "the note was saved — this must not be redelivered"
+  );
+  assert.equal(await store.claim("other"), null, "and it is gone from the queue");
+  await store.close();
+});
+
+test("a late settlement is refused once another consumer holds the item", async () => {
+  let clock = 1_000_000;
+  const store = await createQueueStore({
+    file: await freshFile("late-settle-taken"),
+    leaseMs: 60_000,
+    now: () => clock,
+  });
+  await store.submit(ANALYSIS);
+  const first = await store.claim("tab-a");
+
+  clock += 60_001;
+  const second = await store.claim("tab-b");
+  assert.ok(second, "the item legitimately moved on");
+
+  assert.equal(
+    await store.settle("tab-a", first.receipt, "accepted"),
+    "gone",
+    "the late owner no longer speaks for this item"
+  );
+  await store.close();
 });
 
 /* 소유자가 아닌 쪽의 정산은 남의 리스를 끊지 못한다. */
