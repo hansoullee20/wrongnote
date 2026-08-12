@@ -99,7 +99,11 @@ test("restart of an existing canonical queue fsyncs its containing directory bef
   assert.ok(dirSyncs >= 1, "startup must repair/confirm the canonical queue directory entry");
   const health = await store.health();
   assert.notEqual(health.durability, "uncertain");
-  assert.ok(["durable", "degraded"].includes(health.durability));
+  if (process.platform === "win32") {
+    assert.ok(["durable", "degraded"].includes(health.durability));
+  } else {
+    assert.equal(health.durability, "durable");
+  }
   await store.close();
 });
 
