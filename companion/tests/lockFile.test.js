@@ -95,6 +95,27 @@ test("a transient read failure during release is reported, not latched", async (
   );
 });
 
+/* 소유 확인과 unlink 사이에 await가 있다. 동시에 부른 두 해제가 모두 "우리
+   것"을 보고 나면, 늦게 깨어난 쪽은 그 사이 남이 새로 잡은 잠금 파일을 지운다.
+   해제는 몇 번을 겹쳐 불러도 unlink를 한 번만 해야 한다. */
+test("concurrent releases perform exactly one unlink", async () => {
+  const lockPath = await freshLock("concurrent");
+  let unlinks = 0;
+  const spy = {
+    ...fs,
+    async unlink(p) {
+      if (String(p) === lockPath) unlinks += 1;
+      return fs.unlink(p);
+    },
+  };
+
+  const held = await acquireQueueLock(lockPath, { fsImpl: spy });
+  await Promise.all([held.release(), held.release(), held.release()]);
+
+  assert.equal(unlinks, 1, "overlapping releases must collapse into one");
+  await assert.rejects(() => fs.access(lockPath), /ENOENT/);
+});
+
 test("a lock stranded by this process can be reclaimed by it", async () => {
   const lockPath = await freshLock("stranded");
   await fs.writeFile(

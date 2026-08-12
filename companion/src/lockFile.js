@@ -115,9 +115,25 @@ export async function acquireQueueLock(lockPath, { fsImpl = fs } = {}) {
     }
   }
 
+  /* 겹쳐 부른 해제는 하나로 합친다. 소유 확인과 unlink 사이에 await가 있어,
+     각자 진행하면 늦게 깨어난 쪽이 그 사이 남이 잡은 잠금을 지운다.
+     실패하면 in-flight를 비워 재시도는 그대로 가능하다. */
+  let inFlight = null;
+
   return {
     path: lockPath,
-    async release() {
+    release() {
+      if (!heldTokens.has(token)) return Promise.resolve();
+      if (inFlight) return inFlight;
+      inFlight = doRelease().finally(() => {
+        inFlight = null;
+      });
+      return inFlight;
+    },
+  };
+
+  async function doRelease() {
+    return (async () => {
       /* 토큰 보유 여부가 곧 "아직 안 놓았다"이다. 별도 플래그를 먼저 세우면,
          해제가 실패했는데도 놓았다고 기록되어 재시도가 막힌다. 그 잠금의 pid는
          우리 자신이라 회수 대상도 아니어서 이 프로세스는 큐를 영영 못 연다. */
@@ -140,6 +156,6 @@ export async function acquireQueueLock(lockPath, { fsImpl = fs } = {}) {
         if (err.code !== "ENOENT") throw err; // 토큰 유지 → 재시도 가능
       }
       heldTokens.delete(token);
-    },
-  };
+    })();
+  }
 }
