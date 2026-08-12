@@ -150,6 +150,8 @@ test("failed note persistence cannot settle the AI event as accepted", async ({ 
   await page.getByRole("button", { name: "저장 (기록하기)" }).click();
 
   await expect(page.locator(".audit-warn").first()).toBeVisible();
+  await expect(page.getByTestId("ai-review-sheet")).toBeVisible();
+  await expect(page.getByRole("button", { name: "저장 (기록하기)" })).toBeDisabled();
   await page.waitForTimeout(500);
   expect(mock.settlements.some((entry) => entry.outcome === "accepted")).toBe(false);
   expect(await page.evaluate(() => localStorage.getItem("wr_notes"))).toBe(beforeRaw);
