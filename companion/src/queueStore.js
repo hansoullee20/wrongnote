@@ -167,12 +167,8 @@ export async function createQueueStore({
      읽고-고치고-쓰는 구간이 겹치지 않는다. 겹치면 나중에 쓴 쪽이 앞의 변경을
      통째로 되돌린다 (lost update). */
   let chain = Promise.resolve();
-  const mutate = (fn) => {
-    const run = chain.then(async () => {
-      const result = await fn();
-      await writeStateAtomic(file, state, fsImpl);
-      return result;
-    });
+  const enqueue = (fn) => {
+    const run = chain.then(fn);
     // 한 번 실패해도 줄이 끊기면 안 된다
     chain = run.then(
       () => undefined,
@@ -180,6 +176,34 @@ export async function createQueueStore({
     );
     return run;
   };
+
+  /* copy-on-write. 후보 상태를 만들어 거기에 변경을 가하고, **디스크에 앉은
+     뒤에만** 그것을 현재 상태로 삼는다.
+
+     제자리에서 고치고 나중에 저장하면, 저장이 실패했을 때 호출자에게는
+     "실패"라고 알리면서 스토어는 그 변경을 계속 사실로 취급한다. 그리고 다음
+     성공한 쓰기가 실패했다고 보고된 변경을 조용히 디스크에 박아 넣는다.
+
+     가장 나쁜 경우는 accepted 정산이다: 메모리는 accepted인데 디스크는 leased면,
+     프로세스가 죽은 뒤 앱이 이미 저장한 분석이 다시 배달된다 — exactly-once
+     위반이다. 개별 메서드를 손보지 않고 이 지점 하나로 막는다. */
+  const mutate = (fn) =>
+    enqueue(async () => {
+      const previous = state;
+      state = clone(previous);
+      try {
+        const result = await fn();
+        await writeStateAtomic(file, state, fsImpl);
+        return result;
+      } catch (err) {
+        state = previous; // 후보를 통째로 버린다
+        throw err;
+      }
+    });
+
+  /* 읽기도 같은 줄에 세운다. 그래야 진행 중인 변경의 후보 상태가 아니라
+     확정된 상태를 본다. */
+  const read = (fn) => enqueue(async () => fn());
 
   /* 만료된 리스는 waiting으로 되돌린다. 브라우저 탭이 죽으면 이 경로로만
      항목이 돌아온다 — 명시적 release는 죽은 탭이 보낼 수 없다. */
@@ -352,11 +376,11 @@ export async function createQueueStore({
     },
 
     async listRejected() {
-      return clone(state.rejected);
+      return read(() => clone(state.rejected));
     },
 
     async list() {
-      return clone(state.items);
+      return read(() => clone(state.items));
     },
   };
 }

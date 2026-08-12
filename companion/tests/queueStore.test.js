@@ -327,6 +327,101 @@ test("a directory that cannot be opened for read (EPERM) is tolerated", async ()
   assert.equal((await store.list()).length, 1);
 });
 
+/* 11 — 지속화가 실패했는데 메모리 상태만 바뀌어 있으면, 스토어는 방금
+   "실패했다"고 알린 그 변경을 계속 사실로 취급한다. 그리고 다음 성공한 쓰기가
+   그 실패한 변경을 조용히 디스크에 박아 넣는다.
+
+   변경은 durable write가 성공한 뒤에만 보여야 한다. */
+const failableFs = () => {
+  const control = { failNextWrite: false };
+  return {
+    control,
+    impl: {
+      ...fs,
+      async open(p, flags, mode) {
+        const handle = await fs.open(p, flags, mode);
+        if (!String(p).includes(".tmp-")) return handle;
+        return new Proxy(handle, {
+          get(target, key) {
+            if (key === "sync" && control.failNextWrite) {
+              return async () => {
+                const err = new Error("injected ENOSPC");
+                err.code = "ENOSPC";
+                throw err;
+              };
+            }
+            const value = target[key];
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      },
+    },
+  };
+};
+
+test("a failed durable write leaves no trace in live state", async () => {
+  const file = await freshFile("rollback-submit");
+  const { control, impl } = failableFs();
+  const store = await createQueueStore({ file, fsImpl: impl });
+
+  control.failNextWrite = true;
+  await assert.rejects(() => store.submit(ANALYSIS), /ENOSPC/);
+
+  assert.deepEqual(await store.list(), [], "the rejected submit must not be live");
+  await assert.rejects(() => fs.readFile(file, "utf8"), /ENOENT/);
+});
+
+test("a later successful write does not smuggle in the failed one", async () => {
+  const file = await freshFile("rollback-smuggle");
+  const { control, impl } = failableFs();
+  const store = await createQueueStore({ file, fsImpl: impl });
+
+  const A = { ...ANALYSIS, question: { problem: "A" } };
+  const B = { ...ANALYSIS, question: { problem: "B" } };
+
+  control.failNextWrite = true;
+  await assert.rejects(() => store.submit(A), /ENOSPC/);
+  control.failNextWrite = false;
+  await store.submit(B);
+
+  const live = (await store.list()).map((i) => i.payload.question.problem);
+  assert.deepEqual(live, ["B"], "A was reported failed and must stay failed");
+
+  const onDisk = JSON.parse(await fs.readFile(file, "utf8"));
+  assert.deepEqual(
+    onDisk.items.map((i) => i.payload.question.problem),
+    ["B"]
+  );
+});
+
+/* 가장 나쁜 경우 — accepted 정산이 지속화에 실패했는데 메모리에서는 이미
+   accepted라면, 디스크에는 leased로 남아 있다. 프로세스가 죽으면 그 분석은
+   앱이 이미 저장했는데도 다시 배달된다. exactly-once 위반이다. */
+test("a failed accepted-settlement does not consume the item", async () => {
+  const file = await freshFile("rollback-settle");
+  const { control, impl } = failableFs();
+  const store = await createQueueStore({ file, fsImpl: impl });
+  await store.submit(ANALYSIS);
+  const claimed = await store.claim("tab");
+
+  control.failNextWrite = true;
+  await assert.rejects(() => store.settle("tab", claimed.receipt, "accepted"), /ENOSPC/);
+  control.failNextWrite = false;
+
+  const [live] = await store.list();
+  assert.equal(live.state, "leased", "still leased — the settlement did not happen");
+  assert.equal(live.leaseReceipt, claimed.receipt, "the receipt must survive for a retry");
+  assert.ok(live.payload, "the payload must not have been dropped");
+
+  // 디스크도 같은 이야기를 해야 한다
+  const reopened = await createQueueStore({ file });
+  const [persisted] = await reopened.list();
+  assert.equal(persisted.state, "leased");
+
+  // 그리고 재시도가 실제로 먹혀야 한다
+  assert.equal(await store.settle("tab", claimed.receipt, "accepted"), "settled");
+});
+
 /* 소유자가 아닌 쪽의 정산은 남의 리스를 끊지 못한다. */
 test("settling someone else's live lease is a conflict, not a settlement", async () => {
   const store = await createQueueStore({ file: await freshFile("owner") });
