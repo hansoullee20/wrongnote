@@ -232,7 +232,12 @@ test("post-rename EIO propagates committed uncertainty but keeps candidate live 
 test("unsupported directory fsync is explicit degraded mode", async () => {
   const file = await tempFile("degraded");
   const dir = path.dirname(file);
-  const store = await createQueueStore({ file, fsImpl: fsWithDirSyncFailure(dir, "EINVAL"), platform: "linux" });
+  const unsupportedCode = process.platform === "win32" ? "EPERM" : "EINVAL";
+  const store = await createQueueStore({
+    file,
+    fsImpl: fsWithDirSyncFailure(dir, unsupportedCode),
+    platform: process.platform,
+  });
   const result = await store.submit("event-1", payload());
   assert.equal(result.durability, "degraded");
   assert.equal((await store.health()).durability, "degraded");
