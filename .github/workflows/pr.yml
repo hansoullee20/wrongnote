@@ -45,3 +45,14 @@ jobs:
             test-results
           retention-days: 7
           if-no-files-found: ignore
+
+  # 컴패니언의 잠금/rename/fsync 경계에는 플랫폼별 동작이 있다.
+  # 전체 브라우저 스택을 복제하지 않고 Node 경계 테스트만 Windows에서 직접 실행한다.
+  companion-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      - run: npm --prefix companion test
