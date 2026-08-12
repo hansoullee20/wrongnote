@@ -86,7 +86,11 @@ function validateAccepted(rec, i) {
 
 function validateRejected(rec, i) {
   const p = `rejected[${i}]`;
-  exactKeys(rec, ["rejectionId", "eventId", "itemId", "receipt", "payloadHash", "payload", "error", "rejectedAt", "requeuedItemId"], p);
+  exactKeys(
+    rec,
+    ["rejectionId", "eventId", "itemId", "receipt", "payloadHash", "payload", "error", "rejectedAt", "requeuedItemId"],
+    p
+  );
   string(rec.rejectionId, `${p}.rejectionId`);
   assertEventId(rec.eventId, "corrupt_queue");
   string(rec.itemId, `${p}.itemId`);
@@ -189,23 +193,78 @@ export function validateState(state) {
   validateSession(state.session, state.nextFence, activeIds);
   if (state.session?.delivery) seeReceipt(state.session.delivery.receipt, "session.delivery");
 
-  const recordByItemId = new Map();
-  for (const item of state.items) recordByItemId.set(item.id, item);
-  for (const rec of state.accepted) recordByItemId.set(rec.itemId, rec);
-  for (const rec of state.rejected) recordByItemId.set(rec.itemId, rec);
+  /* Requeue history is a per-event linear chain, not just a bag of records.
+     A compacted rejection must lead to exactly one concrete successor; two
+     histories cannot fork into the same item, form a cycle, or leave two
+     unresolved heads. Otherwise an event can validate yet become unreachable
+     and impossible to requeue/resubmit. */
+  const nodeByItemId = new Map();
+  const rejectionById = new Map();
+  const incomingByItemId = new Map();
+  const outgoingByItemId = new Map();
+  const nodesByEvent = new Map();
+
+  const addNode = (itemId, kind, record) => {
+    const node = { itemId, kind, record, eventId: record.eventId, payloadHash: record.payloadHash };
+    nodeByItemId.set(itemId, node);
+    const group = nodesByEvent.get(record.eventId) || [];
+    group.push(node);
+    nodesByEvent.set(record.eventId, group);
+  };
+
+  for (const item of state.items) addNode(item.id, "active", item);
+  for (const rec of state.accepted) addNode(rec.itemId, "accepted", rec);
+  for (const rec of state.rejected) {
+    addNode(rec.itemId, "rejected", rec);
+    rejectionById.set(rec.rejectionId, rec);
+  }
+
   for (const rec of state.rejected) {
     if (!rec.requeuedItemId) continue;
-    const retry = recordByItemId.get(rec.requeuedItemId);
-    if (!retry || retry.eventId !== rec.eventId || retry.payloadHash !== rec.payloadHash) {
+    const target = nodeByItemId.get(rec.requeuedItemId);
+    if (!target || target.eventId !== rec.eventId || target.payloadHash !== rec.payloadHash) {
       fail("corrupt_queue", `rejection ${rec.rejectionId} points to a missing or mismatched retry`);
     }
+    if (incomingByItemId.has(target.itemId)) {
+      fail("corrupt_queue", `multiple rejection records point to retry item ${target.itemId}`);
+    }
+    incomingByItemId.set(target.itemId, rec);
+    outgoingByItemId.set(rec.itemId, target.itemId);
   }
 
   for (const item of state.items) {
-    if (!item.retryOfRejectionId) continue;
-    const dead = state.rejected.find((r) => r.rejectionId === item.retryOfRejectionId);
+    const incoming = incomingByItemId.get(item.id);
+    if (item.retryOfRejectionId === null) {
+      if (incoming) {
+        fail("corrupt_queue", `active retry ${item.id} is linked from rejection ${incoming.rejectionId} but has no backlink`);
+      }
+      continue;
+    }
+    const dead = rejectionById.get(item.retryOfRejectionId);
     if (!dead || dead.eventId !== item.eventId || dead.payloadHash !== item.payloadHash) {
       fail("corrupt_queue", `active retry ${item.id} does not match its rejection history`);
+    }
+    if (dead.requeuedItemId !== item.id || incoming?.rejectionId !== dead.rejectionId) {
+      fail("corrupt_queue", `active retry ${item.id} and rejection ${dead.rejectionId} are not bidirectionally linked`);
+    }
+  }
+
+  for (const [eventId, nodes] of nodesByEvent) {
+    const roots = nodes.filter((node) => !incomingByItemId.has(node.itemId));
+    const sinks = nodes.filter((node) => !outgoingByItemId.has(node.itemId));
+    if (roots.length !== 1 || sinks.length !== 1) {
+      fail("corrupt_queue", `eventId ${eventId} does not form one linear lifecycle chain`);
+    }
+
+    const seen = new Set();
+    let cursor = roots[0].itemId;
+    while (cursor) {
+      if (seen.has(cursor)) fail("corrupt_queue", `eventId ${eventId} contains a rejection-history cycle`);
+      seen.add(cursor);
+      cursor = outgoingByItemId.get(cursor) || null;
+    }
+    if (seen.size !== nodes.length) {
+      fail("corrupt_queue", `eventId ${eventId} contains disconnected lifecycle history`);
     }
   }
 
