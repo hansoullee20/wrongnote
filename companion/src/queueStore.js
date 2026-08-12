@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { MAX_ACTIVE_ITEMS, MAX_ERROR_CHARS, SESSION_LEASE_MS } from "./config.js";
-import { QueueCommitError, fail } from "./errors.js";
+import { QueueCommitError, QueueError, fail } from "./errors.js";
 import { snapshotPayload } from "./jsonValue.js";
 import { acquireQueueLock, lockPathForQueue } from "./lockFile.js";
 import path from "node:path";
@@ -55,7 +55,19 @@ export async function createQueueStore({
     }
     quarantine = await quarantineOrphanTemps(file, { fsImpl, platform });
   } catch (err) {
-    await lock.release().catch(() => {});
+    try {
+      await lock.release();
+    } catch (cleanupErr) {
+      throw new QueueError(
+        "startup_lock_cleanup_failed",
+        `queue startup failed and its process lock could not be released: ${lockPath}`,
+        {
+          lockPath,
+          cause: err,
+          cleanupCause: cleanupErr,
+        }
+      );
+    }
     throw err;
   }
 
@@ -110,6 +122,15 @@ export async function createQueueStore({
     degradedReasons: [...degradedReasons],
   });
 
+  const annotateCurrentDurability = (err, result) => {
+    if (err && (typeof err === "object" || typeof err === "function")) {
+      if (err.durability === undefined) err.durability = durability;
+      if (err.degradedReasons === undefined) err.degradedReasons = [...degradedReasons];
+      if (result !== undefined && err.result === undefined) err.result = result;
+    }
+    return err;
+  };
+
   async function persist(candidate, result) {
     try {
       const persisted = await writeStateAtomic(file, candidate, { fsImpl, platform });
@@ -123,7 +144,7 @@ export async function createQueueStore({
         err.result = result;
         throw err;
       }
-      throw err;
+      throw annotateCurrentDurability(err, result);
     }
   }
 
@@ -142,9 +163,7 @@ export async function createQueueStore({
               err.result = tx?.result;
               throw err;
             }
-            err.durability = "uncertain";
-            err.result = tx?.result;
-            throw err;
+            throw annotateCurrentDurability(err, tx?.result);
           }
         }
         return resultWithDurability(tx?.result);
