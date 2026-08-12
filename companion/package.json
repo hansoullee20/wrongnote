@@ -1,0 +1,13 @@
+{
+  "name": "wrongnote-companion",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "bin": {
+    "wrongnote-queue": "bin/queue-doctor.js"
+  }
+}
