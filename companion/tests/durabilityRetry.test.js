@@ -46,7 +46,11 @@ function failTargetDirSyncOnce(targetDir) {
 
 function assertUncertaintyRepaired(value) {
   assert.notEqual(value, "uncertain");
-  assert.ok(["durable", "degraded"].includes(value));
+  if (process.platform === "win32") {
+    assert.ok(["durable", "degraded"].includes(value));
+  } else {
+    assert.equal(value, "durable");
+  }
 }
 
 test("retry after committed uncertainty re-persists before reporting duplicate", async () => {
