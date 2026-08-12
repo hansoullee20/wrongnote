@@ -1,4 +1,4 @@
-import { CAUSES, MATH_TOPICS } from "./constants.js";
+import { CAUSES, MATH_TOPICS, SUBJECTS } from "./constants.js";
 
 export const AI_IMPORT_VERSION = 1;
 
@@ -6,9 +6,23 @@ const topicList = Object.entries(MATH_TOPICS)
   .map(([main, subs]) => `${main}: ${subs.join(", ")}`)
   .join("\n");
 
+const cleanStrings = (value) => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const text = item.trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    out.push(text);
+  }
+  return out;
+};
+
 export function buildChatGPTRequest({ subject, problem, locale = "ko" }) {
   const language = locale === "en" ? "English" : "Korean";
-  return `You are preparing a personal wrong-answer study record. I will attach two image groups: the original question and my handwritten work. Return ONLY valid JSON matching this shape:\n{\n  "version": 1,\n  "locale": "${locale}",\n  "question": { "problem": "", "plainText": "", "latex": "", "correctAnswer": "" },\n  "analysis": { "topicMain": "", "topicSub": "", "concepts": [""], "cause": "", "tags": [""], "failurePoint": "", "mySolution": "", "optimalSolution": "", "memo": "" }\n}\n\nWrite all explanatory text in ${language}. Preserve mathematical notation in LaTex. Do not invent text that cannot be read from the images; use an empty string when uncertain.\n\nSubject: ${subject}\nProblem label: ${problem || ""}\nAllowed causes: ${CAUSES.join(", ")}\nMath topic taxonomy:\n${topicList}`;
+  return `You are preparing a personal wrong-answer study record. I will attach two image groups: the original question and my handwritten work. Return ONLY valid JSON matching this shape:\n{\n  "version": 1,\n  "locale": "${locale}",\n  "subject": "${subject}",\n  "question": { "problem": "", "plainText": "", "latex": "", "correctAnswer": "" },\n  "analysis": { "topicMain": "", "topicSub": "", "concepts": [""], "cause": "", "tags": [""], "failurePoint": "", "mySolution": "", "optimalSolution": "", "memo": "" }\n}\n\nWrite all explanatory text in ${language}. Preserve mathematical notation in LaTex. Do not invent text that cannot be read from the images; use an empty string when uncertain.\n\nSubject: ${subject}\nProblem label: ${problem || ""}\nAllowed causes: ${CAUSES.join(", ")}\nMath topic taxonomy:\n${topicList}`;
 }
 
 export function parseAiImport(raw) {
@@ -28,17 +42,20 @@ export function parseAiImport(raw) {
     mainOk && typeof a.topicSub === "string" && MATH_TOPICS[topicMain].includes(a.topicSub)
       ? a.topicSub
       : "";
+  const subject = SUBJECTS.includes(value.subject) ? value.subject : "";
   return {
     analysisLocale: value.locale === "en" ? "en" : "ko",
+    ...(subject ? { subject } : {}),
     problem: typeof q.problem === "string" ? q.problem : "",
     question: typeof q.plainText === "string" ? q.plainText : "",
     questionLatex: typeof q.latex === "string" ? q.latex : "",
     correctAnswer: typeof q.correctAnswer === "string" ? q.correctAnswer : "",
     topicMain,
     topicSub,
-    concepts: Array.isArray(a.concepts) ? a.concepts.filter((x) => typeof x === "string" && x.trim()) : [],
+    concepts: cleanStrings(a.concepts),
     cause: CAUSES.includes(a.cause) ? a.cause : "",
-    tags: Array.isArray(a.tags) ? a.tags.filter((x) => typeof x === "string" && x.trim()) : [],
+    tags: cleanStrings(a.tags),
+    failurePoint: typeof a.failurePoint === "string" ? a.failurePoint : "",
     memo: typeof a.memo === "string" ? a.memo : "",
     mySol: typeof a.mySolution === "string" ? a.mySolution : "",
     optSol: typeof a.optimalSolution === "string" ? a.optimalSolution : "",
