@@ -2,7 +2,11 @@
 
 import { LEGACY_CAUSE_MAP, CAUSES } from "./constants.js";
 
-export const SCHEMA_VERSION = 9; // v9: AI producer event identity (6은 배포된 적 없다)
+/* aiEventId는 v8 reader/writer가 이미 보장하는 unknown-field 보존 계약의
+   additive provenance 필드다. 옛 v8 코드도 ...note로 그대로 왕복시키므로
+   이것만을 위해 저장 형식을 v9로 선언하면 실제 incompatibility 없이
+   다운그레이드 잠금/전이 백업을 발생시킨다. 스키마 마커는 8을 유지한다. */
+export const SCHEMA_VERSION = 8; // v8: 실패 지점 + additive AI provenance (6은 배포된 적 없다)
 
 /**
  * v2: 카드에 SRS 필드 추가.
@@ -76,7 +80,8 @@ export function migrateAttempt(noteId, attempt, index) {
 
 /**
  * v2: 반복 재검증 필드. v3: 사진. v4: 주원인/답/시도 이력. v5: attempt 정규화.
- * v6: attempt에 assisted 추가. v8: failurePoint. v9: AI producer event identity.
+ * v6: attempt에 assisted 추가. v8: failurePoint.
+ * aiEventId는 v8의 unknown-field 보존 계약 위에 얹는 additive provenance다.
  * @param {object} note 저장된 노트
  */
 export function migrateNote(note) {
@@ -115,9 +120,9 @@ export function migrateNote(note) {
     analysisLocale: note.analysisLocale === "en" ? "en" : "ko",
     /* 어디서 풀이가 무너졌는가 (v8). 과거 노트에는 추측하지 않는다. */
     failurePoint: typeof note.failurePoint === "string" ? note.failurePoint : "",
-    /* MCP/companion producer event identity (v9). 이 값은 AI의 내용이 아니라
-       전송 사건의 idempotency identity다. 노트 저장 성공 뒤 queue ACK를 잃어도
-       재전달된 같은 event를 새 노트로 만들지 않게 한다. */
+    /* MCP/companion producer event identity. AI 내용이 아니라 전송 사건의
+       idempotency provenance다. v8 코드가 unknown fields를 보존하므로 새 marker가
+       필요하지 않다. */
     aiEventId: typeof note.aiEventId === "string" ? note.aiEventId : "",
   };
 }
