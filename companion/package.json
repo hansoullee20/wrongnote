@@ -1,15 +1,24 @@
 {
   "name": "wrongnote-companion",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "engines": { "node": ">=20" },
   "bin": {
     "wrongnote-queue": "src/cli.js",
-    "wrongnote-companion": "src/serve.js"
+    "wrongnote-companion": "src/serve.js",
+    "wrongnote-mcp": "src/mcp.js"
   },
   "scripts": {
     "test": "node --test",
-    "serve": "node src/serve.js"
+    "serve": "node src/serve.js",
+    "mcp": "node src/mcp.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0"
   }
 }
