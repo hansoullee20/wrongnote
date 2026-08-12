@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { pathToFileURL } from "node:url";
 import { BIND_ADDRESS, queueAllowedOrigins, queueFilePath, queuePort } from "./config.js";
 import { createHttpTransport } from "./httpServer.js";
 import { createQueueStore } from "./queueStore.js";
@@ -86,7 +87,7 @@ async function main() {
   process.once("SIGTERM", () => void stop("SIGTERM"));
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error(
       JSON.stringify({
