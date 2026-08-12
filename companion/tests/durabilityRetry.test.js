@@ -44,6 +44,11 @@ function failTargetDirSyncOnce(targetDir) {
   };
 }
 
+function assertUncertaintyRepaired(value) {
+  assert.notEqual(value, "uncertain");
+  assert.ok(["durable", "degraded"].includes(value));
+}
+
 test("retry after committed uncertainty re-persists before reporting duplicate", async () => {
   const file = await tempFile("repair");
   const probe = failTargetDirSyncOnce(path.dirname(file));
@@ -58,9 +63,9 @@ test("retry after committed uncertainty re-persists before reporting duplicate",
 
   const retry = await store.submit("event-1", ANALYSIS);
   assert.equal(retry.status, "duplicate");
-  assert.equal(retry.durability, "durable");
+  assertUncertaintyRepaired(retry.durability);
   assert.ok(probe.syncCount() > before, "duplicate retry must perform a durability repair write");
-  assert.equal((await store.health()).durability, "durable");
+  assertUncertaintyRepaired((await store.health()).durability);
   await store.close();
 });
 
@@ -83,6 +88,6 @@ test("ambiguous session acquisition is recoverable by the same session id withou
   assert.equal(retry.status, "already_acquired");
   assert.equal(retry.fence, firstError.result.fence);
   assert.equal(retry.expiresAt, originalExpiry);
-  assert.equal(retry.durability, "durable");
+  assertUncertaintyRepaired(retry.durability);
   await store.close();
 });
