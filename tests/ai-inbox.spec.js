@@ -90,6 +90,7 @@ async function installCompanionMock(page, { eventId = "evt-ai-1", problem = "AI-
 test("AI inbox stays reviewable and only settles accepted after the note is persisted", async ({ page }) => {
   const mock = await installCompanionMock(page);
   await freshApp(page);
+  await page.getByTestId("ai-companion-enable").click();
 
   const badge = page.getByTestId("ai-inbox-badge");
   await expect(badge).toBeVisible({ timeout: 10_000 });
@@ -123,7 +124,7 @@ test("redelivery of an already-saved event is ACKed without creating a duplicate
   await page.goto("/");
   await page.evaluate(() => {
     localStorage.clear();
-    localStorage.setItem("wr_schema_version", "9");
+    localStorage.setItem("wr_schema_version", "8");
     localStorage.setItem("wr_cards", "[]");
     localStorage.setItem(
       "wr_notes",
@@ -163,6 +164,7 @@ test("redelivery of an already-saved event is ACKed without creating a duplicate
   });
   await page.reload();
   await page.getByRole("button", { name: /^문제/ }).waitFor();
+  await page.getByTestId("ai-companion-enable").click();
 
   await expect.poll(() => mock.settlements.some((entry) => entry.outcome === "accepted")).toBe(true);
   await expect(page.getByTestId("ai-inbox-badge")).toHaveCount(0);
