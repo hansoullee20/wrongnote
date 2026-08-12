@@ -1,4 +1,5 @@
 export const COMPANION_BASE_URL = "http://127.0.0.1:43119/v1";
+const DEFAULT_TIMEOUT_MS = 5_000;
 
 export class CompanionHttpError extends Error {
   constructor(message, { status = 0, code = "companion_error", details = {} } = {}) {
@@ -59,11 +60,25 @@ async function readResponse(response) {
 export function createCompanionClient({
   baseUrl = COMPANION_BASE_URL,
   fetchImpl = globalThis.fetch,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) {
   if (typeof fetchImpl !== "function") throw new Error("companion client requires fetch");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("companion client timeoutMs must be a positive number");
+  }
   const base = String(baseUrl).replace(/\/+$/, "");
 
   async function request(path, { method = "GET", body, signal, keepalive = false } = {}) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const onExternalAbort = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    else signal?.addEventListener?.("abort", onExternalAbort, { once: true });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
     let response;
     try {
       response = await fetchImpl(`${base}${path}`, {
@@ -73,17 +88,25 @@ export function createCompanionClient({
         cache: "no-store",
         redirect: "error",
         referrerPolicy: "no-referrer",
-        signal,
+        signal: controller.signal,
         keepalive,
         headers: body === undefined ? undefined : { "Content-Type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (err) {
-      if (err?.name === "AbortError") throw err;
+      if (timedOut) {
+        throw new CompanionHttpError("Wrongnote companion request timed out", {
+          code: "companion_timeout",
+        });
+      }
+      if (signal?.aborted || err?.name === "AbortError") throw err;
       throw new CompanionHttpError("Wrongnote companion is unavailable", {
         code: "companion_unavailable",
         details: { cause: err },
       });
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener?.("abort", onExternalAbort);
     }
     return readResponse(response);
   }
