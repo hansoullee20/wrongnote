@@ -79,9 +79,8 @@ export function createCompanionClient({
       controller.abort();
     }, timeoutMs);
 
-    let response;
     try {
-      response = await fetchImpl(`${base}${path}`, {
+      const response = await fetchImpl(`${base}${path}`, {
         method,
         mode: "cors",
         credentials: "omit",
@@ -93,6 +92,11 @@ export function createCompanionClient({
         headers: body === undefined ? undefined : { "Content-Type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
+      /* Keep the same timeout alive through body consumption. `fetch()` resolves
+         when headers arrive; a local server can still stall before finishing its
+         JSON body. Clearing the timer before response.json() would wedge polling
+         forever on exactly that half-response failure. */
+      return await readResponse(response);
     } catch (err) {
       if (timedOut) {
         throw new CompanionHttpError("Wrongnote companion request timed out", {
@@ -100,6 +104,7 @@ export function createCompanionClient({
         });
       }
       if (signal?.aborted || err?.name === "AbortError") throw err;
+      if (err instanceof CompanionHttpError) throw err;
       throw new CompanionHttpError("Wrongnote companion is unavailable", {
         code: "companion_unavailable",
         details: { cause: err },
@@ -108,7 +113,6 @@ export function createCompanionClient({
       clearTimeout(timer);
       signal?.removeEventListener?.("abort", onExternalAbort);
     }
-    return readResponse(response);
   }
 
   return {
