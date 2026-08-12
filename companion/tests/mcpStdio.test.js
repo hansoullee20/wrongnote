@@ -52,6 +52,10 @@ async function assertLockGone(file) {
   await assert.rejects(() => fs.stat(lockPathForQueue(file)), (err) => err.code === "ENOENT");
 }
 
+async function assertQueueAbsent(file) {
+  await assert.rejects(() => fs.stat(file), (err) => err.code === "ENOENT");
+}
+
 test("spawned wrongnote-mcp lists and calls the producer tool over legacy stdio", { timeout: 20_000 }, async (t) => {
   const file = await tempFile("call");
   const port = await reservePort();
@@ -62,6 +66,8 @@ test("spawned wrongnote-mcp lists and calls the producer tool over legacy stdio"
 
   const tools = await client.listTools();
   assert.deepEqual(tools.tools.map((tool) => tool.name), [WRONGNOTE_SUBMIT_TOOL]);
+  await assertLockGone(file);
+  await assertQueueAbsent(file);
 
   const result = await client.callTool({
     name: WRONGNOTE_SUBMIT_TOOL,
@@ -82,7 +88,7 @@ test("spawned wrongnote-mcp lists and calls the producer tool over legacy stdio"
   await assertLockGone(file);
 });
 
-test("modern stdio auto-negotiation can probe then start the real owner without a lock collision", { timeout: 30_000 }, async (t) => {
+test("modern stdio auto-negotiation can probe side-effect free then start the real owner", { timeout: 30_000 }, async (t) => {
   const file = await tempFile("modern-probe");
   const port = await reservePort();
   const { client } = await createSpawnedClient(file, port, { versionNegotiation: { mode: "auto" } });
@@ -93,6 +99,9 @@ test("modern stdio auto-negotiation can probe then start the real owner without 
   assert.equal(client.getProtocolEra(), "modern");
   const tools = await client.listTools();
   assert.deepEqual(tools.tools.map((tool) => tool.name), [WRONGNOTE_SUBMIT_TOOL]);
+  await assertLockGone(file);
+  await assertQueueAbsent(file);
+
   const result = await client.callTool({
     name: WRONGNOTE_SUBMIT_TOOL,
     arguments: {
