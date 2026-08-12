@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
-import path from "node:path";
 import { MAX_ACTIVE_ITEMS, MAX_ERROR_CHARS, SESSION_LEASE_MS } from "./config.js";
 import { QueueCommitError, fail } from "./errors.js";
 import { snapshotPayload } from "./jsonValue.js";
 import { acquireQueueLock, lockPathForQueue } from "./lockFile.js";
+import path from "node:path";
 import { ensureDirectoryDurable, quarantineOrphanTemps, readTextIfExists, writeStateAtomic } from "./persistence.js";
 import { assertEventId, assertSessionId, emptyState, validateState } from "./state.js";
 
@@ -66,6 +66,7 @@ export async function createQueueStore({
   const clock = () => {
     const raw = Number(now());
     if (!Number.isFinite(raw) || raw < 0) throw new Error("clock returned an invalid timestamp");
+    // A backward wall-clock adjustment cannot make a lease expire earlier or create retrograde records.
     lastNow = Math.max(lastNow, raw);
     return lastNow;
   };
@@ -75,31 +76,70 @@ export async function createQueueStore({
       if (closed || closing) fail("store_closed", "queue store is closing or closed");
       return fn();
     });
-    chain = run.then(() => undefined, () => undefined);
+    chain = run.then(
+      () => undefined,
+      () => undefined
+    );
     return run;
   };
+
+  const applyPersistedDurability = (persisted) => {
+    degradedReasons = [...new Set([...bootstrapReasons, ...persisted.degradedReasons])];
+    durability = degradedReasons.length ? "degraded" : persisted.durability;
+  };
+
+  const resultWithDurability = (result) => ({
+    ...(result || {}),
+    durability,
+    degradedReasons: [...degradedReasons],
+  });
+
+  async function persist(candidate, result) {
+    try {
+      const persisted = await writeStateAtomic(file, candidate, { fsImpl, platform });
+      state = candidate;
+      applyPersistedDurability(persisted);
+      return resultWithDurability(result);
+    } catch (err) {
+      if (err instanceof QueueCommitError || err?.committed === true) {
+        // rename is the commit point: disk-visible state is candidate even though crash durability is uncertain.
+        state = candidate;
+        durability = "uncertain";
+        err.result = result;
+        throw err;
+      }
+      throw err;
+    }
+  }
 
   async function transact(fn) {
     return enqueue(async () => {
       const candidate = clone(state);
       const tx = await fn(candidate);
-      if (!tx || tx.changed !== true) return tx?.result;
-      validateState(candidate);
-      try {
-        const persisted = await writeStateAtomic(file, candidate, { fsImpl, platform });
-        state = candidate;
-        degradedReasons = [...new Set([...bootstrapReasons, ...persisted.degradedReasons])];
-        durability = degradedReasons.length ? "degraded" : persisted.durability;
-        return { ...tx.result, durability, degradedReasons: [...degradedReasons] };
-      } catch (err) {
-        if (err instanceof QueueCommitError || err?.committed === true) {
-          state = candidate;
-          durability = "uncertain";
-          err.result = tx.result;
-          throw err;
+      if (!tx || tx.changed !== true) {
+        /* A post-rename failure leaves the logical state applied but crash durability
+           unknown. A retry must never turn that into an ordinary duplicate/busy/etc.
+           Re-persist the current state first; a successful directory sync closes the
+           ambiguity, while another failure stays loud. */
+        if (durability === "uncertain") {
+          try {
+            const persisted = await writeStateAtomic(file, state, { fsImpl, platform });
+            applyPersistedDurability(persisted);
+          } catch (err) {
+            if (err instanceof QueueCommitError || err?.committed === true) {
+              durability = "uncertain";
+              err.result = tx?.result;
+              throw err;
+            }
+            err.durability = "uncertain";
+            err.result = tx?.result;
+            throw err;
+          }
         }
-        throw err;
+        return resultWithDurability(tx?.result);
       }
+      validateState(candidate);
+      return persist(candidate, tx.result);
     });
   }
 
@@ -128,6 +168,7 @@ export async function createQueueStore({
 
   return {
     async submit(eventId, payload) {
+      // Snapshot before entering the serialized async queue. The caller may mutate its object immediately after this call.
       assertEventId(eventId);
       const snap = snapshotPayload(payload);
       return transact((candidate) => {
@@ -137,16 +178,29 @@ export async function createQueueStore({
         const existing = active || accepted || rejected;
         if (existing) {
           if (existing.payloadHash !== snap.hash) {
-            return { changed: false, result: { status: "idempotency_conflict", eventId, existingHash: existing.payloadHash, submittedHash: snap.hash } };
+            return {
+              changed: false,
+              result: { status: "idempotency_conflict", eventId, existingHash: existing.payloadHash, submittedHash: snap.hash },
+            };
           }
           if (active) {
             const delivered = candidate.session?.delivery?.itemId === active.id;
             return { changed: false, result: { status: "duplicate", state: delivered ? "delivered" : "waiting", eventId, itemId: active.id } };
           }
           if (accepted) return { changed: false, result: { status: "duplicate", state: "accepted", eventId, itemId: accepted.itemId } };
-          return { changed: false, result: { status: "duplicate", state: rejected.requeuedItemId ? "rejected_history" : "rejected", eventId, rejectionId: rejected.rejectionId } };
+          return {
+            changed: false,
+            result: {
+              status: "duplicate",
+              state: rejected.requeuedItemId ? "rejected_history" : "rejected",
+              eventId,
+              rejectionId: rejected.rejectionId,
+            },
+          };
         }
-        if (candidate.items.length >= MAX_ACTIVE_ITEMS) return { changed: false, result: { status: "queue_full", limit: MAX_ACTIVE_ITEMS } };
+        if (candidate.items.length >= MAX_ACTIVE_ITEMS) {
+          return { changed: false, result: { status: "queue_full", limit: MAX_ACTIVE_ITEMS } };
+        }
         const item = {
           id: id(),
           eventId,
@@ -165,7 +219,10 @@ export async function createQueueStore({
       return transact((candidate) => {
         const t = clock();
         if (candidate.session && t < candidate.session.expiresAt) {
-          return { changed: false, result: { status: "busy", expiresAt: candidate.session.expiresAt } };
+          return {
+            changed: false,
+            result: { status: "busy", expiresAt: candidate.session.expiresAt },
+          };
         }
         const fence = candidate.nextFence;
         candidate.nextFence += 1;
@@ -198,52 +255,100 @@ export async function createQueueStore({
         if (a.status !== "ok") return { changed: false, result: a };
         const t = clock();
         if (t >= a.session.expiresAt) return { changed: false, result: { status: "lease_expired" } };
+
         if (a.session.delivery) {
           const item = candidate.items.find((i) => i.id === a.session.delivery.itemId);
           if (!item) fail("corrupt_queue", "current delivery points to a missing item");
           renew(a.session, t);
-          return { changed: true, result: { status: "delivered", repeated: true, eventId: item.eventId, itemId: item.id, receipt: a.session.delivery.receipt, payload: clone(item.payload), expiresAt: a.session.expiresAt } };
+          return {
+            changed: true,
+            result: {
+              status: "delivered",
+              repeated: true,
+              eventId: item.eventId,
+              itemId: item.id,
+              receipt: a.session.delivery.receipt,
+              payload: clone(item.payload),
+              expiresAt: a.session.expiresAt,
+            },
+          };
         }
+
         const item = candidate.items[0];
         if (!item) return { changed: false, result: { status: "empty" } };
         const receipt = id();
         a.session.delivery = { itemId: item.id, receipt, deliveredAt: t };
         renew(a.session, t);
-        return { changed: true, result: { status: "delivered", repeated: false, eventId: item.eventId, itemId: item.id, receipt, payload: clone(item.payload), expiresAt: a.session.expiresAt } };
+        return {
+          changed: true,
+          result: {
+            status: "delivered",
+            repeated: false,
+            eventId: item.eventId,
+            itemId: item.id,
+            receipt,
+            payload: clone(item.payload),
+            expiresAt: a.session.expiresAt,
+          },
+        };
       });
     },
 
     async settle(sessionId, fence, receipt, outcome, { error = "" } = {}) {
       assertSessionId(sessionId);
       requireNonemptyString(receipt, "invalid_receipt", "receipt");
-      if (!["accepted", "rejected", "released"].includes(outcome)) fail("invalid_outcome", `unknown settlement outcome: ${outcome}`);
+      if (!["accepted", "rejected", "released"].includes(outcome)) {
+        fail("invalid_outcome", `unknown settlement outcome: ${outcome}`);
+      }
       return transact((candidate) => {
         const a = auth(candidate, sessionId, fence);
         if (a.status !== "ok") return { changed: false, result: a };
+
         if (!a.session.delivery) {
           const terminal = terminalByReceipt(candidate, receipt);
-          return { changed: false, result: terminal ? { status: "already_settled", outcome: terminal.kind, eventId: terminal.record.eventId } : { status: "receipt_mismatch" } };
+          return {
+            changed: false,
+            result: terminal
+              ? { status: "already_settled", outcome: terminal.kind, eventId: terminal.record.eventId }
+              : { status: "receipt_mismatch" },
+          };
         }
         if (a.session.delivery.receipt !== receipt) {
           const terminal = terminalByReceipt(candidate, receipt);
-          return { changed: false, result: terminal ? { status: "already_settled", outcome: terminal.kind, eventId: terminal.record.eventId } : { status: "receipt_mismatch", currentReceipt: a.session.delivery.receipt } };
+          return {
+            changed: false,
+            result: terminal
+              ? { status: "already_settled", outcome: terminal.kind, eventId: terminal.record.eventId }
+              : { status: "receipt_mismatch", currentReceipt: a.session.delivery.receipt },
+          };
         }
+
         const itemIndex = candidate.items.findIndex((i) => i.id === a.session.delivery.itemId);
         if (itemIndex === -1) return { changed: false, result: { status: "not_found" } };
         const item = candidate.items[itemIndex];
         const t = clock();
+
         if (outcome === "released") {
           a.session.delivery = null;
           renew(a.session, t);
           return { changed: true, result: { status: "released", eventId: item.eventId, itemId: item.id } };
         }
+
         candidate.items.splice(itemIndex, 1);
         a.session.delivery = null;
         renew(a.session, t);
+
         if (outcome === "accepted") {
-          candidate.accepted.push({ eventId: item.eventId, itemId: item.id, receipt, payloadHash: item.payloadHash, acceptedAt: t });
+          candidate.accepted.push({
+            eventId: item.eventId,
+            itemId: item.id,
+            receipt,
+            payloadHash: item.payloadHash,
+            acceptedAt: t,
+          });
           return { changed: true, result: { status: "accepted", eventId: item.eventId, itemId: item.id } };
         }
+
         const rejection = {
           rejectionId: id(),
           eventId: item.eventId,
@@ -256,7 +361,10 @@ export async function createQueueStore({
           requeuedItemId: null,
         };
         candidate.rejected.push(rejection);
-        return { changed: true, result: { status: "rejected", eventId: item.eventId, itemId: item.id, rejectionId: rejection.rejectionId } };
+        return {
+          changed: true,
+          result: { status: "rejected", eventId: item.eventId, itemId: item.id, rejectionId: rejection.rejectionId },
+        };
       });
     },
 
@@ -268,9 +376,18 @@ export async function createQueueStore({
         const accepted = candidate.accepted.find((r) => r.eventId === dead.eventId);
         if (accepted) return { changed: false, result: { status: "already_settled", outcome: "accepted", eventId: dead.eventId } };
         const active = candidate.items.find((i) => i.eventId === dead.eventId);
-        if (active) return { changed: false, result: { status: "already_requeued", eventId: dead.eventId, itemId: active.id } };
-        if (dead.requeuedItemId || dead.payload === null) return { changed: false, result: { status: "already_requeued", eventId: dead.eventId, itemId: dead.requeuedItemId } };
-        if (candidate.items.length >= MAX_ACTIVE_ITEMS) return { changed: false, result: { status: "queue_full", limit: MAX_ACTIVE_ITEMS } };
+        if (active) {
+          return { changed: false, result: { status: "already_requeued", eventId: dead.eventId, itemId: active.id } };
+        }
+        if (dead.requeuedItemId || dead.payload === null) {
+          return {
+            changed: false,
+            result: { status: "already_requeued", eventId: dead.eventId, itemId: dead.requeuedItemId },
+          };
+        }
+        if (candidate.items.length >= MAX_ACTIVE_ITEMS) {
+          return { changed: false, result: { status: "queue_full", limit: MAX_ACTIVE_ITEMS } };
+        }
         const item = {
           id: id(),
           eventId: dead.eventId,
@@ -281,7 +398,7 @@ export async function createQueueStore({
         };
         candidate.items.push(item);
         dead.requeuedItemId = item.id;
-        dead.payload = null;
+        dead.payload = null; // evidence remains; full payload now lives on the active retry
         return { changed: true, result: { status: "requeued", eventId: item.eventId, itemId: item.id, rejectionId } };
       });
     },
@@ -296,9 +413,17 @@ export async function createQueueStore({
       });
     },
 
-    async list() { return enqueue(() => clone(state.items)); },
-    async listRejected() { return enqueue(() => clone(state.rejected)); },
-    async listAccepted() { return enqueue(() => clone(state.accepted)); },
+    async list() {
+      return enqueue(() => clone(state.items));
+    },
+
+    async listRejected() {
+      return enqueue(() => clone(state.rejected));
+    },
+
+    async listAccepted() {
+      return enqueue(() => clone(state.accepted));
+    },
 
     async health() {
       return enqueue(() => ({
@@ -309,7 +434,14 @@ export async function createQueueStore({
         activeItems: state.items.length,
         rejected: state.rejected.length,
         accepted: state.accepted.length,
-        session: state.session ? { sessionId: state.session.sessionId, fence: state.session.fence, expiresAt: state.session.expiresAt, hasDelivery: Boolean(state.session.delivery) } : null,
+        session: state.session
+          ? {
+              sessionId: state.session.sessionId,
+              fence: state.session.fence,
+              expiresAt: state.session.expiresAt,
+              hasDelivery: Boolean(state.session.delivery),
+            }
+          : null,
       }));
     },
 
@@ -323,7 +455,7 @@ export async function createQueueStore({
         await lock.release();
         closed = true;
       })().finally(() => {
-        if (!closed) closing = false;
+        if (!closed) closing = false; // release failure remains retryable
         closeFlight = null;
       });
       return closeFlight;
