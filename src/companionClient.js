@@ -134,8 +134,14 @@ export function createCompanionClient({
 }
 
 export function newCompanionSessionId(cryptoImpl = globalThis.crypto) {
-  if (!cryptoImpl?.randomUUID) {
-    throw new Error("browser does not support crypto.randomUUID");
+  if (cryptoImpl?.randomUUID) {
+    return `wrongnote-tab-${cryptoImpl.randomUUID()}`;
   }
-  return `wrongnote-tab-${cryptoImpl.randomUUID()}`;
+  if (cryptoImpl?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    cryptoImpl.getRandomValues(bytes);
+    const token = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+    return `wrongnote-tab-${token}`;
+  }
+  throw new Error("browser does not provide a secure random source for companion session ids");
 }
