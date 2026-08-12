@@ -96,7 +96,8 @@ function validateRejected(rec, i) {
   string(rec.itemId, `${p}.itemId`);
   string(rec.receipt, `${p}.receipt`);
   hash(rec.payloadHash, `${p}.payloadHash`);
-  string(rec.error, `${p}.error`, { nonempty: false });
+  string(rec.error, `${p}.error`);
+  if (rec.error.trim().length === 0) fail("corrupt_queue", `${p}.error must contain a visible reason`);
   time(rec.rejectedAt, `${p}.rejectedAt`);
   if (rec.requeuedItemId !== null) string(rec.requeuedItemId, `${p}.requeuedItemId`);
   if (rec.requeuedItemId === null) {
@@ -129,10 +130,17 @@ function validateSession(session, nextFence, activeIds) {
 }
 
 export function validateState(state) {
-  exactKeys(state, ["version", "nextFence", "session", "items", "accepted", "rejected"], "queue");
+  object(state, "queue");
+  if (!Object.hasOwn(state, "version")) {
+    fail("corrupt_queue", "queue.version is missing");
+  }
+  if (!Number.isSafeInteger(state.version) || state.version <= 0) {
+    fail("corrupt_queue", "queue.version must be a positive integer");
+  }
   if (state.version !== QUEUE_FORMAT_VERSION) {
     fail("unsupported_queue_version", `queue version ${state.version} is not supported`);
   }
+  exactKeys(state, ["version", "nextFence", "session", "items", "accepted", "rejected"], "queue");
   positiveInt(state.nextFence, "nextFence");
   if (!Array.isArray(state.items) || !Array.isArray(state.accepted) || !Array.isArray(state.rejected)) {
     fail("corrupt_queue", "items, accepted and rejected must all be arrays");
@@ -193,11 +201,6 @@ export function validateState(state) {
   validateSession(state.session, state.nextFence, activeIds);
   if (state.session?.delivery) seeReceipt(state.session.delivery.receipt, "session.delivery");
 
-  /* Requeue history is a per-event linear chain, not just a bag of records.
-     A compacted rejection must lead to exactly one concrete successor; two
-     histories cannot fork into the same item, form a cycle, or leave two
-     unresolved heads. Otherwise an event can validate yet become unreachable
-     and impossible to requeue/resubmit. */
   const nodeByItemId = new Map();
   const rejectionById = new Map();
   const incomingByItemId = new Map();

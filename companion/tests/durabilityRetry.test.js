@@ -63,3 +63,26 @@ test("retry after committed uncertainty re-persists before reporting duplicate",
   assert.equal((await store.health()).durability, "durable");
   await store.close();
 });
+
+test("ambiguous session acquisition is recoverable by the same session id without extending the lease", async () => {
+  const file = await tempFile("acquire-ambiguous");
+  const probe = failTargetDirSyncOnce(path.dirname(file));
+  const store = await createQueueStore({ file, fsImpl: probe.fsImpl });
+  let firstError;
+  try {
+    await store.acquireSession("tab-ambiguous");
+    assert.fail("expected committed uncertainty");
+  } catch (err) {
+    firstError = err;
+  }
+  assert.equal(firstError.code, "committed_durability_uncertain");
+  assert.equal(firstError.result.status, "acquired");
+  const originalExpiry = firstError.result.expiresAt;
+
+  const retry = await store.acquireSession("tab-ambiguous");
+  assert.equal(retry.status, "already_acquired");
+  assert.equal(retry.fence, firstError.result.fence);
+  assert.equal(retry.expiresAt, originalExpiry);
+  assert.equal(retry.durability, "durable");
+  await store.close();
+});

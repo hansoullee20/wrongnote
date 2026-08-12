@@ -5,7 +5,7 @@ import { QueueCommitError, fail } from "./errors.js";
 import { snapshotPayload } from "./jsonValue.js";
 import { acquireQueueLock, lockPathForQueue } from "./lockFile.js";
 import path from "node:path";
-import { ensureDirectoryDurable, quarantineOrphanTemps, readTextIfExists, writeStateAtomic } from "./persistence.js";
+import { directorySync, ensureDirectoryDurable, quarantineOrphanTemps, readTextIfExists, writeStateAtomic } from "./persistence.js";
 import { assertEventId, assertSessionId, emptyState, validateState } from "./state.js";
 
 const clone = (value) => structuredClone(value);
@@ -42,9 +42,17 @@ export async function createQueueStore({
   const lock = await acquireQueueLock(lockPath, { fsImpl, now });
   let state;
   let quarantine = { count: 0, paths: [] };
+  let canonicalDirSync = { supported: true };
   try {
-    state = parseState(await readTextIfExists(file, { fsImpl }), file);
+    const raw = await readTextIfExists(file, { fsImpl });
+    state = parseState(raw, file);
     validateState(state);
+    // A visible canonical file may come from a prior rename whose directory fsync failed.
+    // Syncing its containing directory on every reopen repairs/confirms that commit before
+    // this process is allowed to call the queue durable again.
+    if (raw !== null) {
+      canonicalDirSync = await directorySync(path.dirname(file), { fsImpl, platform });
+    }
     quarantine = await quarantineOrphanTemps(file, { fsImpl, platform });
   } catch (err) {
     await lock.release().catch(() => {});
@@ -53,11 +61,20 @@ export async function createQueueStore({
 
   const bootstrapReasons = [...new Set([
     ...bootstrapDurability.degradedReasons,
+    ...(!canonicalDirSync.supported ? [`directory-fsync:${canonicalDirSync.reason}`] : []),
     ...(quarantine.degradedReasons || []),
   ])];
   let durability = bootstrapReasons.length ? "degraded" : "durable";
   let degradedReasons = [...bootstrapReasons];
-  let lastNow = 0;
+  const durableTimes = [
+    state.session?.acquiredAt,
+    state.session?.renewedAt,
+    state.session?.delivery?.deliveredAt,
+    ...state.items.map((item) => item.createdAt),
+    ...state.accepted.map((record) => record.acceptedAt),
+    ...state.rejected.map((record) => record.rejectedAt),
+  ].filter(Number.isFinite);
+  let lastNow = Math.max(0, ...durableTimes);
   let chain = Promise.resolve();
   let closed = false;
   let closing = false;
@@ -148,8 +165,9 @@ export async function createQueueStore({
   }
 
   function renew(s, t) {
-    s.renewedAt = t;
-    s.expiresAt = t + leaseMs;
+    const effective = Math.max(t, s.renewedAt);
+    s.renewedAt = effective;
+    s.expiresAt = Math.max(s.expiresAt, effective + leaseMs);
   }
 
   function terminalByReceipt(candidate, receipt) {
@@ -212,6 +230,17 @@ export async function createQueueStore({
       return transact((candidate) => {
         const t = clock();
         if (candidate.session && t < candidate.session.expiresAt) {
+          if (candidate.session.sessionId === sessionId) {
+            return {
+              changed: false,
+              result: {
+                status: "already_acquired",
+                sessionId,
+                fence: candidate.session.fence,
+                expiresAt: candidate.session.expiresAt,
+              },
+            };
+          }
           return {
             changed: false,
             result: { status: "busy", expiresAt: candidate.session.expiresAt },
@@ -293,6 +322,13 @@ export async function createQueueStore({
       if (!["accepted", "rejected", "released"].includes(outcome)) {
         fail("invalid_outcome", `unknown settlement outcome: ${outcome}`);
       }
+      let rejectionError = "";
+      if (outcome === "rejected") {
+        if (typeof error !== "string" || error.trim().length === 0) {
+          fail("invalid_rejection_error", "rejected settlement requires a visible nonblank reason");
+        }
+        rejectionError = error.trim().slice(0, MAX_ERROR_CHARS);
+      }
       return transact((candidate) => {
         const a = auth(candidate, sessionId, fence);
         if (a.status !== "ok") return { changed: false, result: a };
@@ -349,7 +385,7 @@ export async function createQueueStore({
           receipt,
           payloadHash: item.payloadHash,
           payload: item.payload,
-          error: String(error ?? "").slice(0, MAX_ERROR_CHARS),
+          error: rejectionError,
           rejectedAt: t,
           requeuedItemId: null,
         };
