@@ -423,6 +423,14 @@ export async function createQueueStore({
        - conflict : 살아 있는 리스인데 주인이 아니다 */
     async settle(consumerId, receipt, outcome, { error = "" } = {}) {
       alive();
+      /* undefined는 신원이 아니다. 빈 값을 그대로 비교에 넣으면 필드가 아직
+         없는 항목(= 아무도 가져간 적 없는 항목)과 "일치"해서 정산된다. */
+      if (typeof consumerId !== "string" || consumerId.length === 0) {
+        throw new Error("settle requires a non-empty string consumerId");
+      }
+      if (typeof receipt !== "string" || receipt.length === 0) {
+        throw new Error("settle requires a non-empty string receipt");
+      }
       if (!["accepted", "rejected", "released"].includes(outcome)) {
         throw new Error(`unknown outcome: ${outcome}`);
       }

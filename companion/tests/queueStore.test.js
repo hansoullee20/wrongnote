@@ -561,6 +561,23 @@ test("a closed store refuses further work instead of writing without the lock", 
   await assert.rejects(() => store.list(), /closed/i);
 });
 
+/* 늦은 정산 조회가 "필드 없음 === 인자 없음"으로 걸리면, 아무도 가져간 적
+   없는 항목이 정산된다. undefined는 신원이 아니다. */
+test("settling with no identity cannot consume an unclaimed item", async () => {
+  const store = await createQueueStore({ file: await freshFile("undef-settle") });
+  await store.submit(ANALYSIS);
+
+  /* 빈 신원은 조용한 "gone"이 아니라 호출자 잘못으로 시끄럽게 실패해야 한다. */
+  await assert.rejects(() => store.settle(undefined, undefined, "accepted"), /consumerId/);
+  await assert.rejects(() => store.settle("tab", undefined, "accepted"), /receipt/);
+  await assert.rejects(() => store.settle("", "", "accepted"), /consumerId/);
+
+  const [item] = await store.list();
+  assert.equal(item.state, "waiting", "it was never claimed — it must still be here");
+  assert.ok(item.payload, "and its payload must be intact");
+  await store.close();
+});
+
 /* ── B. 배열 안의 레코드도 검증한다 ──────────────────────────────────
    items가 배열인지만 보고 안에 든 객체를 안 보면, 멀쩡히 시작한 뒤 특정
    항목이 영원히 청구 불가가 되거나 큐 머리를 막는다. 조용히 잘못 도는 것이
