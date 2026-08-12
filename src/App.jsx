@@ -45,6 +45,7 @@ const TABS = [
 const THEME_KEY = "wr_theme";
 const PALETTE_KEY = "wr_palette";
 const LOCALE_KEY = "wr_locale";
+const AI_COMPANION_KEY = "wr_ai_companion_enabled";
 
 const isThemePreference = (v) =>
   v === "system" || v === "light" || v === "dark";
@@ -66,6 +67,10 @@ function initialLocale() {
   return localStorage.getItem(LOCALE_KEY) === "en" ? "en" : "ko";
 }
 
+function initialAiCompanionEnabled() {
+  return localStorage.getItem(AI_COMPANION_KEY) === "1";
+}
+
 export default function App() {
   // 부팅 시 1회 로드 + 마이그레이션. 파싱 실패면 저장을 잠가 원본을 보호한다.
   const [boot] = useState(loadAll);
@@ -73,6 +78,7 @@ export default function App() {
   const [systemTheme, setSystemTheme] = useState(systemScheme);
   const [palette, setPalette] = useState(initialPalette);
   const [locale, setLocale] = useState(initialLocale);
+  const [aiCompanionEnabled, setAiCompanionEnabled] = useState(initialAiCompanionEnabled);
 
   useEffect(() => {
     const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -138,9 +144,15 @@ export default function App() {
     acceptReady: acceptAiReady,
     rejectReady: rejectAiReady,
   } = useCompanionInbox({
-    // 폼을 쓰는 동안 새 delivery를 claim하지 않는다. 이미 받은 delivery는
-    // hook이 lease를 계속 갱신하므로 검토 중 사라지지 않는다.
-    enabled: !storageLocked && !recording && !settingsOpen && !aiReviewOpen,
+    /* localhost를 기본으로 두드리면 companion을 쓰지 않는 모든 브라우저가
+       ERR_CONNECTION_REFUSED를 남기고, Local Network Access 권한도 맥락 없이
+       뜰 수 있다. 사용자가 'AI 연결'을 명시적으로 켠 뒤에만 폴링한다. */
+    enabled:
+      aiCompanionEnabled &&
+      !storageLocked &&
+      !recording &&
+      !settingsOpen &&
+      !aiReviewOpen,
   });
 
   const storageBanner = storageLocked ? (
@@ -206,6 +218,12 @@ export default function App() {
     [notes]
   );
   const cardDueCount = useMemo(() => dueCards(cards).length, [cards]);
+
+  function setAiBridgeEnabled(enabled) {
+    if (enabled) localStorage.setItem(AI_COMPANION_KEY, "1");
+    else localStorage.removeItem(AI_COMPANION_KEY);
+    setAiCompanionEnabled(enabled);
+  }
 
   function applyDerivedTag(draft) {
     if (draft.derived === "yes" && !draft.tags.includes("지위 오해")) {
@@ -431,6 +449,23 @@ export default function App() {
             <button type="button" className="sheet-close" onClick={dismissAiNotice}>
               닫기
             </button>
+          </div>
+        )}
+
+        {!recording && !settingsOpen && !aiReviewOpen && !aiReady && (
+          <div className="form-shell" data-testid="ai-companion-control">
+            <button
+              type="button"
+              className={`btn ${aiCompanionEnabled ? "btn--ghost" : "btn--ink"}`}
+              data-testid="ai-companion-enable"
+              aria-pressed={aiCompanionEnabled}
+              onClick={() => setAiBridgeEnabled(!aiCompanionEnabled)}
+            >
+              {aiCompanionEnabled ? "✦ AI 연결됨 · 끄기" : "✦ AI 연결"}
+            </button>
+            {!aiCompanionEnabled && (
+              <span className="hint">Claude/ChatGPT 로컬 컴패니언을 쓸 때만 켠다.</span>
+            )}
           </div>
         )}
 
