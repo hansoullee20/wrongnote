@@ -10,10 +10,10 @@ export async function startWrongnoteMcp({ env = process.env, logger = console } 
   let closed = false;
 
   async function getCompanion() {
-    if (companion) return companion;
     if (closing || closed) {
       throw new QueueError("mcp_closing", "Wrongnote MCP runtime is closing");
     }
+    if (companion) return companion;
     if (companionFlight) return companionFlight;
 
     companionFlight = startCompanionHttp({ env, logger })
@@ -43,19 +43,14 @@ export async function startWrongnoteMcp({ env = process.env, logger = console } 
     },
   };
 
-  let stdio;
-  try {
-    // Do not acquire the queue lock or bind HTTP during MCP discovery/handshake.
-    // Modern stdio auto-negotiation may use a disposable sibling process for
-    // server/discover; ownership begins only when the actual model submits work.
-    stdio = serveStdio(() => createWrongnoteMcpServer(lazyProducerStore, { logger }), {
-      onerror(error) {
-        logger?.error?.("wrongnote MCP stdio error", error);
-      },
-    });
-  } catch (err) {
-    throw err;
-  }
+  // Do not acquire the queue lock or bind HTTP during MCP discovery/handshake.
+  // Modern stdio auto-negotiation may use a disposable sibling process for
+  // server/discover; ownership begins only when the actual model submits work.
+  const stdio = serveStdio(() => createWrongnoteMcpServer(lazyProducerStore, { logger }), {
+    onerror(error) {
+      logger?.error?.("wrongnote MCP stdio error", error);
+    },
+  });
 
   let closeFlight = null;
   async function close() {
