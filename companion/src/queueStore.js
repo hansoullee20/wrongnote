@@ -290,6 +290,12 @@ export async function createQueueStore({
       }
     });
 
+  let closed = false;
+  const alive = () => {
+    /* 닫힌 뒤에도 동작하면 잠금 없이 파일을 쓴다 — A가 막으려던 상태 그대로다. */
+    if (closed) throw new Error("queue store is closed");
+  };
+
   /* 읽기도 같은 줄에 세운다. 그래야 진행 중인 변경의 후보 상태가 아니라
      확정된 상태를 본다. */
   const read = (fn) => enqueue(async () => fn());
@@ -335,6 +341,7 @@ export async function createQueueStore({
 
   return {
     async submit(payload) {
+      alive();
       const serialized = JSON.stringify(payload);
       if (serialized === undefined) throw new Error("payload is not serializable");
       if (Buffer.byteLength(serialized, "utf8") > MAX_PAYLOAD_BYTES) {
@@ -373,6 +380,7 @@ export async function createQueueStore({
     },
 
     async claim(consumerId) {
+      alive();
       if (typeof consumerId !== "string" || consumerId.length === 0) {
         /* 호출자 소유 객체를 상태에 넣으면, 나중에 그 객체가 순환 참조가 되는
            것만으로 쓰기 없이 스토어가 망가진다. 문자열만 받는다. */
@@ -413,6 +421,7 @@ export async function createQueueStore({
        - gone     : 그 영수증은 이미 끝났거나 리스가 만료돼 남에게 갔다
        - conflict : 살아 있는 리스인데 주인이 아니다 */
     async settle(consumerId, receipt, outcome, { error = "" } = {}) {
+      alive();
       if (!["accepted", "rejected", "released"].includes(outcome)) {
         throw new Error(`unknown outcome: ${outcome}`);
       }
@@ -481,6 +490,7 @@ export async function createQueueStore({
        생기고, 이미 재시도가 도는 중에 또 부르면 사본이 둘이 된다. 다시 거부되면
        그때 새 레코드가 쌓이므로 이력은 끊기지 않는다. */
     async requeue(id) {
+      alive();
       return mutate(() => {
         const dead = state.rejected.find((r) => r.id === id);
         if (!dead) return "gone";
@@ -508,15 +518,19 @@ export async function createQueueStore({
     },
 
     async listRejected() {
+      alive();
       return read(() => clone(state.rejected));
     },
 
     async list() {
+      alive();
       return read(() => clone(state.items));
     },
 
     /* 잠금은 프로세스 수명 동안 유지된다. 닫을 때만 놓는다. */
     async close() {
+      if (closed) return; // 멱등
+      closed = true;
       await chain.catch(() => {});
       await lock.release();
     },

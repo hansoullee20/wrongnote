@@ -528,6 +528,39 @@ test("a lock from another host is never reclaimed, however old it looks", async 
   await assert.rejects(() => createQueueStore({ file }), /in use|locked|owned/i);
 });
 
+/* 닫기는 멱등해야 한다. 같은 프로세스 안에서 잠금이 정당하게 재획득된 뒤
+   옛 스토어가 close()를 한 번 더 부르면, pid·hostname만 보는 해제는 **남의**
+   잠금을 지운다. 그러면 두 소유자가 생기고, 잠금이 막으려던 경합이 그대로
+   돌아온다 — 잠금이 열린 채로 실패하는 경로다. */
+test("closing twice does not release a lock that was re-acquired meanwhile", async () => {
+  const file = await freshFile("lock-double-close");
+  const first = await createQueueStore({ file });
+  await first.close();
+
+  const second = await createQueueStore({ file });
+  await first.close(); // 늦은 두 번째 닫기 — second의 잠금을 건드리면 안 된다
+
+  try {
+    await assert.rejects(
+      () => createQueueStore({ file }),
+      /in use|locked|owned/i,
+      "the second store must still own the queue"
+    );
+  } finally {
+    await second.close();
+  }
+});
+
+test("a closed store refuses further work instead of writing without the lock", async () => {
+  const file = await freshFile("closed-store");
+  const store = await createQueueStore({ file });
+  await store.close();
+
+  await assert.rejects(() => store.submit(ANALYSIS), /closed/i);
+  await assert.rejects(() => store.claim("tab"), /closed/i);
+  await assert.rejects(() => store.list(), /closed/i);
+});
+
 /* ── B. 배열 안의 레코드도 검증한다 ──────────────────────────────────
    items가 배열인지만 보고 안에 든 객체를 안 보면, 멀쩡히 시작한 뒤 특정
    항목이 영원히 청구 불가가 되거나 큐 머리를 막는다. 조용히 잘못 도는 것이

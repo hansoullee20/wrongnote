@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 
@@ -53,6 +54,10 @@ const inUse = (lockPath, holder) =>
   );
 
 export async function acquireQueueLock(lockPath, { fsImpl = fs } = {}) {
+  /* pid + hostname만으로는 소유를 식별하기에 부족하다. 같은 프로세스가 잠금을
+     놓았다가 다시 잡으면 옛 핸들이 보기에도 "내 잠금"이다. 획득마다 고유한
+     토큰을 박아 그 인스턴스만 자기 것을 지우게 한다. */
+  const token = crypto.randomUUID();
   const write = async () => {
     const handle = await fsImpl.open(lockPath, "wx", 0o600);
     try {
@@ -60,6 +65,7 @@ export async function acquireQueueLock(lockPath, { fsImpl = fs } = {}) {
         JSON.stringify({
           pid: process.pid,
           hostname: os.hostname(),
+          token,
           startedAt: Date.now(),
         }),
         "utf8"
@@ -89,12 +95,17 @@ export async function acquireQueueLock(lockPath, { fsImpl = fs } = {}) {
     }
   }
 
+  let released = false;
   return {
     path: lockPath,
     async release() {
-      /* 내 잠금일 때만 지운다. 이미 회수돼 남이 들고 있으면 건드리지 않는다. */
+      /* 두 번째 호출은 아무것도 하지 않는다. 그 사이 같은 프로세스가 잠금을
+         다시 잡았을 수 있고, 그러면 이 해제는 **남의** 잠금을 지운다 —
+         소유자가 둘이 되어 잠금이 열린 채로 실패한다. */
+      if (released) return;
+      released = true;
       const holder = await readHolder(lockPath, fsImpl);
-      if (holder?.pid === process.pid && holder?.hostname === os.hostname()) {
+      if (holder?.token === token) {
         await fsImpl.unlink(lockPath).catch(() => {});
       }
     },
