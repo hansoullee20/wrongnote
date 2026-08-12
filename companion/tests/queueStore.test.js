@@ -422,6 +422,43 @@ test("a failed accepted-settlement does not consume the item", async () => {
   assert.equal(await store.settle("tab", claimed.receipt, "accepted"), "settled");
 });
 
+/* 12 — rename이 커밋 지점이다. rename이 성공한 뒤 디렉터리 fsync가 실패하면
+   변경은 이미 파일시스템에 있다. 여기서 메모리를 되돌리면 살아 있는 상태와
+   디스크가 갈라진다 — "실패했다"고 보고된 변경이 재시작 후 되살아난다.
+   되돌리기는 rename **이전** 실패에만 옳다. */
+test("a post-rename fsync failure leaves live and persisted state in agreement", async () => {
+  const file = await freshFile("post-rename");
+  const store = await createQueueStore({
+    file,
+    fsImpl: dirFsyncFailure("EIO"),
+  });
+
+  await assert.rejects(() => store.submit(ANALYSIS), /EIO/);
+
+  /* 내구성은 의심스럽지만 rename은 성공했다. 디스크에 있는 것이 사실이고,
+     메모리도 같은 이야기를 해야 한다. */
+  const onDisk = JSON.parse(await fs.readFile(file, "utf8"));
+  const live = await store.list();
+  assert.equal(onDisk.items.length, 1, "the rename took effect");
+  assert.equal(live.length, 1, "live state must not disagree with the file");
+  assert.equal(live[0].id, onDisk.items[0].id);
+});
+
+test("a post-rename fsync failure does not resurrect the change on restart", async () => {
+  const file = await freshFile("post-rename-restart");
+  const store = await createQueueStore({ file, fsImpl: dirFsyncFailure("EIO") });
+  await assert.rejects(() => store.submit(ANALYSIS), /EIO/);
+
+  const reopened = await createQueueStore({ file });
+  const persisted = await reopened.list();
+  const live = await store.list();
+  assert.deepEqual(
+    persisted.map((i) => i.id),
+    live.map((i) => i.id),
+    "a restart must see exactly what the running store sees"
+  );
+});
+
 /* 소유자가 아닌 쪽의 정산은 남의 리스를 끊지 못한다. */
 test("settling someone else's live lease is a conflict, not a settlement", async () => {
   const store = await createQueueStore({ file: await freshFile("owner") });

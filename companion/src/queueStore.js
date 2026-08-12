@@ -120,6 +120,12 @@ async function writeStateAtomic(file, state, fsImpl) {
   }
   await fsImpl.rename(tmp, file);
 
+  /* 여기가 커밋 지점이다. rename이 성공한 순간 변경은 이미 파일시스템에 있다.
+     이 뒤의 실패는 "일어나지 않았다"가 아니라 "일어났지만 내구성이 의심스럽다"이다.
+     호출자에게는 올려보내되, 되돌리면 안 된다 — 되돌리면 살아 있는 상태와
+     디스크가 갈라지고, 실패했다고 보고한 변경이 재시작 후 되살아난다. */
+  const applied = (err) => Object.assign(err, { appliedToDisk: true });
+
   /* rename만으로는 전원이 나갔을 때 살아남는다는 보장이 없다. 파일 내용은
      fsync했지만 **디렉터리 엔트리**는 아직 디스크에 없을 수 있고, 그러면
      rename 자체가 통째로 사라진다 — 첫 저장이었다면 파일이 아예 없다.
@@ -135,7 +141,7 @@ async function writeStateAtomic(file, state, fsImpl) {
   try {
     dirHandle = await fsImpl.open(dir, "r");
   } catch (err) {
-    if (!UNSUPPORTED_DIR_FSYNC.has(err.code)) throw err;
+    if (!UNSUPPORTED_DIR_FSYNC.has(err.code)) throw applied(err);
     return; // Windows: 디렉터리를 읽기로 열 수 없다 — 플랫폼 속성이다
   }
   try {
@@ -143,7 +149,7 @@ async function writeStateAtomic(file, state, fsImpl) {
   } catch (err) {
     /* EINVAL/ENOTSUP는 "이 파일시스템은 디렉터리 fsync를 지원하지 않는다"는
        뜻이다. EIO·ENOSPC는 그렇지 않다 — 그건 진짜 실패고 올려보내야 한다. */
-    if (!UNSUPPORTED_DIR_FSYNC.has(err.code)) throw err;
+    if (!UNSUPPORTED_DIR_FSYNC.has(err.code)) throw applied(err);
   } finally {
     /* 닫기 실패는 내구성과 무관하다 — sync는 이미 끝났다. */
     await dirHandle.close().catch(() => {});
@@ -196,7 +202,10 @@ export async function createQueueStore({
         await writeStateAtomic(file, state, fsImpl);
         return result;
       } catch (err) {
-        state = previous; // 후보를 통째로 버린다
+        /* rename 이후 실패는 이미 디스크에 반영됐다. 후보를 유지해야 살아 있는
+           상태와 파일이 같은 이야기를 한다. 오류는 그대로 올려보낸다 —
+           내구성이 의심스럽다는 사실 자체는 삼키지 않는다. */
+        if (!err?.appliedToDisk) state = previous;
         throw err;
       }
     });
