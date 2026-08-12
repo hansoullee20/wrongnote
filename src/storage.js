@@ -125,74 +125,42 @@ export function loadAll() {
     cards = [];
   }
 
-  /* 마이그레이션 **직전** 스냅샷. 파싱에 성공한 뒤에만 찍고, 원본 문자열이
-     아니라 배열로 남긴다 — importEnvelope가 요구하는 모양이 배열이라,
-     문자열로 남기면 이 백업은 가져오기로 되돌릴 수 없는 반쪽짜리가 된다.
-     (복원 UI는 이번 범위 밖이다. 다만 이 키의 값을 그대로 .json으로 저장해
-     기존 '가져오기'에 넣으면 노트·카드는 되돌아온다.)
-     파싱 실패면 아예 찍지 않는다: 빈 배열을 "백업"이라 부르면 원본이 멀쩡한데도
-     정상 백업처럼 보이는 파일을 쥐여주게 된다. 시드는 사용자 데이터가 아니므로
-     없는 키는 [] 로 남긴다. */
-  const snapshotKey = backupKeyFor(storedVersion, SCHEMA_VERSION);
-  let snapshotFailed = false;
-  if (
-    !error &&
-    storedVersion < SCHEMA_VERSION &&
-    (rawNotes !== null || rawCards !== null) &&
-    /* 같은 전이의 스냅샷이 이미 있으면 **덮지 않는다**. 처음 것이 가장
-       원본에 가깝다: 부분 쓰기(노트 성공·카드 실패로 마커 미승격) 뒤 다시
-       부팅하면 같은 전이를 또 밟는데, 그때 덮으면 반쯤 마이그레이션된 상태가
-       유일한 백업이 된다 — 하필 마이그레이션이 데이터를 망친 경우에 그렇다.
-       전이 키를 쓰는 이상 옛 스냅샷이 새 전이를 가리는 문제는 없으므로,
-       "덮어쓰기"는 애초에 필요 없는 과잉 교정이었다. */
-    localStorage.getItem(snapshotKey) === null
-  ) {
-    try {
-      localStorage.setItem(
-        snapshotKey,
-        JSON.stringify({
-          version: storedVersion,
-          savedAt: Date.now(),
-          notes: rawNotes === null ? [] : notes,
-          cards: rawCards === null ? [] : cards,
-        })
-      );
-    } catch {
-      snapshotFailed = true;
+  /* 앞으로 데이터 손실을 막기 위해, 파싱에 성공한 경우에만 마이그레이션한다. */
+  if (!error) {
+    const now = Date.now();
+    notes = notes.map(migrateNote);
+    cards = cards.map((c) => migrateCard(c, now));
+  }
+
+  if (isDowngrade) {
+    writeError = DOWNGRADE_ERROR_MESSAGE;
+  } else if (!error && storedVersion < SCHEMA_VERSION) {
+    /* 전이 직전 원본을 처음 한 번만 저장한다. snapshot 자체가 실패하면
+       marker/notes/cards 어느 것도 쓰지 않는다. */
+    const backupKey = backupKeyFor(storedVersion, SCHEMA_VERSION);
+    const alreadyBackedUp = localStorage.getItem(backupKey) !== null;
+    const snapshot = JSON.stringify({
+      version: storedVersion,
+      notes: rawNotes,
+      cards: rawCards,
+    });
+    if (!alreadyBackedUp && !safeSet(backupKey, snapshot)) {
+      writeError = SNAPSHOT_ERROR_MESSAGE;
     }
   }
 
-  const now = Date.now();
-  notes = notes.map(migrateNote);
-  cards = cards.map((c) => migrateCard(c, now));
-
-  // 정상 로드일 때만 마이그레이션 결과를 영속화하고 버전 승격 (idempotent)
-  // 순서는 notes → cards → 버전. localStorage에 트랜잭션이 없어 부분 성공이
-  // 가능하지만, 버전 승격이 마지막이라 다음 부팅에서 멱등 마이그레이션을 다시 돈다.
-  // 다운그레이드면 아무것도 쓰지 않는다 — 정규화 결과는 메모리에만 둔다.
-  if (isDowngrade) {
-    writeError = DOWNGRADE_ERROR_MESSAGE;
-  } else if (snapshotFailed) {
-    /* 스냅샷을 못 남겼는데 마이그레이션 결과를 덮어쓰면 되돌릴 방법이 없다.
-       읽기·내보내기는 계속 열어두되(메모리 데이터는 온전하다) 디스크는
-       옛 스키마 그대로 둔다 — 다음 부팅에서 다시 시도할 수 있다.
-       "로드는 계속한다"와 "저장해도 된다"는 다른 말이다. */
-    writeError = SNAPSHOT_ERROR_MESSAGE;
-  } else if (!error) {
-    const ok =
-      safeSet(NOTES_KEY, JSON.stringify(notes)) &&
-      safeSet(CARDS_KEY, JSON.stringify(cards)) &&
-      safeSet(VERSION_KEY, String(SCHEMA_VERSION));
-    if (!ok) writeError = WRITE_ERROR_MESSAGE;
+  if (!isDowngrade && !error && !writeError) {
+    /* marker를 마지막에 쓴다. notes/cards 중 하나라도 못 쓰면 marker가 앞서가면
+       다음 부팅이 migration을 건너뛰므로, 실패는 marker 이전에서 멈춰야 한다. */
+    if (!safeSet(NOTES_KEY, JSON.stringify(notes))) {
+      writeError = WRITE_ERROR_MESSAGE;
+    } else if (!safeSet(CARDS_KEY, JSON.stringify(cards))) {
+      writeError = WRITE_ERROR_MESSAGE;
+    } else if (!safeSet(VERSION_KEY, String(SCHEMA_VERSION))) {
+      writeError = WRITE_ERROR_MESSAGE;
+    }
   }
 
-  /* 이미 저장된 노트가 있었다 = 기존 사용자다. 시드 첫 실행과 구분해야
-     사용자 데이터 플래그를 뒤늦게 채울 수 있다 (storageHealth를 여기서
-     import하면 순환이 되므로 사실만 돌려주고 판단은 App이 한다). */
-  /* dataVersion = 지금 메모리에 있는 데이터가 실제로 따르는 스키마.
-     보통은 현재 버전이지만, 다운그레이드 잠금 중이면 저장된 쪽이 더 새롭다 —
-     그때 내보내기가 현재 버전을 찍으면 v7 데이터가 v6이라고 주장하는 파일이
-     나온다. 구조 수단이 거짓말을 하면 안 된다. */
   return {
     notes,
     cards,
@@ -209,6 +177,22 @@ export const saveNotes = (notes) => safeSet(NOTES_KEY, JSON.stringify(notes));
 export const saveCards = (cards) => safeSet(CARDS_KEY, JSON.stringify(cards));
 /** 설정(테마·팔레트)용 안전 쓰기 — 꽉 찬 저장소에서 토글이 앱을 죽이면 안 된다 */
 export const savePref = (key, value) => safeSet(key, value);
+
+/**
+ * AI queue의 accepted/replay dedupe는 React 메모리 상태가 아니라 이 함수가
+ * 읽은 **현재 영속 bytes**를 증거로 삼는다. 파싱 실패/키 없음/잘못된 id는
+ * 전부 false로 fail-closed 한다.
+ */
+export function hasPersistedAiEvent(eventId) {
+  if (typeof eventId !== "string" || eventId.length === 0) return false;
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    if (raw === null) return false;
+    return parseArray(raw).some((note) => note && note.aiEventId === eventId);
+  } catch {
+    return false;
+  }
+}
 
 /** 백업 내보내기용 버전 포함 봉투 */
 export function exportEnvelope(notes, cards, version = SCHEMA_VERSION) {
