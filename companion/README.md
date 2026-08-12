@@ -17,6 +17,86 @@ The queue boundary was rewritten from the schema-v8 base and intentionally does 
 - unsupported directory fsync is visible as degraded durability;
 - orphan temp files are quarantined.
 
+## MCP producer mode
+
+`wrongnote-mcp` is the preferred owner when Claude Code is the AI producer. One process owns all three boundaries together:
+
+```text
+Claude Code
+    ↕ MCP stdio
+wrongnote-mcp process
+    ├─ durable queue
+    └─ http://127.0.0.1:43119 browser bridge
+```
+
+The MCP server exposes exactly one producer tool:
+
+```text
+wrongnote_submit_analysis
+```
+
+Its arguments are:
+
+```json
+{
+  "eventId": "stable-producer-id-for-this-analysis",
+  "payload": {
+    "version": 1,
+    "question": {},
+    "analysis": {}
+  }
+}
+```
+
+`eventId` is an idempotency key, not a content hash. Generate it once per distinct analysis and reuse the exact same value if the tool call must be retried. A retry with the same ID and same payload is safe; the same ID with different content is an explicit conflict.
+
+The MCP tool does **not** parse or save a Wrongnote note. It only queues the model-produced JSON as untrusted data. The browser-side `parseAiImport()` remains the ingestion/trust boundary before any draft can be saved.
+
+If a write committed but directory durability is uncertain, the tool returns an error that says the operation may already have happened and instructs the model to retry the exact same `eventId`. It must not invent a replacement ID.
+
+A dead-letter/rejected event also remains visible as an error on producer resubmission. Do not use a new event ID to bypass rejection evidence; inspect/requeue the dead letter explicitly.
+
+### Claude Code setup
+
+Install the companion dependencies once from the repository:
+
+```bash
+npm --prefix companion ci
+```
+
+Then register the server by invoking Node directly. For example, from the repository root:
+
+```bash
+claude mcp add wrongnote --scope project -- node companion/src/mcp.js
+```
+
+The generated project MCP configuration is equivalent to:
+
+```json
+{
+  "mcpServers": {
+    "wrongnote": {
+      "command": "node",
+      "args": ["companion/src/mcp.js"],
+      "env": {}
+    }
+  }
+}
+```
+
+Use an absolute path if Claude Code will launch the server from a different working directory.
+
+**Do not configure `npm run` as the stdio MCP command.** npm may write its own banner to stdout; MCP stdout is reserved for protocol messages. Invoke `node .../src/mcp.js` directly or install/use the `wrongnote-mcp` bin.
+
+`wrongnote-mcp` logs status only to stderr. stdout belongs to the MCP transport.
+
+### One owner at a time
+
+Do not run `wrongnote-companion` and `wrongnote-mcp` simultaneously against the same queue file. Both intentionally acquire the same process lock, so the second owner will fail rather than race the queue.
+
+- `wrongnote-mcp`: MCP producer + browser HTTP bridge in one process.
+- `wrongnote-companion`: HTTP-only owner, useful when the producer will arrive through another integration later.
+
 ## Localhost HTTP transport
 
 The browser transport is intentionally same-machine only. It binds to:
@@ -27,7 +107,7 @@ The browser transport is intentionally same-machine only. It binds to:
 
 It never binds to `0.0.0.0` or the LAN interface. A browser running on another phone/tablet cannot reach this loopback server; cross-device transport is a separate future problem.
 
-Run it with:
+Run the HTTP-only owner with:
 
 ```bash
 npm --prefix companion run serve
@@ -70,7 +150,7 @@ POST /v1/settle
 POST /v1/session/release
 ```
 
-There is deliberately no browser `submit` endpoint. Producer integration is a separate boundary.
+There is deliberately no browser `submit` endpoint. Producer integration is the MCP/tool boundary instead.
 
 State-changing requests require `Content-Type: application/json`, exact request fields, and a bounded body. Browser origins are matched exactly; no wildcard CORS is used. OPTIONS requests are non-mutating.
 
