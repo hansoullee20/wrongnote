@@ -122,11 +122,10 @@ export async function createQueueStore({
     degradedReasons: [...degradedReasons],
   });
 
-  const annotateCurrentDurability = (err, result) => {
+  const annotateCurrentDurability = (err) => {
     if (err && (typeof err === "object" || typeof err === "function")) {
       if (err.durability === undefined) err.durability = durability;
       if (err.degradedReasons === undefined) err.degradedReasons = [...degradedReasons];
-      if (result !== undefined && err.result === undefined) err.result = result;
     }
     return err;
   };
@@ -144,7 +143,7 @@ export async function createQueueStore({
         err.result = result;
         throw err;
       }
-      throw annotateCurrentDurability(err, result);
+      throw annotateCurrentDurability(err);
     }
   }
 
@@ -163,7 +162,11 @@ export async function createQueueStore({
               err.result = tx?.result;
               throw err;
             }
-            throw annotateCurrentDurability(err, tx?.result);
+            annotateCurrentDurability(err);
+            if (err && (typeof err === "object" || typeof err === "function") && err.result === undefined) {
+              err.result = tx?.result;
+            }
+            throw err;
           }
         }
         return resultWithDurability(tx?.result);
