@@ -34,6 +34,7 @@ async function installStatefulMock(
     loseFirstReleaseResponse = false,
     acceptedAlreadyOutcome = null,
     rejectedAlreadyOutcome = null,
+    permanentSettlementErrorOutcome = null,
   } = {}
 ) {
   let itemWaiting = true;
@@ -95,6 +96,21 @@ async function installStatefulMock(
       }
     } else if (url.pathname.endsWith("/settle")) {
       settlements.push(body);
+
+      if (body.outcome === permanentSettlementErrorOutcome) {
+        await route.fulfill({
+          status: 400,
+          headers,
+          body: JSON.stringify({
+            ok: false,
+            error: {
+              code: "invalid_settlement_request",
+              message: "mock permanent settlement rejection",
+            },
+          }),
+        });
+        return;
+      }
 
       if (body.outcome === "released") {
         releaseAttempts += 1;
@@ -173,19 +189,24 @@ test("lost response after release cannot pin the session on the stale receipt", 
   await connectAndOpenReview(page);
 
   await page.getByRole("button", { name: /나중에/ }).click();
-  await expect.poll(mock.releaseAttempts).toBe(1);
+  await expect.poll(() => mock.releaseAttempts() >= 1).toBe(true);
 
-  // First explicit tick retries the stale release and receives receipt_mismatch.
-  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  // If React immediately schedules the retry after the first lost response this
+  // may already be 2. Either way, the stale receipt must be tried at most once.
+  if (mock.releaseAttempts() < 2) {
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  }
   await expect.poll(mock.releaseAttempts).toBe(2);
 
-  // A second tick must be free to claim again. Before the fix, pendingRelease
-  // stayed forever and this badge could never reappear while the page remained open.
+  // Once receipt_mismatch confirms the old release receipt is no longer current,
+  // another tick must be free to reclaim the waiting analysis.
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await expect(page.getByTestId("ai-inbox-badge")).toContainText("AI-RELEASE-LOST", {
     timeout: 5_000,
   });
   expect(mock.deliveryCount()).toBeGreaterThanOrEqual(2);
+  await page.waitForTimeout(250);
+  expect(mock.releaseAttempts()).toBe(2);
 });
 
 test("accepted retry cannot call already-rejected state a successful acceptance", async ({ page }) => {
@@ -205,6 +226,7 @@ test("accepted retry cannot call already-rejected state a successful acceptance"
 
   await expect(page.getByTestId("ai-inbox-notice")).toContainText("AI 처리 상태 충돌");
   await expect(page.getByTestId("ai-inbox-notice")).toContainText("rejected");
+  await page.waitForTimeout(250);
   expect(mock.settlements.filter((entry) => entry.outcome === "accepted")).toHaveLength(1);
 });
 
@@ -220,7 +242,26 @@ test("rejected retry cannot call already-accepted state a successful rejection",
   await page.getByRole("button", { name: "거절" }).click();
   await expect(page.getByTestId("ai-inbox-notice")).toContainText("AI 처리 상태 충돌");
   await expect(page.getByTestId("ai-inbox-notice")).toContainText("accepted");
+  await page.waitForTimeout(250);
   expect(mock.settlements.filter((entry) => entry.outcome === "rejected")).toHaveLength(1);
+});
+
+test("permanent settlement rejection stops automatic retry instead of pinning the lease", async ({ page }) => {
+  const mock = await installStatefulMock(page, {
+    eventId: "evt-permanent-400",
+    problem: "AI-PERMANENT-400",
+    permanentSettlementErrorOutcome: "accepted",
+  });
+  await freshApp(page);
+  await connectAndOpenReview(page);
+
+  await page.getByRole("button", { name: "저장 (기록하기)" }).click();
+  await expect(page.getByTestId("ai-inbox-notice")).toContainText("자동 재시도를 멈췄다");
+  expect(mock.settlements.filter((entry) => entry.outcome === "accepted")).toHaveLength(1);
+
+  // Longer than the ordinary poll interval: a permanent 4xx must not be hammered.
+  await page.waitForTimeout(4_500);
+  expect(mock.settlements.filter((entry) => entry.outcome === "accepted")).toHaveLength(1);
 });
 
 test("AI-disabled startup does not require randomUUID, and opt-in falls back to getRandomValues", async ({ page }) => {
@@ -231,7 +272,6 @@ test("AI-disabled startup does not require randomUUID, and opt-in falls back to 
         configurable: true,
       });
     } catch {
-      // Chromium may expose it on the prototype instead of as an own property.
       try {
         Object.defineProperty(Crypto.prototype, "randomUUID", {
           value: undefined,
@@ -247,6 +287,7 @@ test("AI-disabled startup does not require randomUUID, and opt-in falls back to 
 
   await freshApp(page);
   await expect(page.getByRole("button", { name: /^문제/ })).toBeVisible();
+  expect(await page.evaluate(() => typeof crypto.randomUUID)).toBe("undefined");
 
   await page.getByTestId("ai-companion-enable").click();
   await expect(page.getByTestId("ai-inbox-badge")).toContainText("AI-NO-RANDOM-UUID", {
