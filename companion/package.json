@@ -4,10 +4,6 @@
   "version": "0.2.0",
   "type": "module",
   "engines": { "node": ">=20" },
-  "scripts": {
-    "test": "node --test tests/*.test.js"
-  },
-  "bin": {
-    "wrongnote-queue": "bin/queue-doctor.js"
-  }
+  "bin": { "wrongnote-queue": "src/cli.js" },
+  "scripts": { "test": "node --test tests/*.test.js" }
 }
