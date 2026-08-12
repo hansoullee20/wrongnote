@@ -5,7 +5,6 @@ import { hasPersistedAiEvent } from "./storage.js";
 
 const POLL_MS = 4_000;
 const RENEW_MS = 20_000;
-const AI_COMPANION_KEY = "wr_ai_companion_enabled";
 
 const terminalOwnershipStatus = new Set(["no_session", "not_owner", "stale_fence"]);
 const directSettlementStatus = new Set(["released", "rejected", "accepted"]);
@@ -24,14 +23,6 @@ function permanentSettlementError(err) {
     err?.code === "bad_companion_response" ||
     (Number.isInteger(err?.status) && err.status >= 400 && err.status < 500)
   );
-}
-
-function userConnectionOptedIn() {
-  try {
-    return localStorage.getItem(AI_COMPANION_KEY) === "1";
-  } catch {
-    return false;
-  }
 }
 
 export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
@@ -137,20 +128,20 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
         clearSession();
         if (aliveRef.current) {
           setNotice(
-            `로컬 컴패니언이 알 수 없는 AI 처리 상태(${String(result.status)})를 반환했다. 자동 재시도를 멈췄다. AI 연결을 껐다가 컴패니언 상태를 확인한 뒤 다시 켜라.`
+            `로컬 컴패니언이 알 수 없는 AI 처리 상태(${String(result.status)})를 반환했다. 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
           );
         }
         return { done: true, matched: false, permanent: true, result };
       } catch (err) {
         if (permanentSettlementError(err)) {
           /* 같은 잘못된 요청을 영원히 재시도하며 lease를 갱신하지 않는다.
-             queue item은 지우지 않고 현재 session lease가 만료되게 둔다. 사용자가
-             AI 연결을 껐다 켜야 다시 시도하므로 protocol mismatch가 눈에 보인다. */
+             queue item은 지우지 않고 현재 session lease가 만료되게 둔다. UI 폼이
+             잠깐 열렸다는 이유로 이 stop-gate를 풀지 않는다. 복구는 명시적 reload다. */
           protocolBlockedRef.current = true;
           clearSession();
           if (aliveRef.current) {
             setNotice(
-              `AI 처리 요청을 로컬 컴패니언이 거부했다 (${err.code || err.status || "protocol error"}). 자동 재시도를 멈췄다. AI 연결을 껐다가 컴패니언 상태를 확인한 뒤 다시 켜라.`
+              `AI 처리 요청을 로컬 컴패니언이 거부했다 (${err.code || err.status || "protocol error"}). 자동 재시도를 멈췄다. 컴패니언 상태를 확인한 뒤 페이지를 새로고침해라.`
             );
           }
           return { done: true, matched: false, permanent: true, error: err };
@@ -403,9 +394,6 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   }, [clearSession, enabled, setReady]);
 
   useEffect(() => {
-    /* enabled=false는 기록/설정/AI review가 화면을 점유한 경우에도 생긴다.
-       protocol block은 실제 사용자 opt-out에서만 풀어야 한다. */
-    if (!enabled && !userConnectionOptedIn()) protocolBlockedRef.current = false;
     const hasPending = Boolean(
       pendingRejectRef.current || pendingAcceptRef.current || pendingReleaseRef.current
     );
