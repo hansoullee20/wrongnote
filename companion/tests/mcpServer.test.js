@@ -134,3 +134,26 @@ test("invalid queue payload remains a tool-level error, not a saved event", asyn
   assert.equal(result.structuredContent.code, "invalid_payload");
   assert.equal((await store.list()).length, 0);
 });
+
+test("resubmitting a dead-letter event stays visibly rejected instead of looking successful", async (t) => {
+  const store = await createQueueStore({ file: await tempFile("dead-letter") });
+  t.after(() => store.close());
+  await store.submit("event-rejected", PAYLOAD);
+  const session = await store.acquireSession("browser-tab");
+  const delivery = await store.claim("browser-tab", session.fence);
+  await store.settle("browser-tab", session.fence, delivery.receipt, "rejected", {
+    error: "AI import payload failed browser validation",
+  });
+
+  const result = await submitWrongnoteAnalysis(
+    store,
+    { eventId: "event-rejected", payload: PAYLOAD },
+    { logger: { error() {} } }
+  );
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.ok, false);
+  assert.equal(result.structuredContent.status, "duplicate");
+  assert.equal(result.structuredContent.state, "rejected");
+  assert.match(result.content[0].text, /dead-letter/);
+  assert.match(result.content[0].text, /Do not create a new eventId/);
+});
