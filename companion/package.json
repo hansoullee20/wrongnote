@@ -5,5 +5,5 @@
   "type": "module",
   "engines": { "node": ">=20" },
   "bin": { "wrongnote-queue": "src/cli.js" },
-  "scripts": { "test": "node --test tests/*.test.js" }
+  "scripts": { "test": "node --test" }
 }
