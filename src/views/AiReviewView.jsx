@@ -28,7 +28,13 @@ function normalizeInitial(imported) {
   };
 }
 
-export default function AiReviewView({ delivery, saving = false, onSave, onReject }) {
+export default function AiReviewView({
+  delivery,
+  saving = false,
+  disabled = false,
+  onSave,
+  onReject,
+}) {
   const [draft, setDraft] = useState(() => normalizeInitial(delivery.imported));
 
   useEffect(() => {
@@ -40,7 +46,7 @@ export default function AiReviewView({ delivery, saving = false, onSave, onRejec
     () => (draft.topicMain && MATH_TOPICS[draft.topicMain]) || [],
     [draft.topicMain]
   );
-  const canSave = Boolean(draft.problem.trim() && draft.cause && !saving);
+  const canSave = Boolean(draft.problem.trim() && draft.cause && !saving && !disabled);
 
   return (
     <div className="view ai-review-view" data-testid="ai-review-view">
