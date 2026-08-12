@@ -49,10 +49,10 @@ const emptyState = () => ({
   rejected: [],
 });
 
-async function readState(file) {
+async function readState(file, fsImpl) {
   let raw;
   try {
-    raw = await fs.readFile(file, "utf8");
+    raw = await fsImpl.readFile(file, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") return emptyState();
     throw err;
@@ -95,18 +95,37 @@ async function readState(file) {
 
 /* 같은 디렉터리 임시 파일 → fsync → rename. rename은 원자적이라 중간에
    죽어도 이전 파일이 통째로 남는다. 부분 기록된 파일이 보이는 창이 없다. */
-async function writeStateAtomic(file, state) {
+async function writeStateAtomic(file, state, fsImpl) {
   const dir = path.dirname(file);
-  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  await fsImpl.mkdir(dir, { recursive: true, mode: 0o700 });
   const tmp = path.join(dir, `.${path.basename(file)}.tmp-${process.pid}-${randomId()}`);
-  const handle = await fs.open(tmp, "w", 0o600);
+  const handle = await fsImpl.open(tmp, "w", 0o600);
   try {
     await handle.writeFile(JSON.stringify(state, null, 2), "utf8");
     await handle.sync();
   } finally {
     await handle.close();
   }
-  await fs.rename(tmp, file);
+  await fsImpl.rename(tmp, file);
+
+  /* rename만으로는 전원이 나갔을 때 살아남는다는 보장이 없다. 파일 내용은
+     fsync했지만 **디렉터리 엔트리**는 아직 디스크에 없을 수 있고, 그러면
+     rename 자체가 통째로 사라진다 — 첫 저장이었다면 파일이 아예 없다.
+     디렉터리를 열어 fsync해야 "넣은 분석은 남는다"가 참이 된다.
+
+     프로세스만 죽는 경우(SIGKILL)는 페이지 캐시가 살아 있어 이게 없어도
+     통과한다. 즉 SIGKILL 테스트는 이 결함을 잡지 못한다. */
+  let dirHandle;
+  try {
+    dirHandle = await fsImpl.open(dir, "r");
+    await dirHandle.sync();
+  } catch {
+    /* 디렉터리 fsync를 허용하지 않는 플랫폼(Windows)이 있다. 거기서는
+       실패시키지 않는다 — 쓰기는 이미 끝났고, 여기서 던지면 정상 저장이
+       실패로 보고된다. */
+  } finally {
+    await dirHandle?.close().catch(() => {});
+  }
 }
 
 export async function createQueueStore({
@@ -114,10 +133,13 @@ export async function createQueueStore({
   leaseMs = LEASE_MS,
   tombstoneMs = TOMBSTONE_MS,
   now = () => Date.now(),
+  /* 테스트가 fsync/rename 순서를 관찰할 수 있도록 열어둔 이음매.
+     운영 경로는 항상 node:fs/promises 그대로다. */
+  fsImpl = fs,
 } = {}) {
   if (!file) throw new Error("queue store requires a file path");
 
-  let state = await readState(file);
+  let state = await readState(file, fsImpl);
 
   /* 모든 변경을 한 줄로 세운다. MCP 쪽 submit과 HTTP 쪽 claim이 동시에 와도
      읽고-고치고-쓰는 구간이 겹치지 않는다. 겹치면 나중에 쓴 쪽이 앞의 변경을
@@ -126,7 +148,7 @@ export async function createQueueStore({
   const mutate = (fn) => {
     const run = chain.then(async () => {
       const result = await fn();
-      await writeStateAtomic(file, state);
+      await writeStateAtomic(file, state, fsImpl);
       return result;
     });
     // 한 번 실패해도 줄이 끊기면 안 된다

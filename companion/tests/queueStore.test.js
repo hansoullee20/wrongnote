@@ -215,6 +215,56 @@ test("an interrupted write cannot erase previously queued items", async () => {
   assert.deepEqual(items[0].payload, ANALYSIS);
 });
 
+/* 9 — rename 뒤 디렉터리 fsync. 내용만 fsync하고 rename하면 전원이 나갔을 때
+   디렉터리 엔트리가 없어 rename 자체가 사라진다 — 첫 저장이었다면 파일이
+   통째로 없다.
+
+   위의 SIGKILL 테스트는 이걸 못 잡는다. 프로세스만 죽으면 페이지 캐시가
+   살아 있어서 fsync가 하나도 없어도 통과한다. 진짜 전원 차단은 이 하네스로
+   재현할 수 없으므로, 순서 자체를 관찰해서 고정한다. */
+test("the directory is fsynced after rename, not just the file", async () => {
+  const file = await freshFile("dirsync");
+  const dir = path.dirname(file);
+  const events = [];
+
+  const spy = {
+    ...fs,
+    async open(p, flags, mode) {
+      const handle = await fs.open(p, flags, mode);
+      return new Proxy(handle, {
+        get(target, key) {
+          if (key === "sync") {
+            return async () => {
+              events.push({ type: "sync", path: String(p) });
+              return target.sync();
+            };
+          }
+          const value = target[key];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    },
+    async rename(from, to) {
+      const result = await fs.rename(from, to);
+      events.push({ type: "rename", path: String(to) });
+      return result;
+    },
+  };
+
+  const store = await createQueueStore({ file, fsImpl: spy });
+  await store.submit(ANALYSIS);
+
+  const renameAt = events.findIndex((e) => e.type === "rename" && e.path === file);
+  const dirSyncAt = events.findIndex((e) => e.type === "sync" && e.path === dir);
+
+  assert.ok(renameAt >= 0, "the state file is published by rename");
+  assert.ok(dirSyncAt >= 0, "the containing directory is fsynced");
+  assert.ok(
+    dirSyncAt > renameAt,
+    "the directory fsync must come after the rename — before it, the entry it is meant to persist does not exist yet"
+  );
+});
+
 /* 소유자가 아닌 쪽의 정산은 남의 리스를 끊지 못한다. */
 test("settling someone else's live lease is a conflict, not a settlement", async () => {
   const store = await createQueueStore({ file: await freshFile("owner") });

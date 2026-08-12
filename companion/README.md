@@ -42,8 +42,17 @@ Concretely:
 
 The queue is a JSON file, default `~/.wrongnote/ai-queue-v1.json` (override with
 `WRONGNOTE_QUEUE_FILE`), written to a same-directory temp file, fsynced, then
-renamed. Rename is atomic, so a process killed mid-write leaves the previous
-file whole.
+renamed, and **then the containing directory is fsynced too**. Rename is atomic,
+so a process killed mid-write leaves the previous file whole; the directory
+fsync is what makes the rename itself survive power loss, since until the
+directory entry reaches disk the rename can vanish — taking the file with it if
+that was the first write.
+
+Worth being precise about what the test suite can and cannot show here: killing
+the process proves durability across *process* death, where the page cache still
+holds everything, and would pass with no fsync at all. True power-loss durability
+is not reproducible in this harness, so the write ordering is pinned by
+observation (rename, then directory fsync) rather than by crashing a machine.
 
 A file that cannot be parsed **fails startup and is left untouched**. Starting
 empty on a corrupt file would silently discard every analysis inside it.
@@ -57,7 +66,7 @@ cleanly, looks healthy, and loses everything that was queued.
 
     npm --prefix companion test
 
-Fourteen tests, each one a scenario that could lose or duplicate a user's analysis.
+Fifteen tests, each one a scenario that could lose or duplicate a user's analysis.
 Every guard has been falsified by mutation: removing persistence, the
 single-lease rule, lease expiry, the accepted tombstone, the rejected-item
 removal, the dead-letter write, requeue-once, or the corrupt-file refusal each
