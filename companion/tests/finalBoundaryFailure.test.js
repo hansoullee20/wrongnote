@@ -102,7 +102,7 @@ test("startup failure does not hide a failed process-lock release", async () => 
   await fs.unlink(lockPath);
 });
 
-test("changed pre-commit failure cannot mask pre-existing durability uncertainty", async () => {
+test("changed pre-commit failure cannot mask uncertainty or report the uncommitted candidate as applied", async () => {
   const file = await tempFile("sticky-uncertainty");
   const dir = path.dirname(file);
   let failTargetDirSync = true;
@@ -146,7 +146,10 @@ test("changed pre-commit failure cannot mask pre-existing durability uncertainty
   failRename = true;
   await assert.rejects(
     () => store.submit("event-b", { value: "B" }),
-    (err) => err.code === "ENOSPC" && err.durability === "uncertain"
+    (err) =>
+      err.code === "ENOSPC" &&
+      err.durability === "uncertain" &&
+      err.result === undefined
   );
 
   assert.deepEqual((await store.list()).map((item) => item.eventId), ["event-a"]);
