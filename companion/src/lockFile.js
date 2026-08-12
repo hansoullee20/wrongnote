@@ -264,28 +264,52 @@ async function acquireRecoveryGuard(lockPath, { fsImpl = fs, now = () => Date.no
 
 export async function unlockDeadQueueLock(lockPath, { fsImpl = fs, now = () => Date.now() } = {}) {
   const guard = await acquireRecoveryGuard(lockPath, { fsImpl, now });
+  let result;
+  let primaryError;
   try {
     const info = await inspectQueueLock(lockPath, { fsImpl });
-    if (!info.exists) return { status: "absent", lockPath };
-    if (!info.local) {
-      fail("unlock_refused", `lock belongs to another host: ${info.holder.hostname}`, { lockPath, holder: info.holder });
+    if (!info.exists) {
+      result = { status: "absent", lockPath };
+    } else {
+      if (!info.local) {
+        fail("unlock_refused", `lock belongs to another host: ${info.holder.hostname}`, { lockPath, holder: info.holder });
+      }
+      if (info.process !== "dead") {
+        fail("unlock_refused", `lock holder pid ${info.holder.pid} is not definitively dead`, {
+          lockPath,
+          holder: info.holder,
+          holderStatus: info.process,
+        });
+      }
+      const again = await readHolder(lockPath, fsImpl);
+      if (!again || again.token !== info.holder.token) {
+        fail("unlock_raced", "lock changed while preparing manual unlock; retry inspection", { lockPath });
+      }
+      // While the recovery guard exists, cooperative acquireQueueLock calls cannot remain owners,
+      // and a second unlock command cannot enter. The old check/unlink replacement race is closed.
+      await fsImpl.unlink(lockPath);
+      result = { status: "unlocked", lockPath, holder: info.holder };
     }
-    if (info.process !== "dead") {
-      fail("unlock_refused", `lock holder pid ${info.holder.pid} is not definitively dead`, {
-        lockPath,
-        holder: info.holder,
-        holderStatus: info.process,
-      });
-    }
-    const again = await readHolder(lockPath, fsImpl);
-    if (!again || again.token !== info.holder.token) {
-      fail("unlock_raced", "lock changed while preparing manual unlock; retry inspection", { lockPath });
-    }
-    // While the recovery guard exists, cooperative acquireQueueLock calls cannot remain owners,
-    // and a second unlock command cannot enter. The old check/unlink replacement race is closed.
-    await fsImpl.unlink(lockPath);
-    return { status: "unlocked", lockPath, holder: info.holder };
-  } finally {
-    await guard.release();
+  } catch (err) {
+    primaryError = err;
   }
+
+  try {
+    await guard.release();
+  } catch (cleanupErr) {
+    throw new QueueError(
+      "recovery_cleanup_failed",
+      `manual lock recovery could not release its recovery guard: ${guard.recoveryPath}`,
+      {
+        lockPath,
+        recoveryPath: guard.recoveryPath,
+        cause: primaryError,
+        cleanupCause: cleanupErr,
+        result,
+      }
+    );
+  }
+
+  if (primaryError) throw primaryError;
+  return result;
 }
