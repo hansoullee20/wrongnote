@@ -265,6 +265,68 @@ test("the directory is fsynced after rename, not just the file", async () => {
   );
 });
 
+/* 10 — 디렉터리 fsync가 **실패**한 것과 **불가능**한 것은 다른 사건이다.
+   실패를 삼키면 디스크에 닿지 못한 쓰기가 성공한 durable write로 보고된다. */
+const dirFsyncFailure = (code) => ({
+  ...fs,
+  async open(p, flags, mode) {
+    const handle = await fs.open(p, flags, mode);
+    const stat = await handle.stat();
+    if (!stat.isDirectory()) return handle;
+    return new Proxy(handle, {
+      get(target, key) {
+        if (key === "sync") {
+          return async () => {
+            const err = new Error(`injected ${code}`);
+            err.code = code;
+            throw err;
+          };
+        }
+        const value = target[key];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  },
+});
+
+test("a real directory-fsync failure (EIO) is reported, not swallowed", async () => {
+  const store = await createQueueStore({
+    file: await freshFile("eio"),
+    fsImpl: dirFsyncFailure("EIO"),
+  });
+  await assert.rejects(() => store.submit(ANALYSIS), /EIO/);
+});
+
+test("a platform that cannot fsync directories (EINVAL) is tolerated", async () => {
+  const store = await createQueueStore({
+    file: await freshFile("einval"),
+    fsImpl: dirFsyncFailure("EINVAL"),
+  });
+  const result = await store.submit(ANALYSIS);
+  assert.equal(result.duplicate, false);
+  assert.equal((await store.list()).length, 1);
+});
+
+test("a directory that cannot be opened for read (EPERM) is tolerated", async () => {
+  const file = await freshFile("eperm");
+  const spy = {
+    ...fs,
+    async open(p, flags, mode) {
+      const stat = await fs.stat(p).catch(() => null);
+      if (stat?.isDirectory()) {
+        const err = new Error("injected EPERM");
+        err.code = "EPERM";
+        throw err;
+      }
+      return fs.open(p, flags, mode);
+    },
+  };
+  const store = await createQueueStore({ file, fsImpl: spy });
+  const result = await store.submit(ANALYSIS);
+  assert.equal(result.duplicate, false);
+  assert.equal((await store.list()).length, 1);
+});
+
 /* 소유자가 아닌 쪽의 정산은 남의 리스를 끊지 못한다. */
 test("settling someone else's live lease is a conflict, not a settlement", async () => {
   const store = await createQueueStore({ file: await freshFile("owner") });

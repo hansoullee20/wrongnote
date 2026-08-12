@@ -54,6 +54,14 @@ holds everything, and would pass with no fsync at all. True power-loss durabilit
 is not reproducible in this harness, so the write ordering is pinned by
 observation (rename, then directory fsync) rather than by crashing a machine.
 
+A directory fsync that *fails* is not the same event as one that is *impossible*.
+Windows cannot open a directory for read, and some filesystems refuse directory
+fsync outright (`EISDIR`, `EPERM`, `EACCES`, `EINVAL`, `ENOTSUP`); those are
+platform properties and are tolerated. `EIO` and `ENOSPC` are not — they mean the
+write did not reach disk, and they propagate. Swallowing them would report an
+undurable write as a durable one, which is the exact silent loss this queue
+exists to prevent.
+
 A file that cannot be parsed **fails startup and is left untouched**. Starting
 empty on a corrupt file would silently discard every analysis inside it.
 
@@ -66,7 +74,7 @@ cleanly, looks healthy, and loses everything that was queued.
 
     npm --prefix companion test
 
-Fifteen tests, each one a scenario that could lose or duplicate a user's analysis.
+Eighteen tests, each one a scenario that could lose or duplicate a user's analysis.
 Every guard has been falsified by mutation: removing persistence, the
 single-lease rule, lease expiry, the accepted tombstone, the rejected-item
 removal, the dead-letter write, requeue-once, or the corrupt-file refusal each

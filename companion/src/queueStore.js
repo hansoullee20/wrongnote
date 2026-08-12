@@ -43,6 +43,18 @@ const fingerprintOf = (payload) =>
 
 const randomId = () => crypto.randomBytes(12).toString("hex");
 
+/* 디렉터리 fsync를 **구조적으로** 못 하는 경우들. Windows는 디렉터리를 읽기로
+   열지 못하고(EISDIR/EPERM/EACCES), 일부 파일시스템은 디렉터리 fsync 자체를
+   거부한다(EINVAL/ENOTSUP). EIO·ENOSPC는 여기 없다 — 그건 한계가 아니라 사고다. */
+const UNSUPPORTED_DIR_FSYNC = new Set([
+  "EISDIR",
+  "EPERM",
+  "EACCES",
+  "EINVAL",
+  "ENOTSUP",
+  "EOPNOTSUPP",
+]);
+
 const emptyState = () => ({
   version: QUEUE_FORMAT_VERSION,
   items: [],
@@ -115,16 +127,26 @@ async function writeStateAtomic(file, state, fsImpl) {
 
      프로세스만 죽는 경우(SIGKILL)는 페이지 캐시가 살아 있어 이게 없어도
      통과한다. 즉 SIGKILL 테스트는 이 결함을 잡지 못한다. */
+  /* 여기서 모든 오류를 삼키면 안 된다. "이 플랫폼은 디렉터리 fsync를 못 한다"와
+     "fsync가 실패했다"는 전혀 다른 사건이다. 후자를 삼키면 디스크에 닿지 못한
+     쓰기가 성공한 durable write로 보고된다 — 큐가 막으려던 바로 그 조용한
+     소실이다. 플랫폼 한계만 좁게 봐준다. */
   let dirHandle;
   try {
     dirHandle = await fsImpl.open(dir, "r");
+  } catch (err) {
+    if (!UNSUPPORTED_DIR_FSYNC.has(err.code)) throw err;
+    return; // Windows: 디렉터리를 읽기로 열 수 없다 — 플랫폼 속성이다
+  }
+  try {
     await dirHandle.sync();
-  } catch {
-    /* 디렉터리 fsync를 허용하지 않는 플랫폼(Windows)이 있다. 거기서는
-       실패시키지 않는다 — 쓰기는 이미 끝났고, 여기서 던지면 정상 저장이
-       실패로 보고된다. */
+  } catch (err) {
+    /* EINVAL/ENOTSUP는 "이 파일시스템은 디렉터리 fsync를 지원하지 않는다"는
+       뜻이다. EIO·ENOSPC는 그렇지 않다 — 그건 진짜 실패고 올려보내야 한다. */
+    if (!UNSUPPORTED_DIR_FSYNC.has(err.code)) throw err;
   } finally {
-    await dirHandle?.close().catch(() => {});
+    /* 닫기 실패는 내구성과 무관하다 — sync는 이미 끝났다. */
+    await dirHandle.close().catch(() => {});
   }
 }
 
