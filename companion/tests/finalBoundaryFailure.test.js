@@ -9,6 +9,7 @@ import {
   inspectQueueLock,
   lockPathForQueue,
   recoveryPathForLock,
+  unlockDeadQueueLock,
 } from "../src/lockFile.js";
 
 async function tempFile(name) {
@@ -100,6 +101,41 @@ test("startup failure does not hide a failed process-lock release", async () => 
   );
   assert.equal((await inspectQueueLock(lockPath)).exists, true);
   await fs.unlink(lockPath);
+});
+
+test("manual unlock reports an applied unlock if recovery-guard cleanup then fails", async () => {
+  const file = await tempFile("recovery-cleanup");
+  const lockPath = lockPathForQueue(file);
+  const recoveryPath = recoveryPathForLock(lockPath);
+  await fs.writeFile(
+    lockPath,
+    JSON.stringify({
+      pid: 2147483647,
+      hostname: os.hostname(),
+      token: "dead-holder",
+      startedAt: Date.now() - 1000,
+    }),
+    "utf8"
+  );
+
+  const spy = {
+    ...fs,
+    async unlink(p) {
+      if (String(p) === String(recoveryPath)) throw ioError("EACCES", "cannot release recovery guard");
+      return fs.unlink(p);
+    },
+  };
+
+  await assert.rejects(
+    () => unlockDeadQueueLock(lockPath, { fsImpl: spy }),
+    (err) =>
+      err.code === "recovery_cleanup_failed" &&
+      err.result?.status === "unlocked" &&
+      err.cleanupCause?.code === "EACCES"
+  );
+  await assert.rejects(() => fs.stat(lockPath), (err) => err.code === "ENOENT");
+  assert.equal((await fs.stat(recoveryPath)).isFile(), true);
+  await fs.unlink(recoveryPath);
 });
 
 test("changed pre-commit failure cannot mask uncertainty or report the uncommitted candidate as applied", async () => {
