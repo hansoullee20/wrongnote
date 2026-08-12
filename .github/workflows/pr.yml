@@ -27,6 +27,9 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm test
+      # 컴패니언은 별도 package.json을 쓰므로 루트 Playwright 테스트로는 실행되지 않는다.
+      # 큐 경계가 이 PR의 핵심인 만큼 CI에서 직접 강제한다.
+      - run: npm --prefix companion test
       # 아래 두 게이트는 deploy.yml과 **같아야 한다**. 여기서 빠지면
       # PR이 초록불인데 머지 직후 main 배포가 깨진다.
       - run: npm run contrast
