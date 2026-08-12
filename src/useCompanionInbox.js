@@ -13,6 +13,21 @@ function parseFailureReason(err) {
   return `Wrongnote parseAiImport rejected the queued payload: ${message}`;
 }
 
+/* accepted는 브라우저 메모리의 notes가 아니라 **실제 localStorage에 쓰인 note**를
+   증거로 삼는다. React state는 saveNotes 실패 뒤에도 새 note를 들고 있으므로,
+   그 값을 보고 ACK하면 queue는 사라지고 새로고침 뒤 note도 사라지는 silent loss다. */
+function hasPersistedAiEvent(eventId) {
+  if (typeof eventId !== "string" || !eventId) return false;
+  try {
+    const raw = globalThis.localStorage?.getItem("wr_notes");
+    if (raw === null || raw === undefined) return false;
+    const notes = JSON.parse(raw);
+    return Array.isArray(notes) && notes.some((note) => note?.aiEventId === eventId);
+  } catch {
+    return false;
+  }
+}
+
 export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
   const clientRef = useRef(clientOverride || createCompanionClient());
   const sessionIdRef = useRef(newCompanionSessionId());
@@ -186,6 +201,16 @@ export function useCompanionInbox({ enabled, client: clientOverride } = {}) {
     const current = readyRef.current;
     const session = sessionRef.current;
     if (!current || !session) return true;
+
+    /* Defense in depth: App의 호출 순서가 나중에 바뀌어도 queue accepted가
+       durable note보다 앞설 수 없다. 저장 실패 상태의 in-memory note는 증거가 아니다. */
+    if (!hasPersistedAiEvent(current.eventId)) {
+      if (aliveRef.current) {
+        setNotice("AI 분석은 아직 기기에 저장되지 않아 완료 처리하지 않았다.");
+      }
+      return false;
+    }
+
     const pending = {
       fence: session.fence,
       receipt: current.receipt,
