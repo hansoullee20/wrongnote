@@ -291,6 +291,7 @@ export async function createQueueStore({
     });
 
   let closed = false;
+  let releaseDone = false;
   const alive = () => {
     /* 닫힌 뒤에도 동작하면 잠금 없이 파일을 쓴다 — A가 막으려던 상태 그대로다. */
     if (closed) throw new Error("queue store is closed");
@@ -528,11 +529,15 @@ export async function createQueueStore({
     },
 
     /* 잠금은 프로세스 수명 동안 유지된다. 닫을 때만 놓는다. */
+    /* 잠금은 프로세스 수명 동안 유지된다. 닫을 때만 놓는다.
+       해제가 실패하면 오류를 올려보내고 잠금은 계속 우리 것이다 — close()를
+       다시 부르면 재시도된다. 스토어 자체는 이미 못 쓰는 상태다. */
     async close() {
-      if (closed) return; // 멱등
+      if (releaseDone) return; // 멱등
       closed = true;
       await chain.catch(() => {});
       await lock.release();
+      releaseDone = true;
     },
   };
 }

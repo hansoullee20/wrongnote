@@ -23,13 +23,26 @@ const isAlive = (pid) => {
   }
 };
 
+/* 없음(null)과 못 읽음(예외)을 구분한다. 전부 null로 뭉개면 일시적 읽기 실패가
+   "잠금 없음"으로 둔갑하고, 해제 쪽에서는 놓지도 못한 잠금을 놓았다고 믿는다. */
 async function readHolder(lockPath, fsImpl) {
+  let raw;
   try {
-    return JSON.parse(await fsImpl.readFile(lockPath, "utf8"));
+    raw = await fsImpl.readFile(lockPath, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  try {
+    return JSON.parse(raw);
   } catch {
-    return null; // 없거나 못 읽는다
+    return {}; // 있긴 한데 알아볼 수 없다 — 소유자 미상이지 부재가 아니다
   }
 }
+
+/* 이 프로세스가 지금 들고 있는 토큰들. 잠금 파일의 pid가 우리 자신일 때
+   "우리가 흘린 잠금"과 "우리가 지금 쓰는 잠금"을 가르는 유일한 근거다. */
+const heldTokens = new Set();
 
 /* 회수는 보수적으로. **오래돼 보인다**는 이유로는 절대 깨지 않는다 —
    느린 저장이 진행 중인 살아 있는 컴패니언을 죽이는 길이다.
@@ -39,7 +52,12 @@ function reclaimable(holder) {
   if (!holder || typeof holder !== "object") return false;
   if (holder.hostname !== os.hostname()) return false;
   if (!Number.isInteger(holder.pid) || holder.pid <= 0) return false;
-  if (holder.pid === process.pid) return false;
+  if (holder.pid === process.pid) {
+    /* 우리 pid인데 우리가 들고 있는 토큰이 아니다 — 해제에 실패해 흘린
+       잠금이다. 이걸 회수 불가로 두면 이 프로세스는 자기가 흘린 잠금 때문에
+       큐를 영영 못 연다. 살아 있는 우리 잠금(토큰 보유)은 그대로 지킨다. */
+    return !heldTokens.has(holder.token);
+  }
   return !isAlive(holder.pid);
 }
 
@@ -78,6 +96,7 @@ export async function acquireQueueLock(lockPath, { fsImpl = fs } = {}) {
 
   try {
     await write();
+    heldTokens.add(token);
   } catch (err) {
     if (err.code !== "EEXIST") throw err;
 
@@ -89,25 +108,38 @@ export async function acquireQueueLock(lockPath, { fsImpl = fs } = {}) {
     await fsImpl.unlink(lockPath).catch(() => {});
     try {
       await write();
+      heldTokens.add(token);
     } catch (again) {
       if (again.code !== "EEXIST") throw again;
-      throw inUse(lockPath, await readHolder(lockPath, fsImpl));
+      throw inUse(lockPath, await readHolder(lockPath, fsImpl).catch(() => null));
     }
   }
 
-  let released = false;
   return {
     path: lockPath,
     async release() {
-      /* 두 번째 호출은 아무것도 하지 않는다. 그 사이 같은 프로세스가 잠금을
-         다시 잡았을 수 있고, 그러면 이 해제는 **남의** 잠금을 지운다 —
-         소유자가 둘이 되어 잠금이 열린 채로 실패한다. */
-      if (released) return;
-      released = true;
+      /* 토큰 보유 여부가 곧 "아직 안 놓았다"이다. 별도 플래그를 먼저 세우면,
+         해제가 실패했는데도 놓았다고 기록되어 재시도가 막힌다. 그 잠금의 pid는
+         우리 자신이라 회수 대상도 아니어서 이 프로세스는 큐를 영영 못 연다. */
+      if (!heldTokens.has(token)) return; // 이미 놓았다 — 멱등
+
+      /* 읽기 실패는 올려보낸다. 여기서 삼키면 놓지도 못한 잠금을 놓았다고
+         믿게 된다. 토큰은 그대로 두므로 재시도가 가능하다. */
       const holder = await readHolder(lockPath, fsImpl);
-      if (holder?.token === token) {
-        await fsImpl.unlink(lockPath).catch(() => {});
+
+      if (holder === null || holder.token !== token) {
+        /* 이미 사라졌거나 그 사이 남이 잡았다. 어느 쪽이든 우리가 지울 것은
+           없다 — 남의 잠금을 지우면 소유자가 둘이 된다. */
+        heldTokens.delete(token);
+        return;
       }
+
+      try {
+        await fsImpl.unlink(lockPath);
+      } catch (err) {
+        if (err.code !== "ENOENT") throw err; // 토큰 유지 → 재시도 가능
+      }
+      heldTokens.delete(token);
     },
   };
 }

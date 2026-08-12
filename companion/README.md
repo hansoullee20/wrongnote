@@ -99,7 +99,7 @@ cleanly, looks healthy, and loses everything that was queued.
 
     npm --prefix companion test
 
-Forty-seven tests, each one a scenario that could lose or duplicate a user's analysis.
+Forty-nine tests, each one a scenario that could lose or duplicate a user's analysis.
 Every guard has been falsified by mutation: removing persistence, the
 single-lease rule, lease expiry, the accepted tombstone, the rejected-item
 removal, the dead-letter write, requeue-once, or the corrupt-file refusal each
