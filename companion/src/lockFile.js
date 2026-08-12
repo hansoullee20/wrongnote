@@ -58,9 +58,30 @@ async function sameInode(handle, lockPath, fsImpl) {
   try {
     const [a, b] = await Promise.all([handle.stat(), fsImpl.stat(lockPath)]);
     return a.dev === b.dev && a.ino === b.ino;
-  } catch {
-    return false;
+  } catch (err) {
+    if (err?.code === "ENOENT") return false;
+    throw err;
   }
+}
+
+function cleanupFailure(primary, cleanup, markerPath, details = {}) {
+  return new QueueError(
+    "lock_cleanup_failed",
+    `lock operation failed and its owned marker could not be cleaned safely: ${markerPath}`,
+    {
+      markerPath,
+      cause: primary,
+      cleanupCause: cleanup,
+      ...details,
+    }
+  );
+}
+
+async function removeOwnedMarker(markerPath, holder, fsImpl) {
+  const current = await readHolder(markerPath, fsImpl);
+  if (!current || current.token !== holder.token) return false;
+  await fsImpl.unlink(markerPath);
+  return true;
 }
 
 async function exclusiveMarker(markerPath, holder, fsImpl) {
@@ -70,8 +91,20 @@ async function exclusiveMarker(markerPath, holder, fsImpl) {
     await handle.writeFile(JSON.stringify(holder), "utf8");
     await handle.sync();
   } catch (err) {
-    if (handle && (await sameInode(handle, markerPath, fsImpl))) {
-      await fsImpl.unlink(markerPath).catch(() => {});
+    if (handle) {
+      let owned;
+      try {
+        owned = await sameInode(handle, markerPath, fsImpl);
+      } catch (checkErr) {
+        throw cleanupFailure(err, checkErr, markerPath);
+      }
+      if (owned) {
+        try {
+          await fsImpl.unlink(markerPath);
+        } catch (unlinkErr) {
+          throw cleanupFailure(err, unlinkErr, markerPath);
+        }
+      }
     }
     throw err;
   } finally {
@@ -147,15 +180,32 @@ export async function acquireQueueLock(lockPath, { fsImpl = fs, now = () => Date
     });
   }
 
-  // Recovery may have started after our first check. It cannot safely coexist with a
-  // new owner, so back out while our token is still the only cooperative owner.
-  if (await markerExists(recoveryPath, fsImpl)) {
-    const current = await readHolder(lockPath, fsImpl);
-    if (current?.token === holder.token) await fsImpl.unlink(lockPath).catch(() => {});
-    throw new QueueError("queue_recovery_in_progress", `queue lock recovery started during acquisition: ${recoveryPath}`, {
-      lockPath,
-      recoveryPath,
-    });
+  let ownsMarker = true;
+  const clearOwnedMarker = async () => {
+    if (!ownsMarker) return;
+    await removeOwnedMarker(lockPath, holder, fsImpl);
+    ownsMarker = false;
+  };
+
+  try {
+    // Recovery may have started after our first check. It cannot safely coexist with a
+    // new owner, so back out while our token is still the only cooperative owner.
+    if (await markerExists(recoveryPath, fsImpl)) {
+      await clearOwnedMarker();
+      throw new QueueError("queue_recovery_in_progress", `queue lock recovery started during acquisition: ${recoveryPath}`, {
+        lockPath,
+        recoveryPath,
+      });
+    }
+  } catch (err) {
+    if (ownsMarker) {
+      try {
+        await clearOwnedMarker();
+      } catch (cleanupErr) {
+        throw cleanupFailure(err, cleanupErr, lockPath, { lockPath, recoveryPath, holder: { ...holder } });
+      }
+    }
+    throw err;
   }
 
   let released = false;
