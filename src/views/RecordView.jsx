@@ -98,6 +98,7 @@ const emptyDraft = (subject = "수학") => ({
   concepts: [],
   questionLatex: "",
   analysisLocale: "ko",
+  failurePoint: "",
 });
 
 export default function RecordView({
@@ -169,6 +170,9 @@ export default function RecordView({
       concepts: n.concepts ?? [],
       questionLatex: n.questionLatex ?? "",
       analysisLocale: n.analysisLocale ?? "ko",
+      /* 빠뜨리면 수정 폼이 빈 칸으로 뜨고, 그대로 저장하는 순간 값이 조용히
+         지워진다. draft는 노트를 통째로 덮어쓰므로 여기 없는 필드는 사라진다. */
+      failurePoint: n.failurePoint ?? "",
     });
     clearPendingPhotos();
     originalImageIds.current = n.images || [];
@@ -649,6 +653,19 @@ export default function RecordView({
                 className="math-tag"
               />
             )}
+
+            <Field
+              label="실패 지점"
+              hint="풀이가 무너진 지점 — 어디서부터 틀어졌나"
+              htmlFor="rec-failure-point"
+            >
+              <textarea
+                id="rec-failure-point"
+                rows={2}
+                value={draft.failurePoint}
+                onChange={(e) => set({ failurePoint: e.target.value })}
+              />
+            </Field>
 
             <Field label="메모" className="memo-field">
               <textarea
