@@ -35,6 +35,8 @@ Decided by Han, 2026-08-12. Supersedes the "wrongnote calls a provider" idea.
 - Manual copy/paste stays as the permanent fallback. It is also the mobile path:
   MCP needs a desktop host running a local process, so phone recording keeps
   working exactly as today.
+- The localhost bridge itself is supported on desktop only. Mobile browsers are
+  not a v1 compatibility target; they use the existing manual import path.
 
 ## v1 tool surface (narrow on purpose)
 
