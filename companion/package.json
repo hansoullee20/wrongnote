@@ -1,0 +1,9 @@
+{
+  "name": "wrongnote-companion",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "wrongnote-queue": "src/cli.js" },
+  "scripts": { "test": "node --test" }
+}
